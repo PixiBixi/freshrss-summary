@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FreshRSS Summary</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+  <a href="#articles-grid" class="skip-link">Aller au contenu</a>
+
+  <header>
+    <div class="header-main">
+      <div class="logo">📡 FreshRSS Summary</div>
+      <div class="search-group">
+        <div class="search-wrap">
+          <input id="search-input" class="search-input" type="text" placeholder="Rechercher…" autocomplete="off" aria-label="Rechercher des articles" />
+        </div>
+        <button id="search-read-btn" class="btn btn-ghost" onclick="markSearchAsRead()" style="display:none" data-i18n="btn.markSearch" aria-label="Marquer les résultats comme lus">✓ Tout lire</button>
+        <span id="stats-badge" class="stats" style="display:none">
+          <span id="showing-count">0</span> / <span id="total-count">0</span>
+        </span>
+      </div>
+      <div class="header-actions">
+        <button id="mark-read-btn" class="btn btn-ghost" onclick="markVisibleAsRead()" disabled data-i18n="btn.markVisible" aria-label="Marquer les articles visibles comme lus">✓ Marquer lus</button>
+        <button id="refresh-btn" class="btn btn-primary" onclick="triggerRefresh()" data-i18n="btn.refresh" aria-label="Rafraîchir les articles">⟳ Rafraîchir</button>
+        <div class="lang-dropdown">
+          <button id="lang-btn" class="btn btn-ghost lang-trigger" onclick="toggleLangMenu()" aria-label="Changer de langue" aria-haspopup="listbox" aria-expanded="false">
+            <span id="lang-flag" aria-hidden="true">🇫🇷</span>
+          </button>
+          <div id="lang-menu" class="lang-menu"></div>
+        </div>
+        <span id="auth-badge" style="display:none">
+          <span id="auth-username" style="font-size:12px;color:var(--text-3);margin-right:4px"></span>
+          <button class="btn btn-ghost" style="font-size:12px;padding:3px 8px" onclick="doLogout()" data-i18n="btn.logout" aria-label="Se déconnecter">Déconnexion</button>
+        </span>
+        <a id="login-btn" href="/login" class="btn btn-ghost" style="font-size:12px;padding:3px 8px;display:none" data-i18n="btn.login" aria-label="Se connecter">Connexion</a>
+      </div>
+    </div>
+    <div class="header-filters">
+      <select id="sort-select">
+        <option value="score" data-i18n="sort.score">Score</option>
+        <option value="date"  data-i18n="sort.date" selected>Date</option>
+        <option value="feed"  data-i18n="sort.feed">Source</option>
+      </select>
+      <label class="score-label">
+        <span data-i18n="label.minScore">Score min</span>
+        <input id="min-score" type="number" value="1" min="0" step="1" />
+      </label>
+      <label class="score-label">
+        <span data-i18n="label.period">Période</span>
+        <select id="days-select">
+          <option value="7"  selected data-i18n="period.7">7 j</option>
+          <option value="14" data-i18n="period.14">14 j</option>
+          <option value="30" data-i18n="period.30">30 j</option>
+          <option value="0"  data-i18n="period.all">Tout</option>
+        </select>
+      </label>
+      <button id="show-old-btn" class="btn btn-ghost" onclick="toggleShowRead()" data-i18n="btn.showRead" aria-label="Afficher les articles lus">⏪ Lu</button>
+      <span class="filter-sep"></span>
+      <span id="last-refresh-label" class="last-refresh"></span>
+      <button id="compact-btn" class="btn btn-ghost btn-icon" onclick="toggleCompact()" title="Mode compact" aria-label="Mode compact">⊟</button>
+      <button id="rescore-btn" class="btn btn-ghost" onclick="triggerRescore()" data-i18n="btn.rescore" aria-label="Re-scorer les articles">⇄ Re-scorer</button>
+      <button id="scoring-cfg-btn" class="btn btn-ghost" onclick="openScoringModal()" data-i18n="btn.scoringCfg" aria-label="Configurer les topics de scoring">⚙ Topics</button>
+    </div>
+    <div id="topic-bar" class="topic-bar">
+      <button class="pill active" id="pill-all" onclick="filterTopic(null)">Tous</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="error-state" class="state-error"></div>
+
+    <div id="empty-state" class="state-empty">
+      <div class="state-empty-icon">📭</div>
+      <p data-i18n="empty.title">Aucun article chargé.</p>
+      <p data-i18n-html="empty.hint">Clique sur <strong>Rafraîchir</strong> pour fetcher tes flux.</p>
+    </div>
+
+    <div id="allread-state" class="state-allread" style="display:none">
+      <div class="allread-icon">
+        <div class="allread-ring"></div>
+        <div class="allread-ring allread-ring-2"></div>
+        <div class="allread-check">✓</div>
+      </div>
+      <p class="allread-title" data-i18n="allread.title">Tout lu !</p>
+      <p class="allread-sub" data-i18n="allread.sub">Bravo, tu as tout rattrapé.</p>
+    </div>
+
+    <div id="articles-grid" tabindex="-1"></div>
+
+    <div id="load-more-bar" class="load-more">
+      <button class="btn btn-ghost" onclick="loadMore()" data-i18n="btn.loadMore">Charger plus</button>
+    </div>
+  </main>
+
+  <div id="toast" class="hidden" role="status" aria-live="polite" aria-atomic="true">
+    <div id="toast-spinner" class="spinner"></div>
+    <span id="toast-text">Rafraîchissement...</span>
+    <button id="toast-close" onclick="dismissToast()" aria-label="Fermer la notification"
+      style="display:none;background:none;border:none;color:inherit;cursor:pointer;font-size:12px;margin-left:2px;padding:4px 6px;min-width:28px;min-height:28px">✕</button>
+  </div>
+
+  <!-- Scoring config modal -->
+  <div id="scoring-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="scoring-modal-title">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2 id="scoring-modal-title" data-i18n="cfg.title">Configuration du scoring</h2>
+        <button class="modal-close btn btn-ghost btn-icon" onclick="closeScoringModal()" aria-label="Fermer">✕</button>
+      </div>
+      <div class="modal-body" id="scoring-topics"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="addTopicRow()" data-i18n="cfg.addTopic">+ Ajouter un topic</button>
+        <span style="flex:1"></span>
+        <button class="btn btn-ghost" onclick="closeScoringModal()" data-i18n="cfg.cancel">Annuler</button>
+        <button class="btn btn-primary" id="scoring-save-btn" onclick="saveScoringConfig()" data-i18n="cfg.save">⇄ Enregistrer & re-scorer</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/i18n.js"></script>
+  <script src="/static/js/state.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/render.js"></script>
+  <script src="/static/js/ui.js"></script>
+</body>
+</html>
