@@ -1,0 +1,108 @@
+====================================================================
+  freshrss-summary — {{ .Chart.AppVersion }}
+====================================================================
+
+Release name : {{ .Release.Name }}
+Namespace    : {{ .Release.Namespace }}
+
+{{- if .Values.ingress.enabled }}
+
+Application URL:
+  https://{{ .Values.ingress.host }}
+
+{{- else if eq .Values.service.type "NodePort" }}
+
+Get the application URL:
+  export NODE_PORT=$(kubectl get svc {{ include "freshrss-summary.fullname" . }} \
+    -n {{ .Release.Namespace }} -o jsonpath='{.spec.ports[0].nodePort}')
+  export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}')
+  echo "http://$NODE_IP:$NODE_PORT"
+
+{{- else if eq .Values.service.type "LoadBalancer" }}
+
+Get the application URL (may take a few minutes for the LoadBalancer IP):
+  kubectl get svc {{ include "freshrss-summary.fullname" . }} -n {{ .Release.Namespace }} -w
+
+{{- else }}
+
+Port-forward for local access:
+  kubectl port-forward svc/{{ include "freshrss-summary.fullname" . }} \
+    -n {{ .Release.Namespace }} 8123:{{ .Values.service.port }}
+  Then open: http://localhost:8123
+
+{{- end }}
+
+--------------------------------------------------------------------
+  Initial setup
+--------------------------------------------------------------------
+
+Admin credentials:
+  Username : {{ .Values.app.adminUsername }}
+{{- if .Values.secret.existingSecret }}
+  Password : sourced from Secret "{{ .Values.secret.existingSecret }}" key ADMIN_PASSWORD
+{{- else }}
+  Password : value of secret.adminPassword (set during install)
+{{- end }}
+
+Health check:
+  kubectl exec -n {{ .Release.Namespace }} \
+    deploy/{{ include "freshrss-summary.fullname" . }} -- \
+    wget -qO- http://localhost:{{ .Values.service.targetPort }}/health
+
+--------------------------------------------------------------------
+  Secret management
+--------------------------------------------------------------------
+
+{{- if .Values.secret.existingSecret }}
+Using existing Secret: {{ .Values.secret.existingSecret }}
+(chart does not manage this Secret — update it externally)
+{{- else }}
+The chart created a Secret named: {{ include "freshrss-summary.fullname" . }}
+
+For production, consider using External Secrets Operator:
+  1. Create the Secret in your secrets manager (Vault, AWS SSM, GCP Secret Manager…)
+  2. Deploy an ExternalSecret resource targeting key names:
+       FRESHRSS_API_PASSWORD, ADMIN_PASSWORD, SECRET_KEY, DATABASE_URL
+  3. Set secret.existingSecret=<name> on the next helm upgrade
+
+SECRET_KEY rotation note:
+  Rotating SECRET_KEY invalidates all active sessions. Users will be logged out.
+  Generate a new key: python3 -c "import secrets; print(secrets.token_hex(32))"
+{{- end }}
+
+--------------------------------------------------------------------
+  Persistence
+--------------------------------------------------------------------
+
+{{- if .Values.persistence.enabled }}
+PVC: {{ include "freshrss-summary.pvcName" . }} ({{ .Values.persistence.size }})
+Data directory: {{ .Values.persistence.mountPath }}
+
+SQLite backup (online, safe with WAL mode):
+  kubectl exec -n {{ .Release.Namespace }} \
+    deploy/{{ include "freshrss-summary.fullname" . }} -- \
+    sqlite3 {{ .Values.persistence.mountPath }}/articles.db ".backup /tmp/articles.db.bak"
+
+  # Copy backup to local machine
+  kubectl cp {{ .Release.Namespace }}/$(kubectl get pod -n {{ .Release.Namespace }} \
+    -l app.kubernetes.io/instance={{ .Release.Name }} -o jsonpath='{.items[0].metadata.name}'):/tmp/articles.db.bak \
+    ./articles.db.bak
+
+WARNING: The PVC is bound to the node — do not delete it when redeploying.
+{{- else }}
+WARNING: Persistence is disabled. All data will be lost on pod restart.
+         Enable persistence.enabled=true for production workloads.
+{{- end }}
+
+--------------------------------------------------------------------
+  Scaling note
+--------------------------------------------------------------------
+
+replicaCount is set to {{ .Values.replicaCount }}.
+
+⚠  Do NOT scale beyond 1 replica while using SQLite — concurrent writes will
+   corrupt the database. Migrate to PostgreSQL or MySQL first, then enable HPA.
+
+HPA is currently: {{ if .Values.autoscaling.enabled }}ENABLED — make sure you are NOT using SQLite{{ else }}disabled (safe){{ end }}
+
+====================================================================

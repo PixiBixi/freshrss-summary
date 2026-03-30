@@ -1,0 +1,137 @@
+# Default values for freshrss-summary.
+
+replicaCount: 1
+
+image:
+  repository: freshrss-summary
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  # Override the service account name (defaults to fullname)
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: /metrics
+  prometheus.io/port: "8123"
+
+podLabels: {}
+
+# Non-sensitive FreshRSS configuration
+freshrss:
+  url: ""
+  username: ""
+
+# Non-sensitive application settings
+app:
+  adminUsername: admin
+  serverHost: "0.0.0.0"
+  serverPort: "8123"
+
+# Sensitive credentials — two mutually exclusive modes:
+#   1. existingSecret: ""       → chart creates a Secret from values below
+#   2. existingSecret: "my-sec" → chart uses that Secret (ESO-managed, Vault, etc.)
+#
+# Keys expected in the Secret (whether created by chart or existing):
+#   FRESHRSS_API_PASSWORD, ADMIN_PASSWORD, SECRET_KEY, DATABASE_URL (optional)
+secret:
+  existingSecret: ""   # if set, use this Secret; chart creates none
+  # Values used only when existingSecret is "" (chart-managed Secret).
+  freshrssApiPassword: ""
+  adminPassword: ""
+  # Generate with: python3 -c "import secrets; print(secrets.token_hex(32))"
+  secretKey: ""
+  databaseUrl: ""      # optional
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  size: 1Gi
+  accessMode: ReadWriteOnce
+  mountPath: /app/data
+
+# Pod-level security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level security context
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8123
+
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  annotations: {}
+  tls: []
+
+networkPolicy:
+  enabled: true
+  ingressControllerNamespace: ingress-nginx
+  # Optional: restrict ingress further to specific ingress-controller pods.
+  # Leave empty ({}) to allow any pod in the ingressControllerNamespace.
+  ingressControllerPodSelector: {}
+  # dbPort allows egress to an external database. Set to 0 to disable.
+  # PostgreSQL: 5432 | MySQL: 3306
+  dbPort: 0
+
+# Horizontal Pod Autoscaler — disabled by default (SQLite — do not enable)
+autoscaling:
+  enabled: false   # SQLite — do not enable
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

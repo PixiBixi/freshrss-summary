@@ -1,0 +1,14 @@
+apiVersion: v2
+name: freshrss-summary
+description: Web UI to sort unread FreshRSS articles by thematic relevance
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - freshrss
+  - rss
+  - sre
+  - platform-engineering
+home: https://github.com/jeremy/freshrss-summary
+maintainers:
+  - name: jeremy

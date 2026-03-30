@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "freshrss-summary.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "freshrss-summary.labels" . | nindent 4 }}
+spec:
+  # Single replica enforced — SQLite does not support concurrent writers.
+  # Scale horizontally only after migrating to PostgreSQL/MySQL.
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "freshrss-summary.selectorLabels" . | nindent 6 }}
+  strategy:
+    # Recreate avoids two pods competing for the same SQLite file.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "freshrss-summary.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # Force pod rollout when the chart-managed Secret changes.
+        {{- if not .Values.secret.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "freshrss-summary.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: freshrss-summary
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          env:
+            # Non-sensitive configuration
+            - name: FRESHRSS_URL
+              value: {{ .Values.freshrss.url | quote }}
+            - name: FRESHRSS_USERNAME
+              value: {{ .Values.freshrss.username | quote }}
+            - name: SERVER_HOST
+              value: {{ .Values.app.serverHost | quote }}
+            - name: SERVER_PORT
+              value: {{ .Values.app.serverPort | quote }}
+            - name: ADMIN_USERNAME
+              value: {{ .Values.app.adminUsername | quote }}
+            # Sensitive configuration — sourced from Secret
+            - name: FRESHRSS_API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "freshrss-summary.secretName" . }}
+                  key: FRESHRSS_API_PASSWORD
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "freshrss-summary.secretName" . }}
+                  key: ADMIN_PASSWORD
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "freshrss-summary.secretName" . }}
+                  key: SECRET_KEY
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "freshrss-summary.secretName" . }}
+                  key: DATABASE_URL
+                  # Optional — app falls back to SQLite if the key is absent
+                  optional: true
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            # Persistent data directory (SQLite DB)
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+            # Python / uvicorn need a writable /tmp (readOnlyRootFilesystem=true)
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "freshrss-summary.pvcName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

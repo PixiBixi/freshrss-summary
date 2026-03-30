@@ -1,0 +1,39 @@
+{{- if .Values.autoscaling.enabled -}}
+{{/*
+HPA is intentionally disabled by default.
+SQLite does not support concurrent writers — enable HPA only after migrating
+to a networked database (PostgreSQL/MySQL) and setting persistence.enabled=false
+or using a ReadWriteMany PVC.
+*/}}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "freshrss-summary.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "freshrss-summary.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "freshrss-summary.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}
