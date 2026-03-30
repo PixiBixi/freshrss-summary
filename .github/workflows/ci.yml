@@ -26,7 +26,10 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          python-version: "3.12"
 
-      - run: uv pip install --system -r requirements-dev.txt
+      - run: uv venv
+
+      - run: uv pip install -r requirements-dev.txt
 
       - run: uv run pytest --tb=short
