@@ -311,14 +311,14 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     if request.session.get("authenticated"):
         return RedirectResponse(url="/", status_code=302)
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    return templates.TemplateResponse(request, "login.html")
 
 
 @app.post("/login")
@@ -335,9 +335,7 @@ async def login(
         return RedirectResponse(url=next_url, status_code=303)
 
     return templates.TemplateResponse(
-        "login.html",
-        {"request": request, "error": "Identifiants invalides"},
-        status_code=401,
+        request, "login.html", {"error": "Identifiants invalides"}, status_code=401
     )
 
 
