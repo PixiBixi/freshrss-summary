@@ -11,6 +11,7 @@ RUN uv pip install --system --no-cache -r requirements.txt
 
 COPY app.py freshrss_client.py scorer.py db.py ./
 COPY templates/ templates/
+COPY static/ static/
 
 RUN mkdir -p data && chown app:app data
 
