@@ -96,11 +96,10 @@ class TestBuildDigest:
         result = build_digest(articles)
         assert "Solo Article" in result
 
-    def test_result_contains_score_and_feed(self):
+    def test_result_contains_score(self):
         articles = [_make_article(title="K8s News", score=142.0, feed="The Register")]
         result = build_digest(articles)
         assert "142" in result
-        assert "The Register" in result
 
     def test_result_contains_url_link(self):
         article = _make_article(title="My Article")

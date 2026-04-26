@@ -82,10 +82,9 @@ def build_digest(articles: list[dict]) -> str:
     lines: list[str] = [f"📡 <b>FreshRSS Digest</b> — {date_str}", ""]
     for a in top:
         title = _html_escape(a["title"])
-        feed = _html_escape(a["feed_title"])
         score = int(a["score"])
         url = a["url"]
-        lines.append(f'<a href="{url}">{title}</a> · <b>{score}</b> · {feed}')
+        lines.append(f'<code>{score:>4}↑</code> <a href="{url}">{title}</a>')
 
     article_word = "article" if len(top) == 1 else "articles"
     lines.extend(["", f"{len(top)} {article_word} · top 20% du jour"])
