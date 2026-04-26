@@ -65,6 +65,7 @@
       <button id="compact-btn" class="btn btn-ghost btn-icon" onclick="toggleCompact()" title="Mode compact" aria-label="Mode compact">⊟</button>
       <button id="rescore-btn" class="btn btn-ghost" onclick="triggerRescore()" data-i18n="btn.rescore" aria-label="Re-scorer les articles">⇄ Re-scorer</button>
       <button id="scoring-cfg-btn" class="btn btn-ghost" onclick="openScoringModal()" data-i18n="btn.scoringCfg" aria-label="Configurer les topics de scoring">⚙ Topics</button>
+      <button id="pwd-btn" class="btn btn-ghost" onclick="openPwdModal()" data-i18n="btn.changePassword" aria-label="Changer le mot de passe">🔑 Mot de passe</button>
     </div>
     <div id="topic-bar" class="topic-bar">
       <button class="pill active" id="pill-all" onclick="filterTopic(null)">Tous</button>
@@ -102,6 +103,38 @@
     <span id="toast-text">Rafraîchissement...</span>
     <button id="toast-close" onclick="dismissToast()" aria-label="Fermer la notification"
       style="display:none;background:none;border:none;color:inherit;cursor:pointer;font-size:12px;margin-left:2px;padding:4px 6px;min-width:28px;min-height:28px">✕</button>
+  </div>
+
+  <!-- Password change modal -->
+  <div id="pwd-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="pwd-modal-title">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2 id="pwd-modal-title" data-i18n="pwd.title">Changer le mot de passe</h2>
+        <button class="modal-close btn btn-ghost btn-icon" onclick="closePwdModal()" aria-label="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            <span data-i18n="pwd.current">Mot de passe actuel</span>
+            <input id="pwd-current" type="password" class="search-input" autocomplete="current-password" />
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            <span data-i18n="pwd.new">Nouveau mot de passe</span>
+            <input id="pwd-new" type="password" class="search-input" autocomplete="new-password" />
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            <span data-i18n="pwd.confirm">Confirmer</span>
+            <input id="pwd-confirm" type="password" class="search-input" autocomplete="new-password" />
+          </label>
+          <p id="pwd-error" style="color:#dc2626;font-size:13px;min-height:18px;margin:0"></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span style="flex:1"></span>
+        <button class="btn btn-ghost" onclick="closePwdModal()" data-i18n="pwd.cancel">Annuler</button>
+        <button class="btn btn-primary" id="pwd-save-btn" onclick="savePwd()" data-i18n="pwd.save">Enregistrer</button>
+      </div>
+    </div>
   </div>
 
   <!-- Scoring config modal -->

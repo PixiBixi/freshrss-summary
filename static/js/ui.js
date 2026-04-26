@@ -250,6 +250,56 @@ async function saveScoringConfig() {
   }
 }
 
+// ── Password change modal ───────────────────────────────────────────────
+function openPwdModal() {
+  if (!_requireAuth()) return;
+  const modal = document.getElementById('pwd-modal');
+  document.getElementById('pwd-current').value = '';
+  document.getElementById('pwd-new').value = '';
+  document.getElementById('pwd-confirm').value = '';
+  document.getElementById('pwd-error').textContent = '';
+  modal.style.display = 'flex';
+  document.getElementById('pwd-current').focus();
+  modal.onclick = (e) => { if (e.target === modal) closePwdModal(); };
+  document.addEventListener('keydown', _pwdEscHandler);
+}
+
+function _pwdEscHandler(e) {
+  if (e.key === 'Escape') closePwdModal();
+}
+
+function closePwdModal() {
+  document.getElementById('pwd-modal').style.display = 'none';
+  document.removeEventListener('keydown', _pwdEscHandler);
+}
+
+async function savePwd() {
+  const current = document.getElementById('pwd-current').value;
+  const newPwd  = document.getElementById('pwd-new').value;
+  const confirm = document.getElementById('pwd-confirm').value;
+  const errEl   = document.getElementById('pwd-error');
+  errEl.textContent = '';
+
+  if (newPwd !== confirm) {
+    errEl.textContent = t('pwd.mismatch');
+    return;
+  }
+
+  const btn = document.getElementById('pwd-save-btn');
+  btn.disabled = true;
+  try {
+    await changePassword(current, newPwd);
+    closePwdModal();
+    toastSuccess(t('pwd.ok'));
+  } catch (e) {
+    const key = e.message === 'current_password_wrong' ? 'pwd.wrongCurrent'
+              : e.message === 'password_too_short'     ? 'pwd.tooShort'
+              : null;
+    errEl.textContent = key ? t(key) : (e.message || t('toast.error'));
+    btn.disabled = false;
+  }
+}
+
 // ── Init ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   if (state.compact) {
