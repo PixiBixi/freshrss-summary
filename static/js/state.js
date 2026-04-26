@@ -59,6 +59,7 @@ function scheduleReadFlush() {
 async function flushReadQueue() {
   _readFlushTimer = null;
   if (!_readQueue.size) return;
+  if (!state.authenticated) { _readQueue.clear(); return; }
   const ids = [..._readQueue]; _readQueue.clear();
   try {
     await fetch('/api/mark-read', {
@@ -77,7 +78,7 @@ async function flushReadQueue() {
 }
 
 window.addEventListener('beforeunload', () => {
-  if (!_readQueue.size) return;
+  if (!_readQueue.size || !state.authenticated) return;
   navigator.sendBeacon('/api/mark-read',
     new Blob([JSON.stringify({ article_ids: [..._readQueue] })], { type: 'application/json' }));
 });

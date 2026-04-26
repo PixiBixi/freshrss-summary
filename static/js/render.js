@@ -150,12 +150,14 @@ function renderRow(a) {
           onclick="event.stopPropagation()">${esc(a.title)}</a>
         <div class="row-actions">
           ${!a._read ? `
+            ${state.authenticated ? `
             <button class="row-bookmark ${a.bookmarked ? 'bookmarked' : ''}"
               onclick="toggleBookmark('${esc(a.id)}', event)"
               aria-label="${a.bookmarked ? 'Retirer des favoris' : 'Ajouter aux favoris'}"
               aria-pressed="${a.bookmarked}">${a.bookmarked ? '★' : '☆'}</button>
             <button class="row-lu" onclick="markSingleAsRead('${esc(a.id)}', event)"
               aria-label="Marquer comme lu">${t('btn.markRead')}</button>
+            ` : ''}
           ` : `<span class="badge-read">${t('label.read')}</span>`}
           <span class="row-score ${sc}" data-tooltip="${esc(tooltip)}">${a.score.toFixed(0)}↑</span>
         </div>
@@ -185,11 +187,13 @@ function renderCompactRow(a) {
       <a class="compact-title" href="${esc(a.url)}" target="_blank" rel="noopener"
         onclick="event.stopPropagation()">${esc(a.title)}</a>
       ${!a._read ? `
+        ${state.authenticated ? `
         <button class="row-bookmark ${a.bookmarked ? 'bookmarked' : ''}"
           onclick="toggleBookmark('${esc(a.id)}', event)"
           aria-label="${a.bookmarked ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${a.bookmarked ? '★' : '☆'}</button>
         <button class="row-lu" onclick="markSingleAsRead('${esc(a.id)}', event)"
           aria-label="Marquer comme lu">${t('btn.markRead')}</button>
+        ` : ''}
       ` : `<span class="badge-read">${t('label.read')}</span>`}
       <span class="compact-time">${fmtAgo(a.published)}</span>
     </div>
