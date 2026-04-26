@@ -322,15 +322,13 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 40px; }
   display: flex; gap: 4px; flex-shrink: 0; align-items: center;
 }
 .row-lu, .row-bookmark {
-  display: none; background: none; border: none;
+  display: inline-block; background: none; border: none;
   font-family: inherit; font-size: 11px; color: var(--text-3);
-  cursor: pointer; padding: 2px 4px; border-radius: 4px;
+  cursor: pointer; padding: 2px 6px; border-radius: 4px;
   transition: color 0.12s, background 0.12s;
 }
-.feed-row:hover .row-lu,
-.feed-row:hover .row-bookmark { display: inline-block; }
 .row-lu:hover { color: #059669; background: #ecfdf5; }
-.row-bookmark.bookmarked { display: inline-block; color: #f59e0b; }
+.row-bookmark.bookmarked { color: #f59e0b; }
 .row-bookmark:hover { color: #f59e0b; }
 .row-bookmark:focus-visible, .row-lu:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -376,8 +374,9 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 40px; }
 .compact-title {
   flex: 1; font-size: 13px; font-weight: 500; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+  text-decoration: none;
 }
-.compact-row:hover .compact-title { color: var(--accent); }
+.compact-title:hover { color: var(--accent); }
 
 .compact-time {
   flex-shrink: 0; font-size: 11px; color: var(--text-3); white-space: nowrap;

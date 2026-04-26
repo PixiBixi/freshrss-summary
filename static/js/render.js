@@ -178,21 +178,19 @@ function renderCompactRow(a) {
     <div class="compact-row${a._read ? ' shown-read' : ''}" data-id="${esc(a.id)}"${a._read ? ' data-already-read="1"' : ''}
       onclick="toggleCompactRow('${esc(a.id)}')">
       <span class="compact-score ${sc}">${a.score.toFixed(0)}</span>
-      <span class="compact-title">${esc(a.title)}</span>
-      <span class="compact-time">${fmtAgo(a.published)} <span class="compact-chevron">▼</span></span>
+      <a class="compact-title" href="${esc(a.url)}" target="_blank" rel="noopener"
+        onclick="event.stopPropagation()">${esc(a.title)}</a>
+      ${!a._read ? `
+        <button class="row-bookmark ${a.bookmarked ? 'bookmarked' : ''}"
+          onclick="toggleBookmark('${esc(a.id)}', event)"
+          aria-label="${a.bookmarked ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${a.bookmarked ? '★' : '☆'}</button>
+        <button class="row-lu" onclick="markSingleAsRead('${esc(a.id)}', event)"
+          aria-label="Marquer comme lu">${t('btn.markRead')}</button>
+      ` : `<span class="badge-read">${t('label.read')}</span>`}
+      <span class="compact-time">${fmtAgo(a.published)}</span>
     </div>
     <div class="compact-detail" id="cexp-${esc(a.id)}">
       <div class="compact-meta">${metaParts.join('<span style="color:var(--border)"> · </span>')}</div>
-      <div class="compact-actions">
-        <a href="${esc(a.url)}" target="_blank" rel="noopener"
-          class="btn-sm btn-sm-primary" onclick="event.stopPropagation()">Ouvrir →</a>
-        ${!a._read ? `
-          <button class="btn-sm btn-sm-ghost"
-            onclick="markSingleAsRead('${esc(a.id)}', event)">${t('btn.markRead')}</button>
-          <button class="btn-sm btn-sm-ghost ${a.bookmarked ? 'bookmarked' : ''}"
-            onclick="toggleBookmark('${esc(a.id)}', event)">${a.bookmarked ? '★' : '☆'}</button>
-        ` : `<span style="font-size:10px;color:var(--text-3)">${t('label.read')}</span>`}
-      </div>
     </div>`;
 }
 
