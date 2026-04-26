@@ -32,6 +32,26 @@ fetch:
   batch_size: 1000      # Articles fetched per FreshRSS API call
   max_batches: 10       # Max batches (= max 10 000 unread fetched)
 
+# ── Telegram digest ──────────────────────────────────────────────────────────
+# Optional. If bot_token and chat_id are set, a daily digest is sent at digest_hour.
+# On-demand: send /digest to the bot (requires webhook setup).
+#
+# Setup:
+#   1. Create a bot via @BotFather → copy the token
+#   2. Send a message to the bot, then GET https://api.telegram.org/bot<TOKEN>/getUpdates → find chat.id
+#   3. Set server.public_url (or PUBLIC_URL env var) for auto webhook registration
+#      OR register manually:
+#      curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=<PUBLIC_URL>/telegram/webhook&secret_token=<SECRET>"
+#
+# Env var overrides: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_WEBHOOK_SECRET, PUBLIC_URL
+
+telegram:
+  bot_token: ""          # TELEGRAM_BOT_TOKEN
+  chat_id: ""            # TELEGRAM_CHAT_ID
+  digest_hour: 21        # Hour in Europe/Paris timezone (0-23)
+  webhook_secret: ""     # TELEGRAM_WEBHOOK_SECRET — any random string, e.g.:
+                         # python3 -c "import secrets; print(secrets.token_hex(16))"
+
 scoring:
   title_weight: 3       # Title keyword matches multiplier
   min_score: 1          # Minimum score to include in results

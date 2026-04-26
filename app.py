@@ -14,6 +14,7 @@ from typing import Any
 
 import yaml
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import (
     HTMLResponse,
@@ -52,6 +53,7 @@ from db import (
 )
 from freshrss_client import Article, FreshRSSClient
 from scorer import ScoredArticle, build_topics, score_articles
+from telegram_digest import _register_webhook, send_digest
 
 # ---------------------------------------------------------------------------
 # Prometheus metrics
@@ -156,6 +158,15 @@ def load_config() -> dict:
     db = cfg.setdefault("database", {})
     if v := os.environ.get("DATABASE_URL"):
         db["url"] = v
+
+    if v := os.environ.get("TELEGRAM_BOT_TOKEN"):
+        cfg.setdefault("telegram", {})["bot_token"] = v
+    if v := os.environ.get("TELEGRAM_CHAT_ID"):
+        cfg.setdefault("telegram", {})["chat_id"] = v
+    if v := os.environ.get("TELEGRAM_WEBHOOK_SECRET"):
+        cfg.setdefault("telegram", {})["webhook_secret"] = v
+    if v := os.environ.get("PUBLIC_URL"):
+        srv["public_url"] = v
 
     # Validate required FreshRSS fields
     missing = [k for k in ("url", "username", "api_password") if not fr.get(k)]
@@ -315,6 +326,31 @@ async def lifespan(app: FastAPI):
         )
         scheduler.start()
         logger.info("Auto-refresh scheduler started: every %d min", interval)
+
+    tg_cfg = cfg.get("telegram", {})
+    if tg_cfg.get("bot_token") and tg_cfg.get("chat_id"):
+        if scheduler is None:
+            scheduler = AsyncIOScheduler(timezone="UTC")
+            scheduler.start()
+        hour = int(tg_cfg.get("digest_hour", 21))
+        scheduler.add_job(
+            send_digest,
+            CronTrigger(hour=hour, minute=0, timezone="Europe/Paris"),
+            args=[tg_cfg, cache],
+            id="daily_digest",
+            max_instances=1,
+            coalesce=True,
+        )
+        logger.info("Telegram digest scheduled at %02dh00 Europe/Paris", hour)
+        public_url = cfg.get("server", {}).get("public_url", "")
+        if public_url:
+            await _register_webhook(tg_cfg, public_url)
+        else:
+            logger.info(
+                "Telegram: set server.public_url (or PUBLIC_URL env var) to auto-register webhook"
+            )
+
+    app.state.tg_cfg = tg_cfg
 
     yield
 
@@ -1077,6 +1113,26 @@ async def change_password(req: ChangePasswordRequest, request: Request) -> dict[
 # ---------------------------------------------------------------------------
 # Health & metrics
 # ---------------------------------------------------------------------------
+
+
+@app.post("/telegram/webhook")
+async def telegram_webhook(request: Request) -> dict:
+    """Receive Telegram updates. Verifies secret header, handles /digest command."""
+    tg_cfg: dict = getattr(request.app.state, "tg_cfg", {})
+    webhook_secret = tg_cfg.get("webhook_secret", "")
+    if not webhook_secret:
+        raise HTTPException(status_code=404)
+
+    header_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not secrets.compare_digest(header_secret, webhook_secret):
+        raise HTTPException(status_code=403, detail="Invalid secret")
+
+    body = await request.json()
+    text: str = body.get("message", {}).get("text", "")
+    if text.startswith("/digest"):
+        asyncio.create_task(send_digest(tg_cfg, cache))
+
+    return {}
 
 
 @app.get("/health")
