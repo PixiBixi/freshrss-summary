@@ -465,7 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('sort-select').addEventListener('change', e => { state.sort = e.target.value; applyFilters(); });
   const minScoreEl = document.getElementById('min-score');
   const minScoreVal = document.getElementById('min-score-val');
-  minScoreEl.value = Math.min(state.minScore, 10);
+  minScoreEl.value = state.minScore;
   if (minScoreVal) minScoreVal.textContent = state.minScore;
   minScoreEl.addEventListener('input', e => {
     state.minScore = parseFloat(e.target.value) || 0;
