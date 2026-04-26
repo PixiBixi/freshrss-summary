@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/PixiBixi/freshrss-summary/compare/v1.0.2...v1.1.0) (2026-04-26)
+
+
+### Features
+
+* **scheduler:** add auto-refresh via APScheduler ([94025cc](https://github.com/PixiBixi/freshrss-summary/commit/94025ccac99d06dc80981dcba49e45a5a95a4796))
+
 ## [1.0.2](https://github.com/PixiBixi/freshrss-summary/compare/v1.0.1...v1.0.2) (2026-04-26)
 
 
