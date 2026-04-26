@@ -2,8 +2,6 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN addgroup --system app && adduser --system --ingroup app app
-
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 COPY requirements.txt .
@@ -13,11 +11,9 @@ COPY app.py freshrss_client.py scorer.py db.py ./
 COPY templates/ templates/
 COPY static/ static/
 
-RUN mkdir -p data && chown app:app data
+RUN mkdir -p data
 
 VOLUME /app/data
-
-USER app
 
 EXPOSE 8123
 
