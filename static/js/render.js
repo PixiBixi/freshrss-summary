@@ -171,13 +171,17 @@ function renderRow(a) {
 function renderCompactRow(a) {
   const sc = a.score >= 8 ? 'hi' : 'lo';
   const topTopics = Object.keys(a.matched_topics).slice(0, 2);
+  const tooltip = Object.entries(a.matched_topics)
+    .sort((x, y) => y[1] - x[1])
+    .map(([topic, v]) => `${topic}\u00a0${v.toFixed(1)}`)
+    .join(' · ');
   const metaParts = [`<span>${esc(a.feed_title)}</span>`];
   for (const topic of topTopics) metaParts.push(`<span class="row-topic-tag">${esc(topic)}</span>`);
 
   return `
     <div class="compact-row${a._read ? ' shown-read' : ''}" data-id="${esc(a.id)}"${a._read ? ' data-already-read="1"' : ''}
       onclick="toggleCompactRow('${esc(a.id)}')">
-      <span class="compact-score ${sc}">${a.score.toFixed(0)}</span>
+      <span class="compact-score ${sc}" data-tooltip="${esc(tooltip)}">${a.score.toFixed(0)}</span>
       <a class="compact-title" href="${esc(a.url)}" target="_blank" rel="noopener"
         onclick="event.stopPropagation()">${esc(a.title)}</a>
       ${!a._read ? `
