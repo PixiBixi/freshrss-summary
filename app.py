@@ -1101,5 +1101,7 @@ if __name__ == "__main__":
         host=str(srv.get("host", "0.0.0.0")),
         port=int(srv.get("port", 8123)),
         reload=reload,
+        proxy_headers=True,
+        forwarded_allow_ips="*",
         log_config=LOGGING_CONFIG,
     )
