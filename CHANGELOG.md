@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/PixiBixi/freshrss-summary/compare/v1.0.1...v1.0.2) (2026-04-26)
+
+
+### Bug Fixes
+
+* **app:** trust X-Forwarded-For from Traefik for real client IPs ([8803a23](https://github.com/PixiBixi/freshrss-summary/commit/8803a230a04bed9c2a78e961b057798ce9acaf5b))
+
 ## [1.0.1](https://github.com/PixiBixi/freshrss-summary/compare/v1.0.0...v1.0.1) (2026-04-26)
 
 
