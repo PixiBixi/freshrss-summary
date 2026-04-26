@@ -10,7 +10,7 @@
   --text:      #111111;
   --text-2:    #6b7280;
   --text-3:    #9ca3af;
-  --hover:     #fafafa;
+  --hover:     #f0f4f5;
 }
 
 body {
@@ -268,7 +268,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 40px; }
 
 /* ── Mode A: two-line row ─────────────────────────── */
 .feed-row {
-  padding: 10px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--sep);
   cursor: pointer;
   transition: background 0.1s;
@@ -282,7 +282,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 40px; }
   margin-bottom: 3px;
 }
 .row-title {
-  font-size: 13px; font-weight: 600; color: var(--text);
+  font-size: 14px; font-weight: 600; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   text-decoration: none; transition: color 0.12s; flex: 1; min-width: 0;
 }
@@ -313,7 +313,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 40px; }
 }
 
 .row-line2 {
-  font-size: 11px; color: var(--text-3);
+  font-size: 12px; color: var(--text-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .row-topic-tag { color: var(--accent); }
@@ -374,13 +374,13 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 40px; }
 .compact-score.lo { color: var(--text-3); }
 
 .compact-title {
-  flex: 1; font-size: 11px; font-weight: 500; color: var(--text);
+  flex: 1; font-size: 13px; font-weight: 500; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
 }
 .compact-row:hover .compact-title { color: var(--accent); }
 
 .compact-time {
-  flex-shrink: 0; font-size: 9px; color: var(--text-3); white-space: nowrap;
+  flex-shrink: 0; font-size: 11px; color: var(--text-3); white-space: nowrap;
 }
 
 .compact-detail {
