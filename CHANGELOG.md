@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/PixiBixi/freshrss-summary/compare/v1.0.0...v1.0.1) (2026-04-26)
+
+
+### Bug Fixes
+
+* **ci:** build versioned Docker image in release workflow ([58637f3](https://github.com/PixiBixi/freshrss-summary/commit/58637f3ac8368ae98e1931412f6fca92ddbf5454))
+
 ## 1.0.0 (2026-04-26)
 
 
