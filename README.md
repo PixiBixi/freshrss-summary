@@ -94,6 +94,18 @@ scheduler:
 
 Topics and their keywords are editable live from the UI (⚙ **Topics** button in the header) — changes are persisted in the database, no restart required. The initial topic list is seeded from `config.yaml` on first startup.
 
+## Auto-refresh
+
+Set `scheduler.interval_minutes` (or `REFRESH_INTERVAL_MINUTES` env var) to fetch articles automatically on a schedule — no manual click required.
+
+```bash
+# Docker / docker-compose
+REFRESH_INTERVAL_MINUTES=60   # fetch every hour (0 = disabled, default)
+```
+
+- If a manual refresh is already in progress when the scheduler fires, it is skipped silently.
+- The scheduler starts at app boot and shuts down cleanly on exit.
+
 ## Database
 
 Default: SQLite at `data/articles.db` (created automatically).
@@ -260,6 +272,7 @@ Weights and keywords are editable live from the UI (⚙ **Topics** button) — p
 - **Keyboard shortcuts**: `j`/`k` navigate, `Enter`/`o` open, `m` mark as read, `r` refresh, `Esc` close detail
 - **Compact mode**: denser list layout, toggled with ⊟
 - **Score tooltip**: hover the score badge to see per-topic contribution breakdown
+- **Auto-refresh**: configurable background scheduler — open the UI in the morning and articles are already there (see `REFRESH_INTERVAL_MINUTES`)
 - **Last refresh indicator**: shows time since last fetch; ⚠ warning if stale (>3h)
 - **Rescore**: reapply current weights without re-fetching
 - **Scoring config** (⚙ Topics): edit topic names, weights, and keywords live — saved to DB, triggers automatic rescore
