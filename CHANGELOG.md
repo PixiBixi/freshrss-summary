@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/PixiBixi/freshrss-summary/compare/v1.2.0...v1.2.1) (2026-04-26)
+
+
+### Bug Fixes
+
+* **docker:** add telegram_digest.py to Dockerfile COPY ([8110cde](https://github.com/PixiBixi/freshrss-summary/commit/8110cde8f74c63846a2648f9457c9ff6271a7181))
+
 ## [1.2.0](https://github.com/PixiBixi/freshrss-summary/compare/v1.1.0...v1.2.0) (2026-04-26)
 
 
