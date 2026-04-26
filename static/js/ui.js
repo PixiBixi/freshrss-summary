@@ -419,7 +419,7 @@ function _renderPalette(query) {
     <div class="palette-item${i === _paletteFocusIdx ? ' focused' : ''}"
       onclick="_execPaletteIdx(${i})"
       onmouseover="_paletteFocusIdx=${i}; _highlightPalette()">
-      <span class="palette-item-label">${c.icon} ${esc(t(c.labelKey))}</span>
+      <span class="palette-item-label">${esc(t(c.labelKey))}</span>
       ${c.shortcut ? `<span class="palette-shortcut">${esc(c.shortcut)}</span>` : ''}
     </div>`).join('');
 }
