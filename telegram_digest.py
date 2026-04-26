@@ -124,6 +124,76 @@ async def send_digest(tg_cfg: dict, cache: Any) -> None:
         logger.error("Telegram digest send failed: %s", exc)
 
 
+async def check_trending(articles: list[dict], tg_cfg: dict, alerted: set) -> set:
+    """
+    Alert if a topic has ≥3 articles in the last 2h and ≥2x more than the prior 2h window.
+    Returns updated alerted set (keyed on (topic, 2h-bucket) to avoid duplicate alerts).
+    """
+    bot_token = tg_cfg.get("bot_token", "")
+    chat_id = tg_cfg.get("chat_id", "")
+    if not bot_token or not chat_id:
+        return alerted
+
+    now = time.time()
+    recent_cutoff = now - 2 * 3600
+    prior_cutoff = now - 4 * 3600
+    hour_bucket = int(now) // 7200  # changes every 2 hours
+
+    topic_recent: dict[str, int] = {}
+    topic_prior: dict[str, int] = {}
+    for a in articles:
+        pub = a.get("published") or 0
+        for topic in a.get("matched_topics", {}):
+            if pub >= recent_cutoff:
+                topic_recent[topic] = topic_recent.get(topic, 0) + 1
+            elif pub >= prior_cutoff:
+                topic_prior[topic] = topic_prior.get(topic, 0) + 1
+
+    new_alerted = set(alerted)
+    alerts: list[tuple[str, int, int]] = []
+    for topic, recent in sorted(topic_recent.items(), key=lambda x: -x[1]):
+        key = (topic, hour_bucket)
+        if key in alerted:
+            continue
+        prior = topic_prior.get(topic, 0)
+        if recent >= 3 and (prior == 0 or recent >= prior * 2):
+            alerts.append((topic, recent, prior))
+            new_alerted.add(key)
+
+    if alerts:
+        lines = ["📈 <b>Trending topics</b>", ""]
+        for topic, recent, prior in alerts:
+            vs = f"vs {prior}" if prior else "sans activité récente"
+            lines.append(f"· <b>{_html_escape(topic)}</b>  +{recent} articles ({vs})")
+        try:
+            await send_message(bot_token, chat_id, "\n".join(lines))
+            logger.info("Trending alert sent: %s", [t for t, _, _ in alerts])
+        except Exception as exc:
+            logger.error("Trending alert send failed: %s", exc)
+
+    return new_alerted
+
+
+async def send_snooze_reminders(tg_cfg: dict, due: list[dict]) -> list[str]:
+    """Send Telegram reminders for due snooze entries. Returns article_ids sent successfully."""
+    bot_token = tg_cfg.get("bot_token", "")
+    chat_id = tg_cfg.get("chat_id", "")
+    if not bot_token or not chat_id or not due:
+        return []
+    sent: list[str] = []
+    for s in due:
+        try:
+            title = _html_escape(s["title"])
+            url = s["url"]
+            text = f'⏰ <b>Rappel</b>\n<a href="{url}">{title}</a>'
+            await send_message(bot_token, s.get("chat_id") or chat_id, text)
+            sent.append(s["article_id"])
+            logger.info("Snooze reminder sent: %s", s["article_id"])
+        except Exception as exc:
+            logger.error("Snooze reminder failed for %s: %s", s["article_id"], exc)
+    return sent
+
+
 async def _register_webhook(tg_cfg: dict, public_url: str) -> None:
     """Call Telegram setWebhook on startup. Logs errors, never raises."""
     bot_token = tg_cfg.get("bot_token", "")

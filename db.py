@@ -74,6 +74,16 @@ pending_sync_table = Table(
     Column("queued_at", Integer, nullable=False),
 )
 
+snooze_table = Table(
+    "snooze",
+    metadata,
+    Column("article_id", Text, primary_key=True),
+    Column("chat_id", Text, nullable=False),
+    Column("snooze_until", Integer, nullable=False),
+    Column("title", Text),
+    Column("url", Text),
+)
+
 users_table = Table(
     "users",
     metadata,
@@ -436,6 +446,46 @@ async def clear_pending_sync(ids: list[str]) -> None:
         for i in range(0, len(ids), chunk_size):
             chunk = ids[i : i + chunk_size]
             await conn.execute(delete(pending_sync_table).where(pending_sync_table.c.id.in_(chunk)))
+
+
+# ---------------------------------------------------------------------------
+# Snooze reminders
+# ---------------------------------------------------------------------------
+
+
+async def add_snooze(
+    article_id: str, chat_id: str, snooze_until: int, title: str, url: str
+) -> None:
+    """Schedule a Telegram reminder for an article. Overwrites any existing snooze."""
+    async with get_engine().begin() as conn:
+        await conn.execute(delete(snooze_table).where(snooze_table.c.article_id == article_id))
+        await conn.execute(
+            insert(snooze_table).values(
+                article_id=article_id,
+                chat_id=chat_id,
+                snooze_until=snooze_until,
+                title=title,
+                url=url,
+            )
+        )
+
+
+async def get_due_snoozes(now: int | None = None) -> list[dict]:
+    """Return snooze entries whose reminder time has passed."""
+    if now is None:
+        now = int(time.time())
+    async with get_engine().connect() as conn:
+        rows = (
+            (await conn.execute(select(snooze_table).where(snooze_table.c.snooze_until <= now)))
+            .mappings()
+            .all()
+        )
+    return [dict(r) for r in rows]
+
+
+async def delete_snooze(article_id: str) -> None:
+    async with get_engine().begin() as conn:
+        await conn.execute(delete(snooze_table).where(snooze_table.c.article_id == article_id))
 
 
 # ---------------------------------------------------------------------------

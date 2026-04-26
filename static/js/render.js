@@ -157,6 +157,8 @@ function renderRow(a) {
               aria-pressed="${a.bookmarked}">${a.bookmarked ? '★' : '☆'}</button>
             <button class="row-lu" onclick="markSingleAsRead('${esc(a.id)}', event)"
               aria-label="Marquer comme lu">${t('btn.markRead')}</button>
+            <button class="row-snooze" onclick="snoozeArticle('${esc(a.id)}', event)"
+              aria-label="Rappel demain" title="Rappel demain 8h">💤</button>
             ` : ''}
           ` : `<span class="badge-read">${t('label.read')}</span>`}
           <span class="row-score ${sc}" data-tooltip="${esc(tooltip)}">${a.score.toFixed(0)}↑</span>
@@ -194,6 +196,8 @@ function renderCompactRow(a) {
           aria-label="${a.bookmarked ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${a.bookmarked ? '★' : '☆'}</button>
         <button class="row-lu" onclick="markSingleAsRead('${esc(a.id)}', event)"
           aria-label="Marquer comme lu">${t('btn.markRead')}</button>
+        <button class="row-snooze" onclick="snoozeArticle('${esc(a.id)}', event)"
+          aria-label="Rappel demain" title="Rappel demain 8h">💤</button>
         ` : ''}
       ` : `<span class="badge-read">${t('label.read')}</span>`}
       <span class="compact-time">${fmtAgo(a.published)}</span>

@@ -4,8 +4,11 @@ import time
 
 from db import (
     add_pending_sync,
+    add_snooze,
     clear_pending_sync,
+    delete_snooze,
     get_bookmarked_ids,
+    get_due_snoozes,
     get_pending_sync,
     get_scoring_config,
     get_user_hash,
@@ -273,3 +276,38 @@ class TestLoadForRescore:
         row = rows[0]
         for key in ("id", "title", "url", "feed_title", "published", "content"):
             assert key in row, f"Missing field: {key}"
+
+
+# ── snooze ────────────────────────────────────────────────────────────────────
+
+
+class TestSnooze:
+    async def test_add_and_get_due(self, db):
+        past = int(time.time()) - 10
+        await add_snooze("art-1", "42", past, "My Article", "https://example.com")
+        due = await get_due_snoozes()
+        assert len(due) == 1
+        assert due[0]["article_id"] == "art-1"
+        assert due[0]["title"] == "My Article"
+
+    async def test_not_due_in_future(self, db):
+        future = int(time.time()) + 3600
+        await add_snooze("art-1", "42", future, "My Article", "https://example.com")
+        due = await get_due_snoozes()
+        assert due == []
+
+    async def test_delete_snooze(self, db):
+        past = int(time.time()) - 10
+        await add_snooze("art-1", "42", past, "My Article", "https://example.com")
+        await delete_snooze("art-1")
+        due = await get_due_snoozes()
+        assert due == []
+
+    async def test_add_snooze_overwrites(self, db):
+        """Adding a snooze for the same article replaces the existing one."""
+        past = int(time.time()) - 10
+        future = int(time.time()) + 3600
+        await add_snooze("art-1", "42", past, "Old Title", "https://old.com")
+        await add_snooze("art-1", "42", future, "New Title", "https://new.com")
+        due = await get_due_snoozes()
+        assert due == []  # now in the future, not due

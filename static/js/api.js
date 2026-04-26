@@ -292,6 +292,23 @@ async function updateScoringConfig(topics) {
   if (!r.ok) throw new Error('Failed to save scoring config');
 }
 
+async function snoozeArticle(id, e) {
+  e.stopPropagation(); e.preventDefault();
+  if (!_requireAuth()) return;
+  try {
+    const r = await fetch('/api/snooze', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ article_id: id }),
+    });
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
+      showToast(data.detail || 'Erreur snooze');
+      return;
+    }
+    showToast('💤 Rappel programmé pour demain 8h');
+  } catch (err) { console.error(err); }
+}
+
 async function changePassword(currentPassword, newPassword) {
   const r = await fetch('/api/change-password', {
     method: 'POST',

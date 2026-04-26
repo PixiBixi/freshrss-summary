@@ -69,6 +69,12 @@ def load_config() -> dict:
     if v := os.environ.get("DATABASE_URL"):
         db["url"] = v
 
+    tg = cfg.setdefault("telegram", {})
+    if v := os.environ.get("TELEGRAM_BOT_TOKEN"):
+        tg["bot_token"] = v
+    if v := os.environ.get("TELEGRAM_CHAT_ID"):
+        tg["chat_id"] = v
+
     missing = [k for k in ("url", "username", "api_password") if not fr.get(k)]
     if missing:
         raise RuntimeError(
@@ -583,6 +589,45 @@ def cmd_tune(args, cfg: dict) -> int:
     return 0
 
 
+async def _load_articles_for_digest(cfg: dict) -> list[dict]:
+    from db import load_articles
+
+    await _init_db(cfg)
+    articles, _, _ = await load_articles()
+    return articles
+
+
+def cmd_digest(args, cfg: dict) -> int:
+    """Build and print the Telegram digest from DB articles. Optionally send it."""
+    from telegram_digest import build_digest, send_message
+
+    try:
+        articles = asyncio.run(_load_articles_for_digest(cfg))
+    except Exception as e:
+        print(err(f"DB error: {e}"))
+        return 1
+
+    text = build_digest(articles)
+    print(text)
+
+    if args.send:
+        tg = cfg.get("telegram", {})
+        bot_token = tg.get("bot_token", "")
+        chat_id = tg.get("chat_id", "")
+        if not bot_token or not chat_id:
+            print(err("Telegram bot_token or chat_id not configured"))
+            return 1
+        try:
+            asyncio.run(send_message(bot_token, chat_id, text))
+            print(ok("Digest sent via Telegram"))
+        except Exception as e:
+            print(err(f"Send failed: {e}"))
+            return 1
+
+    print()
+    return 0
+
+
 def _apply_weights(cfg: dict, suggestions: dict) -> None:
     if not CONFIG_PATH.exists():
         raise FileNotFoundError("config.yaml not found")
@@ -611,6 +656,7 @@ def main() -> int:
   rescore            Rescore DB articles with current config weights
   import [FILE]      Import from JSON file  |  --starred : from FreshRSS starred
   tune               Analyze starred items, suggest weight adjustments  (--apply to save)
+  digest             Build and print the digest  |  --send : push via Telegram
 
 {BOLD}examples:{RESET}
   python cli.py check
@@ -618,6 +664,8 @@ def main() -> int:
   python cli.py import --starred --limit 300
   python cli.py tune --apply
   python cli.py import articles.json
+  python cli.py digest
+  python cli.py digest --send
 """,
     )
     sub = parser.add_subparsers(dest="command")
@@ -641,6 +689,9 @@ def main() -> int:
     p.add_argument("--apply", action="store_true", help="Write suggestions to config.yaml")
     p.add_argument("--limit", type=int, help="Max starred items to analyze (default: 200)")
 
+    p = sub.add_parser("digest", help="Build and print the Telegram digest (--send to push)")
+    p.add_argument("--send", action="store_true", help="Send the digest via Telegram")
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -659,6 +710,7 @@ def main() -> int:
         "rescore": cmd_rescore,
         "import": cmd_import,
         "tune": cmd_tune,
+        "digest": cmd_digest,
     }
     return dispatch[args.command](args, cfg)
 

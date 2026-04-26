@@ -33,8 +33,11 @@ from starlette.middleware.sessions import SessionMiddleware
 from db import (
     DEFAULT_DB_URL,
     add_pending_sync,
+    add_snooze,
     clear_pending_sync,
+    delete_snooze,
     get_bookmarked_ids,
+    get_due_snoozes,
     get_meta,
     get_pending_sync,
     get_scoring_config,
@@ -53,7 +56,7 @@ from db import (
 )
 from freshrss_client import Article, FreshRSSClient
 from scorer import ScoredArticle, build_topics, score_articles
-from telegram_digest import _register_webhook, send_digest
+from telegram_digest import _register_webhook, check_trending, send_digest, send_snooze_reminders
 
 # ---------------------------------------------------------------------------
 # Prometheus metrics
@@ -205,6 +208,7 @@ class Cache:
 
 cache = Cache()
 _refresh_task: asyncio.Task | None = None
+_trending_alerted: set = set()
 
 
 # ---------------------------------------------------------------------------
@@ -342,6 +346,26 @@ async def lifespan(app: FastAPI):
             coalesce=True,
         )
         logger.info("Telegram digest scheduled at %02dh00 Europe/Paris", hour)
+        scheduler.add_job(
+            _check_trending,
+            "interval",
+            hours=1,
+            args=[tg_cfg],
+            id="trending_check",
+            max_instances=1,
+            coalesce=True,
+        )
+        logger.info("Trending topic checker scheduled: every 1h")
+        scheduler.add_job(
+            _check_snoozes,
+            "interval",
+            minutes=15,
+            args=[tg_cfg],
+            id="snooze_check",
+            max_instances=1,
+            coalesce=True,
+        )
+        logger.info("Snooze checker scheduled: every 15min")
         public_url = cfg.get("server", {}).get("public_url", "")
         if public_url:
             await _register_webhook(tg_cfg, public_url)
@@ -1064,6 +1088,45 @@ async def bookmark(req: BookmarkRequest) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Snooze
+# ---------------------------------------------------------------------------
+
+
+class SnoozeRequest(BaseModel):
+    article_id: str
+    snooze_until: int | None = None  # Unix timestamp; default = tomorrow 08:00 local
+
+
+@app.post("/api/snooze", dependencies=[Depends(require_auth)])
+async def snooze_article(req: SnoozeRequest, request: Request) -> dict[str, Any]:
+    """Schedule a Telegram reminder for an article."""
+    import datetime
+
+    article = next((a for a in cache.articles if a["id"] == req.article_id), None)
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    tg_cfg: dict = getattr(request.app.state, "tg_cfg", {})
+    if not tg_cfg.get("bot_token") or not tg_cfg.get("chat_id"):
+        raise HTTPException(status_code=400, detail="Telegram not configured")
+
+    if req.snooze_until:
+        snooze_until = req.snooze_until
+    else:
+        tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+        snooze_until = int(datetime.datetime.combine(tomorrow, datetime.time(8, 0)).timestamp())
+
+    await add_snooze(
+        req.article_id,
+        tg_cfg["chat_id"],
+        snooze_until,
+        article["title"],
+        article["url"],
+    )
+    return {"status": "ok", "snooze_until": snooze_until}
+
+
+# ---------------------------------------------------------------------------
 # Scoring config
 # ---------------------------------------------------------------------------
 
@@ -1113,6 +1176,22 @@ async def change_password(req: ChangePasswordRequest, request: Request) -> dict[
 # ---------------------------------------------------------------------------
 # Health & metrics
 # ---------------------------------------------------------------------------
+
+
+async def _check_trending(tg_cfg: dict) -> None:
+    """Scheduler job: alert if a topic is surging in the last 2h."""
+    global _trending_alerted
+    _trending_alerted = await check_trending(cache.articles, tg_cfg, _trending_alerted)
+
+
+async def _check_snoozes(tg_cfg: dict) -> None:
+    """Scheduler job: deliver due snooze reminders and remove them from DB."""
+    due = await get_due_snoozes()
+    if not due:
+        return
+    sent = await send_snooze_reminders(tg_cfg, due)
+    for article_id in sent:
+        await delete_snooze(article_id)
 
 
 @app.post("/telegram/webhook")
