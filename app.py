@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import (
     HTMLResponse,
@@ -147,6 +148,10 @@ def load_config() -> dict:
         srv["host"] = v
     if v := os.environ.get("SERVER_PORT"):
         srv["port"] = int(v)
+
+    sched = cfg.setdefault("scheduler", {})
+    if v := os.environ.get("REFRESH_INTERVAL_MINUTES"):
+        sched["interval_minutes"] = int(v)
 
     db = cfg.setdefault("database", {})
     if v := os.environ.get("DATABASE_URL"):
@@ -295,7 +300,26 @@ async def lifespan(app: FastAPI):
             else "never",
         )
     _update_prom_cache()
+
+    scheduler: AsyncIOScheduler | None = None
+    interval = int(cfg.get("scheduler", {}).get("interval_minutes", 0))
+    if interval > 0:
+        scheduler = AsyncIOScheduler(timezone="UTC")
+        scheduler.add_job(
+            _auto_refresh,
+            "interval",
+            minutes=interval,
+            id="auto_refresh",
+            max_instances=1,
+            coalesce=True,
+        )
+        scheduler.start()
+        logger.info("Auto-refresh scheduler started: every %d min", interval)
+
     yield
+
+    if scheduler and scheduler.running:
+        scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="FreshRSS Summary", lifespan=lifespan)
@@ -727,6 +751,15 @@ def _blocking_fetch_and_score(cfg: dict, topics_cfg: dict) -> tuple[list[dict], 
         return [], 0
 
     return [a.to_dict() for a in scored], total_fetched
+
+
+async def _auto_refresh() -> None:
+    """Scheduled job: runs _do_refresh unless a refresh is already in progress."""
+    if cache.is_loading:
+        logger.info("Scheduled refresh skipped — already in progress")
+        return
+    logger.info("Scheduled refresh starting")
+    await _do_refresh()
 
 
 async def _do_refresh() -> None:

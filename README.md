@@ -85,6 +85,9 @@ scoring:
   title_weight: 3     # a title match counts 3x more than body
   min_score: 1        # minimum score to appear in the UI
 
+scheduler:
+  interval_minutes: 60  # auto-refresh every 60 min (0 = disabled)
+
 # auth:
 #   secret_key: ""    # generate: python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
@@ -126,6 +129,7 @@ All config values can be overridden by environment variables:
 | `ADMIN_USERNAME` | *(admin user, default: `admin`)* |
 | `ADMIN_PASSWORD` | *(reset/init admin password)* |
 | `SECRET_KEY` | `auth.secret_key` |
+| `REFRESH_INTERVAL_MINUTES` | `scheduler.interval_minutes` |
 
 ## Docker
 

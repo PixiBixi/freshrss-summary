@@ -36,6 +36,10 @@ scoring:
   title_weight: 3       # Title keyword matches multiplier
   min_score: 1          # Minimum score to include in results
 
+scheduler:
+  interval_minutes: 60  # Auto-refresh interval in minutes (0 = disabled)
+                        # Overridable via REFRESH_INTERVAL_MINUTES env var
+
 topics:
   SRE:
     weight: 1.5

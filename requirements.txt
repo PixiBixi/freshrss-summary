@@ -9,6 +9,7 @@ sqlalchemy==2.0.48
 aiosqlite==0.22.1
 greenlet==3.3.2
 prometheus-client==0.24.1
+apscheduler==3.10.4
 # Optional async drivers (install the one matching your DATABASE_URL backend):
 #   MySQL      : uv pip install aiomysql
 #   PostgreSQL : uv pip install asyncpg

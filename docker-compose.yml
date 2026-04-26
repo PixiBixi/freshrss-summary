@@ -1,0 +1,33 @@
+services:
+  # ==========================================================================
+  # FreshRSS Summary - Article scoring UI (${FRESHRSS_SUMMARY_HOST})
+  # ==========================================================================
+  freshrss-summary:
+    image: ghcr.io/pixibixi/freshrss-summary:latest
+    container_name: freshrss-summary
+    restart: always
+    networks:
+      - proxy
+    environment:
+      - FRESHRSS_URL=${FRESHRSS_URL}
+      - FRESHRSS_USERNAME=${FRESHRSS_USERNAME}
+      - FRESHRSS_API_PASSWORD=${FRESHRSS_API_PASSWORD}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - SECRET_KEY=${SECRET_KEY}
+      - REFRESH_INTERVAL_MINUTES=${REFRESH_INTERVAL_MINUTES:-60}
+      # - DATABASE_URL=${DATABASE_URL}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.freshrss-summary.rule=Host(`${FRESHRSS_SUMMARY_HOST}`)
+      - traefik.http.routers.freshrss-summary.entrypoints=websecure
+      - traefik.http.routers.freshrss-summary.tls.certresolver=letsencrypt
+      - traefik.http.routers.freshrss-summary.middlewares=security-headers@docker
+      - traefik.http.services.freshrss-summary.loadbalancer.server.port=8123
+      - traefik.docker.network=proxy
+    volumes:
+      - /root/files/apps/freshrss-summary/data:/app/data
+
+networks:
+  proxy:
+    external: true
