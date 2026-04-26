@@ -293,3 +293,15 @@ async function updateScoringConfig(topics) {
   });
   if (!r.ok) throw new Error('Failed to save scoring config');
 }
+
+async function changePassword(currentPassword, newPassword) {
+  const r = await fetch('/api/change-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.detail || 'error');
+  }
+}

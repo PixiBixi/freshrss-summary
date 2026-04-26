@@ -41,7 +41,10 @@ On first start, an admin account is created automatically with a random password
 ========================================================
 ```
 
-To change the password or set a custom account:
+To change the password:
+
+- **From the UI**: click the **🔑 Password** button in the header filters bar (requires login). Enter the current password, then the new one (min. 8 characters) with confirmation.
+- **Via env var on restart** (e.g. Docker / Kubernetes):
 
 ```bash
 ADMIN_PASSWORD=newpassword python app.py
@@ -256,6 +259,7 @@ Weights and keywords are editable live from the UI (⚙ **Topics** button) — p
 - **Last refresh indicator**: shows time since last fetch; ⚠ warning if stale (>3h)
 - **Rescore**: reapply current weights without re-fetching
 - **Scoring config** (⚙ Topics): edit topic names, weights, and keywords live — saved to DB, triggers automatic rescore
+- **Password change** (🔑 Password): change the current user's password directly from the UI — no restart required
 - **i18n**: French, English, German, Spanish, Italian, Portuguese — auto-detected from browser, override persisted in localStorage
 
 ## Observability

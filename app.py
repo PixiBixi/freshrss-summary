@@ -45,6 +45,7 @@ from db import (
     save_articles,
     set_articles_read,
     set_scoring_config,
+    set_user_password,
     toggle_bookmark,
     upsert_user,
 )
@@ -775,6 +776,30 @@ async def update_scoring(req: ScoringConfigRequest) -> dict[str, str]:
     """Persist a new scoring config to DB. Takes effect on next refresh or rescore."""
     await set_scoring_config(req.topics)
     logger.info("Scoring config updated: %d topics", len(req.topics))
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Password change
+# ---------------------------------------------------------------------------
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@app.post("/api/change-password", dependencies=[Depends(require_auth)])
+async def change_password(req: ChangePasswordRequest, request: Request) -> dict[str, str]:
+    """Change the password of the currently authenticated user."""
+    username = request.session.get("username", ADMIN_USERNAME)
+    stored_hash = await get_user_hash(username)
+    if not stored_hash or not verify_password(req.current_password, stored_hash):
+        raise HTTPException(status_code=400, detail="current_password_wrong")
+    if len(req.new_password) < 8:
+        raise HTTPException(status_code=400, detail="password_too_short")
+    await set_user_password(username, hash_password(req.new_password))
+    logger.info("Password changed for user '%s'", username)
     return {"status": "ok"}
 
 

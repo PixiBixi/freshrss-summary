@@ -367,6 +367,16 @@ async def get_user_hash(username: str) -> str | None:
     return row[0] if row else None
 
 
+async def set_user_password(username: str, password_hash: str) -> None:
+    """Update the password hash for an existing user."""
+    async with get_engine().begin() as conn:
+        await conn.execute(
+            update(users_table)
+            .where(users_table.c.username == username)
+            .values(password_hash=password_hash)
+        )
+
+
 async def upsert_user(username: str, password_hash: str) -> None:
     async with get_engine().begin() as conn:
         existing = (
