@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.2.0](https://github.com/PixiBixi/freshrss-summary/compare/v1.1.0...v1.2.0) (2026-04-26)
+
+
+### Features
+
+* **auth:** gate mark-as-read and bookmark actions behind authentication ([5971f9e](https://github.com/PixiBixi/freshrss-summary/commit/5971f9eeda5299fa6f7e549edc733a2c8171bfb5))
+* **docker:** add Telegram env vars to docker-compose ([daf8cd7](https://github.com/PixiBixi/freshrss-summary/commit/daf8cd74146e3750954b5d1b0a799db537faab3d))
+* **telegram:** add telegram_digest module with full test coverage ([eaea1f6](https://github.com/PixiBixi/freshrss-summary/commit/eaea1f66fcad0114212440b153fbcc74756ba2b3))
+* **telegram:** wire scheduler, webhook endpoint, and config into app ([f338a66](https://github.com/PixiBixi/freshrss-summary/commit/f338a6664080294be94e7d0fdf8f858b9cfeaad0))
+* **ui:** implement quick win improvements ([4bdf1b9](https://github.com/PixiBixi/freshrss-summary/commit/4bdf1b9586d2f07e725a97ae22a23ac5a562bf72))
+* **ui:** minimal/editorial redesign ([b176df6](https://github.com/PixiBixi/freshrss-summary/commit/b176df69034471ae0f88609a0660cd17773bf38d))
+
+
+### Bug Fixes
+
+* **ui:** actions toujours visibles — plus besoin de hover/expand pour Lu et Favoris ([92748b3](https://github.com/PixiBixi/freshrss-summary/commit/92748b3ca0fb9338995cfe428634832de2eeff8f))
+* **ui:** extend min-score slider range to 0-200 (step 5) ([120e4d8](https://github.com/PixiBixi/freshrss-summary/commit/120e4d8395866043d037590aaf6d52f99777cabc))
+* **ui:** icônes en double dans la palette — supprimer le préfixe c.icon redondant ([cd41465](https://github.com/PixiBixi/freshrss-summary/commit/cd414651fcc9c3921e406764173cbd2617136c6b))
+* **ui:** larger text + visible hover (#f0f4f5 on white) ([b3543a8](https://github.com/PixiBixi/freshrss-summary/commit/b3543a8a2b018ea9a1814d147dafff42d1d2f3c1))
+* **ui:** restore 'Summary' in logo text ([e14dfba](https://github.com/PixiBixi/freshrss-summary/commit/e14dfba9dc1d4d44d1a6bd139a626e39d6e32491))
+* **ui:** tooltip score au hover en mode compact ([eef4c67](https://github.com/PixiBixi/freshrss-summary/commit/eef4c67fa6140d69c2e7f183b3022e0303c3b561))
+
 ## [1.1.0](https://github.com/PixiBixi/freshrss-summary/compare/v1.0.2...v1.1.0) (2026-04-26)
 
 
