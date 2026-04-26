@@ -1,13 +1,17 @@
 // ── Command Palette commands ───────────────────────────────────────────
 const PALETTE_COMMANDS = [
-  { icon: '⟳', labelKey: 'btn.refresh',       shortcut: 'R', action: () => { closePalette(); triggerRefresh(); } },
-  { icon: '✓', labelKey: 'btn.markVisible',    shortcut: 'M', action: () => { closePalette(); markVisibleAsRead(); } },
-  { icon: '⇄', labelKey: 'btn.rescore',        shortcut: '',  action: () => { closePalette(); triggerRescore(); } },
-  { icon: '⚙', labelKey: 'btn.scoringCfg',    shortcut: '',  action: () => { closePalette(); openScoringModal(); } },
-  { icon: '🎨', labelKey: 'palette.accent',    shortcut: '',  action: () => { closePalette(); openOverflowMenu(); } },
-  { icon: '🌐', labelKey: 'palette.lang',      shortcut: '',  action: () => { closePalette(); openOverflowMenu(); } },
-  { icon: '🔑', labelKey: 'btn.changePassword', shortcut: '', action: () => { closePalette(); openPwdModal(); } },
-  { icon: '⎋',  labelKey: 'palette.logout',    shortcut: '',  action: () => { closePalette(); doLogout(); } },
+  { icon: '⟳', labelKey: 'btn.refresh',        shortcut: 'R', action: () => { closePalette(); triggerRefresh(); } },
+  { icon: '✓', labelKey: 'btn.markVisible',     shortcut: 'M', action: () => { closePalette(); markVisibleAsRead(); } },
+  { icon: '⇄', labelKey: 'btn.rescore',         shortcut: '',  action: () => { closePalette(); triggerRescore(); } },
+  { icon: '⚙', labelKey: 'btn.scoringCfg',     shortcut: '',  action: () => { closePalette(); openScoringModal(); } },
+  { icon: '📅', labelKey: 'palette.period7',    shortcut: '',  action: () => { closePalette(); setDays(7); } },
+  { icon: '📅', labelKey: 'palette.period14',   shortcut: '',  action: () => { closePalette(); setDays(14); } },
+  { icon: '📅', labelKey: 'palette.period30',   shortcut: '',  action: () => { closePalette(); setDays(30); } },
+  { icon: '📅', labelKey: 'palette.periodAll',  shortcut: '',  action: () => { closePalette(); setDays(0); } },
+  { icon: '🎨', labelKey: 'palette.accent',     shortcut: '',  action: () => { closePalette(); openOverflowMenu(); } },
+  { icon: '🌐', labelKey: 'palette.lang',       shortcut: '',  action: () => { closePalette(); openOverflowMenu(); } },
+  { icon: '🔑', labelKey: 'btn.changePassword', shortcut: '',  action: () => { closePalette(); openPwdModal(); } },
+  { icon: '⎋',  labelKey: 'palette.logout',     shortcut: '',  action: () => { closePalette(); doLogout(); } },
 ];
 
 // ── Toast ──────────────────────────────────────────────────────────────
@@ -206,7 +210,21 @@ function updateLastRefresh(ts) {
   el.title = stale ? t('stale.title') : '';
 }
 
+// ── Days period ────────────────────────────────────────────────────────
+function setDays(n) {
+  state.days = n;
+  const sel = document.getElementById('days-select');
+  if (sel) sel.value = String(n);
+  loadArticles();
+}
+
 // ── Keyboard navigation ────────────────────────────────────────────────
+function _rowSelector(id) {
+  return state.compact
+    ? `.compact-row[data-id="${CSS.escape(id)}"]`
+    : `.feed-row[data-id="${CSS.escape(id)}"]`;
+}
+
 function moveFocus(dir) {
   const maxIdx = Math.min(state.filtered.length, state.displayed) - 1;
   if (maxIdx < 0) return;
@@ -214,7 +232,7 @@ function moveFocus(dir) {
 
   if (state.focusedIdx >= 0) {
     const curr = state.filtered[state.focusedIdx];
-    if (curr) document.querySelector(`.feed-row[data-id="${CSS.escape(curr.id)}"]`)?.classList.remove('focused');
+    if (curr) document.querySelector(_rowSelector(curr.id))?.classList.remove('focused');
   }
 
   state.focusedIdx = next;
@@ -226,7 +244,7 @@ function moveFocus(dir) {
     renderArticles();
   }
 
-  const row = document.querySelector(`.feed-row[data-id="${CSS.escape(article.id)}"]`);
+  const row = document.querySelector(_rowSelector(article.id));
   if (row) { row.classList.add('focused'); row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
 }
 
@@ -446,8 +464,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('sort-select').addEventListener('change', e => { state.sort = e.target.value; applyFilters(); });
   const minScoreEl = document.getElementById('min-score');
-  minScoreEl.value = state.minScore;
-  minScoreEl.addEventListener('input', e => { state.minScore = parseFloat(e.target.value) || 0; localStorage.setItem('freshrss-minscore', state.minScore); applyFilters(); });
+  const minScoreVal = document.getElementById('min-score-val');
+  minScoreEl.value = Math.min(state.minScore, 10);
+  if (minScoreVal) minScoreVal.textContent = state.minScore;
+  minScoreEl.addEventListener('input', e => {
+    state.minScore = parseFloat(e.target.value) || 0;
+    if (minScoreVal) minScoreVal.textContent = state.minScore;
+    localStorage.setItem('freshrss-minscore', state.minScore);
+    applyFilters();
+  });
   document.getElementById('days-select').addEventListener('change', e => {
     state.days = parseInt(e.target.value);
     loadArticles();
@@ -514,7 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     else if (e.key === 'm') {
-      if (state.focusedIdx >= 0) {
+      if (state.authenticated && state.focusedIdx >= 0) {
         const a = state.filtered[state.focusedIdx];
         if (a) markSingleAsRead(a.id, { stopPropagation: () => {}, preventDefault: () => {} });
       }

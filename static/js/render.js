@@ -184,6 +184,7 @@ function renderCompactRow(a) {
     <div class="compact-row${a._read ? ' shown-read' : ''}" data-id="${esc(a.id)}"${a._read ? ' data-already-read="1"' : ''}
       onclick="toggleCompactRow('${esc(a.id)}')">
       <span class="compact-score ${sc}" data-tooltip="${esc(tooltip)}">${a.score.toFixed(0)}</span>
+      <span class="compact-feed">${esc(a.feed_title)}</span>
       <a class="compact-title" href="${esc(a.url)}" target="_blank" rel="noopener"
         onclick="event.stopPropagation()">${esc(a.title)}</a>
       ${!a._read ? `
