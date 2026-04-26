@@ -1,3 +1,15 @@
+// ── Command Palette commands ───────────────────────────────────────────
+const PALETTE_COMMANDS = [
+  { icon: '⟳', labelKey: 'btn.refresh',       shortcut: 'R', action: () => { closePalette(); triggerRefresh(); } },
+  { icon: '✓', labelKey: 'btn.markVisible',    shortcut: 'M', action: () => { closePalette(); markVisibleAsRead(); } },
+  { icon: '⇄', labelKey: 'btn.rescore',        shortcut: '',  action: () => { closePalette(); triggerRescore(); } },
+  { icon: '⚙', labelKey: 'btn.scoringCfg',    shortcut: '',  action: () => { closePalette(); openScoringModal(); } },
+  { icon: '🎨', labelKey: 'palette.accent',    shortcut: '',  action: () => { closePalette(); openOverflowMenu(); } },
+  { icon: '🌐', labelKey: 'palette.lang',      shortcut: '',  action: () => { closePalette(); openOverflowMenu(); } },
+  { icon: '🔑', labelKey: 'btn.changePassword', shortcut: '', action: () => { closePalette(); openPwdModal(); } },
+  { icon: '⎋',  labelKey: 'palette.logout',    shortcut: '',  action: () => { closePalette(); doLogout(); } },
+];
+
 // ── Toast ──────────────────────────────────────────────────────────────
 let _toastTimeout = null;
 
@@ -42,7 +54,7 @@ function esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// ── Detail panel ───────────────────────────────────────────────────────
+// ── Detail panel (mode A) ──────────────────────────────────────────────
 function toggleDetail(id) {
   const detail = document.getElementById(`detail-${id}`);
   if (!detail) return;
@@ -56,6 +68,39 @@ function toggleDetail(id) {
     }
     detail.classList.add('open');
     state.openRow = id;
+  }
+}
+
+// ── Compact row expand (mode C) ────────────────────────────────────────
+function toggleCompactRow(id) {
+  if (state.openRow && state.openRow !== id) {
+    const prev = document.getElementById(`cexp-${state.openRow}`);
+    const prevRow = document.querySelector(`.compact-row[data-id="${CSS.escape(state.openRow)}"]`);
+    if (prev) prev.classList.remove('open');
+    if (prevRow) {
+      prevRow.classList.remove('compact-expanded');
+      const chev = prevRow.querySelector('.compact-chevron');
+      if (chev) chev.textContent = '▼';
+    }
+  }
+
+  const detail = document.getElementById(`cexp-${id}`);
+  const row = document.querySelector(`.compact-row[data-id="${CSS.escape(id)}"]`);
+  if (!detail || !row) return;
+
+  const isOpen = detail.classList.contains('open');
+  if (isOpen) {
+    detail.classList.remove('open');
+    row.classList.remove('compact-expanded');
+    state.openRow = null;
+    const chev = row.querySelector('.compact-chevron');
+    if (chev) chev.textContent = '▼';
+  } else {
+    detail.classList.add('open');
+    row.classList.add('compact-expanded');
+    state.openRow = id;
+    const chev = row.querySelector('.compact-chevron');
+    if (chev) chev.textContent = '▲';
   }
 }
 
@@ -73,11 +118,62 @@ async function toggleShowRead() {
 function toggleCompact() {
   state.compact = !state.compact;
   localStorage.setItem('freshrss-compact', state.compact ? '1' : '0');
-  const grid = document.getElementById('articles-grid');
-  const btn  = document.getElementById('compact-btn');
-  grid.classList.toggle('compact', state.compact);
-  btn.classList.toggle('btn-primary', state.compact);
-  btn.classList.toggle('btn-ghost', !state.compact);
+  state.openRow = null;
+  const item = document.getElementById('compact-overflow-item');
+  if (item) item.style.color = state.compact ? 'var(--accent)' : '';
+  closeOverflowMenu();
+  renderArticles();
+}
+
+// ── Overflow menu ──────────────────────────────────────────────────────
+function openOverflowMenu() {
+  document.getElementById('overflow-menu').classList.add('open');
+  document.getElementById('overflow-btn').setAttribute('aria-expanded', 'true');
+  _buildOverflowLang();
+  initAccentColor();
+}
+
+function closeOverflowMenu() {
+  document.getElementById('overflow-menu')?.classList.remove('open');
+  document.getElementById('overflow-btn')?.setAttribute('aria-expanded', 'false');
+}
+
+function toggleOverflowMenu() {
+  const menu = document.getElementById('overflow-menu');
+  if (menu.classList.contains('open')) closeOverflowMenu();
+  else openOverflowMenu();
+}
+
+function _buildOverflowLang() {
+  const container = document.getElementById('overflow-lang');
+  if (!container) return;
+  container.innerHTML = LANGS.map(l =>
+    `<button class="overflow-lang-item${l.code === state.lang ? ' active' : ''}"
+      onclick="setLang('${l.code}'); closeOverflowMenu()">
+      <span>${l.flag}</span><span>${l.label}</span>
+    </button>`
+  ).join('');
+}
+
+// ── Accent color ───────────────────────────────────────────────────────
+function setAccentColor(val) {
+  document.documentElement.style.setProperty('--accent', val);
+  localStorage.setItem('freshrss-accent', val);
+}
+
+function resetAccentColor(e) {
+  if (e) e.stopPropagation();
+  const def = '#5c98a0';
+  setAccentColor(def);
+  const picker = document.getElementById('accent-picker');
+  if (picker) picker.value = def;
+}
+
+function initAccentColor() {
+  const saved = localStorage.getItem('freshrss-accent') || '#5c98a0';
+  document.documentElement.style.setProperty('--accent', saved);
+  const picker = document.getElementById('accent-picker');
+  if (picker) picker.value = saved;
 }
 
 // ── Button loading states ──────────────────────────────────────────────
@@ -90,14 +186,7 @@ function setRefreshBtnLoading(on) {
 }
 
 function setRescoreBtnLoading(on) {
-  const btn = document.getElementById('rescore-btn');
-  btn.disabled = on;
-  btn.className = 'btn btn-ghost';
-  delete btn.dataset.confirming;
-  clearTimeout(btn._confirmTimer);
-  btn.innerHTML = on
-    ? `<span class="spinner" style="display:inline-block;width:12px;height:12px;border-width:2px"></span> ${t('toast.rescoring')}`
-    : t('btn.rescore');
+  // rescore btn is now in overflow menu — no DOM button to update
 }
 
 // ── Last refresh label ─────────────────────────────────────────────────
@@ -167,7 +256,6 @@ async function openScoringModal() {
       `<p style="color:#dc2626">${esc(e.message)}</p>`;
   }
 
-  // Close on overlay click
   modal.onclick = (e) => { if (e.target === modal) closeScoringModal(); };
   document.addEventListener('keydown', _scoringEscHandler);
 }
@@ -209,7 +297,6 @@ function _topicRowHtml(name, cfg) {
 
 function addTopicRow() {
   const container = document.getElementById('scoring-topics');
-  // Remove placeholder text if present
   if (container.querySelector('p')) container.innerHTML = '';
   const div = document.createElement('div');
   div.innerHTML = _topicRowHtml('', { keywords: [], weight: 1.0 });
@@ -241,7 +328,6 @@ async function saveScoringConfig() {
     const topics = _collectTopics();
     await updateScoringConfig(topics);
     closeScoringModal();
-    // Auto-rescore with new weights
     showToast(t('cfg.saved'));
     _doRescore();
   } catch (e) {
@@ -300,12 +386,62 @@ async function savePwd() {
   }
 }
 
+// ── Command Palette ────────────────────────────────────────────────────
+let _paletteFocusIdx = 0;
+let _paletteFiltered = [];
+
+function openPalette() {
+  const overlay = document.getElementById('cmd-palette');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  const input = document.getElementById('palette-input');
+  input.value = '';
+  _paletteFocusIdx = 0;
+  _renderPalette('');
+  setTimeout(() => input.focus(), 0);
+}
+
+function closePalette() {
+  const overlay = document.getElementById('cmd-palette');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function _renderPalette(query) {
+  const q = query.toLowerCase().trim();
+  _paletteFiltered = PALETTE_COMMANDS.filter(c => {
+    const label = t(c.labelKey).toLowerCase();
+    return !q || label.includes(q) || c.icon.includes(q);
+  });
+  if (_paletteFocusIdx >= _paletteFiltered.length) _paletteFocusIdx = 0;
+
+  const list = document.getElementById('palette-list');
+  list.innerHTML = _paletteFiltered.map((c, i) => `
+    <div class="palette-item${i === _paletteFocusIdx ? ' focused' : ''}"
+      onclick="_execPaletteIdx(${i})"
+      onmouseover="_paletteFocusIdx=${i}; _highlightPalette()">
+      <span class="palette-item-label">${c.icon} ${esc(t(c.labelKey))}</span>
+      ${c.shortcut ? `<span class="palette-shortcut">${esc(c.shortcut)}</span>` : ''}
+    </div>`).join('');
+}
+
+function _highlightPalette() {
+  document.querySelectorAll('.palette-item').forEach((el, i) => {
+    el.classList.toggle('focused', i === _paletteFocusIdx);
+  });
+}
+
+function _execPaletteIdx(idx) {
+  if (_paletteFiltered[idx]) _paletteFiltered[idx].action();
+}
+
 // ── Init ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  initAccentColor();
+
+  // Compact mode state indicator
   if (state.compact) {
-    document.getElementById('articles-grid').classList.add('compact');
-    document.getElementById('compact-btn').classList.add('btn-primary');
-    document.getElementById('compact-btn').classList.remove('btn-ghost');
+    const item = document.getElementById('compact-overflow-item');
+    if (item) item.style.color = 'var(--accent)';
   }
 
   document.getElementById('sort-select').addEventListener('change', e => { state.sort = e.target.value; applyFilters(); });
@@ -322,7 +458,52 @@ document.addEventListener('DOMContentLoaded', () => {
     applyFilters();
   });
 
+  document.getElementById('palette-input')?.addEventListener('input', e => {
+    _paletteFocusIdx = 0;
+    _renderPalette(e.target.value);
+  });
+
+  document.getElementById('cmd-palette')?.addEventListener('click', closePalette);
+
+  // Close overflow menu on outside click
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.overflow-wrap')) closeOverflowMenu();
+  });
+
   document.addEventListener('keydown', (e) => {
+    // ⌘K / Ctrl+K — toggle palette
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      const palette = document.getElementById('cmd-palette');
+      if (palette && palette.style.display !== 'none') closePalette();
+      else openPalette();
+      return;
+    }
+
+    // Palette navigation (when open)
+    const paletteOpen = document.getElementById('cmd-palette')?.style.display !== 'none';
+    if (paletteOpen) {
+      if (e.key === 'Escape') { closePalette(); return; }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _paletteFocusIdx = Math.min(_paletteFocusIdx + 1, _paletteFiltered.length - 1);
+        _highlightPalette();
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _paletteFocusIdx = Math.max(_paletteFocusIdx - 1, 0);
+        _highlightPalette();
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        _execPaletteIdx(_paletteFocusIdx);
+        return;
+      }
+      return;
+    }
+
     if (e.target.matches('input, select, textarea')) return;
     if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
     else if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
@@ -339,7 +520,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     else if (e.key === 'r' && !e.ctrlKey && !e.metaKey) triggerRefresh();
-    else if (e.key === 'Escape' && state.openRow) toggleDetail(state.openRow);
+    else if (e.key === 'Escape' && state.openRow) {
+      if (state.compact) toggleCompactRow(state.openRow);
+      else toggleDetail(state.openRow);
+    }
   });
 
   fetchMe();

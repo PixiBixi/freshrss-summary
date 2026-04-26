@@ -66,7 +66,7 @@ function renderArticles() {
         <button class="day-read-btn" onclick="markDayAsRead(this)">${t('btn.dayRead')}</button>
       </div>
       <div class="feed-list">
-        ${items.map(renderRow).join('')}
+        ${items.map(state.compact ? renderCompactRow : renderRow).join('')}
       </div>
     </div>
   `).join('');
@@ -118,9 +118,18 @@ function fmtTime(ts) {
   return new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 }
 
+function fmtAgo(ts) {
+  if (!ts) return '';
+  const diff = Math.floor(Date.now() / 1000 - ts);
+  if (diff < 60)    return t('time.now');
+  if (diff < 3600)  return t('time.min', { n: Math.floor(diff / 60) });
+  if (diff < 86400) return t('time.h',   { n: Math.floor(diff / 3600) });
+  return t('time.d', { n: Math.floor(diff / 86400) });
+}
+
 function renderRow(a) {
-  const sc = a.score >= 15 ? 'hi' : a.score >= 5 ? 'md' : 'lo';
-  const topTopic = a.top_topic || Object.keys(a.matched_topics)[0] || '';
+  const sc = a.score >= 8 ? 'hi' : 'lo';
+  const topTopics = Object.keys(a.matched_topics).slice(0, 2);
   const kws = a.matched_keywords.slice(0, 6).map(k => `<span class="tag-kw">${esc(k)}</span>`).join('');
   const summary = a.summary ? `<p style="margin-bottom:6px">${esc(a.summary)}</p>` : '';
   const tooltip = Object.entries(a.matched_topics)
@@ -128,26 +137,62 @@ function renderRow(a) {
     .map(([topic, v]) => `${topic}\u00a0${v.toFixed(1)}`)
     .join(' · ');
 
+  const metaParts = [`<span>${esc(a.feed_title)}</span>`, `<span>${fmtAgo(a.published)}</span>`];
+  for (const topic of topTopics) {
+    metaParts.push(`<span class="row-topic-tag">${esc(topic)}</span>`);
+  }
+
   return `
-    <div class="feed-row${a._read ? ' shown-read' : ''}" data-id="${esc(a.id)}"${a._read ? ' data-already-read="1"' : ''} onclick="toggleDetail('${esc(a.id)}')">
-      <span class="row-score ${sc}" data-tooltip="${esc(tooltip)}">${a.score.toFixed(0)}</span>
-      <span class="row-source">${esc(a.feed_title)}</span>
-      <a class="row-title" href="${esc(a.url)}" target="_blank" rel="noopener"
-        onclick="event.stopPropagation()">${esc(a.title)}</a>
-      <div class="row-right">
-        ${a._read ? `<span class="badge-read">${t('label.read')}</span>` : ''}
-        ${topTopic ? `<span class="row-topic">${esc(topTopic)}</span>` : ''}
-        <span class="row-date">${fmtTime(a.published)}</span>
-        ${!a._read ? `<button class="row-bookmark ${a.bookmarked ? 'bookmarked' : ''}"
-          onclick="toggleBookmark('${esc(a.id)}', event)"
-          aria-label="${a.bookmarked ? 'Retirer des favoris' : 'Ajouter aux favoris'}"
-          aria-pressed="${a.bookmarked}">${a.bookmarked ? '★' : '☆'}</button>
-        <button class="row-lu" onclick="markSingleAsRead('${esc(a.id)}', event)" aria-label="Marquer comme lu">${t('btn.markRead')}</button>` : ''}
+    <div class="feed-row${a._read ? ' shown-read' : ''}" data-id="${esc(a.id)}"${a._read ? ' data-already-read="1"' : ''}
+      onclick="toggleDetail('${esc(a.id)}')">
+      <div class="row-line1">
+        <a class="row-title" href="${esc(a.url)}" target="_blank" rel="noopener"
+          onclick="event.stopPropagation()">${esc(a.title)}</a>
+        <div class="row-actions">
+          ${!a._read ? `
+            <button class="row-bookmark ${a.bookmarked ? 'bookmarked' : ''}"
+              onclick="toggleBookmark('${esc(a.id)}', event)"
+              aria-label="${a.bookmarked ? 'Retirer des favoris' : 'Ajouter aux favoris'}"
+              aria-pressed="${a.bookmarked}">${a.bookmarked ? '★' : '☆'}</button>
+            <button class="row-lu" onclick="markSingleAsRead('${esc(a.id)}', event)"
+              aria-label="Marquer comme lu">${t('btn.markRead')}</button>
+          ` : `<span class="badge-read">${t('label.read')}</span>`}
+          <span class="row-score ${sc}" data-tooltip="${esc(tooltip)}">${a.score.toFixed(0)}↑</span>
+        </div>
       </div>
+      <div class="row-line2">${metaParts.join('<span style="color:var(--border)"> · </span>')}</div>
     </div>
     <div class="feed-row-detail" id="detail-${esc(a.id)}">
       ${summary}
       <div class="detail-tags">${kws}</div>
+    </div>`;
+}
+
+function renderCompactRow(a) {
+  const sc = a.score >= 8 ? 'hi' : 'lo';
+  const topTopics = Object.keys(a.matched_topics).slice(0, 2);
+  const metaParts = [`<span>${esc(a.feed_title)}</span>`];
+  for (const topic of topTopics) metaParts.push(`<span class="row-topic-tag">${esc(topic)}</span>`);
+
+  return `
+    <div class="compact-row${a._read ? ' shown-read' : ''}" data-id="${esc(a.id)}"${a._read ? ' data-already-read="1"' : ''}
+      onclick="toggleCompactRow('${esc(a.id)}')">
+      <span class="compact-score ${sc}">${a.score.toFixed(0)}</span>
+      <span class="compact-title">${esc(a.title)}</span>
+      <span class="compact-time">${fmtAgo(a.published)} <span class="compact-chevron">▼</span></span>
+    </div>
+    <div class="compact-detail" id="cexp-${esc(a.id)}">
+      <div class="compact-meta">${metaParts.join('<span style="color:var(--border)"> · </span>')}</div>
+      <div class="compact-actions">
+        <a href="${esc(a.url)}" target="_blank" rel="noopener"
+          class="btn-sm btn-sm-primary" onclick="event.stopPropagation()">Ouvrir →</a>
+        ${!a._read ? `
+          <button class="btn-sm btn-sm-ghost"
+            onclick="markSingleAsRead('${esc(a.id)}', event)">${t('btn.markRead')}</button>
+          <button class="btn-sm btn-sm-ghost ${a.bookmarked ? 'bookmarked' : ''}"
+            onclick="toggleBookmark('${esc(a.id)}', event)">${a.bookmarked ? '★' : '☆'}</button>
+        ` : `<span style="font-size:10px;color:var(--text-3)">${t('label.read')}</span>`}
+      </div>
     </div>`;
 }
 

@@ -6,41 +6,81 @@
   <title>FreshRSS Summary</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/app.css" />
 </head>
 <body>
   <a href="#articles-grid" class="skip-link">Aller au contenu</a>
 
   <header>
-    <div class="header-main">
-      <div class="logo">📡 FreshRSS Summary</div>
-      <div class="search-group">
-        <div class="search-wrap">
-          <input id="search-input" class="search-input" type="text" placeholder="Rechercher…" autocomplete="off" aria-label="Rechercher des articles" />
-        </div>
-        <button id="search-read-btn" class="btn btn-ghost" onclick="markSearchAsRead()" style="display:none" data-i18n="btn.markSearch" aria-label="Marquer les résultats comme lus">✓ Tout lire</button>
-        <span id="stats-badge" class="stats" style="display:none">
-          <span id="showing-count">0</span> / <span id="total-count">0</span>
-        </span>
+    <!-- Row 1: identity + search + primary actions -->
+    <div class="header-row-1">
+      <div class="logo">📡 FreshRSS</div>
+
+      <div class="search-wrap">
+        <input id="search-input" class="search-input" type="text" placeholder="Rechercher…"
+          autocomplete="off" aria-label="Rechercher des articles" />
+        <button class="search-palette-hint" onclick="openPalette()" tabindex="-1"
+          aria-label="Ouvrir la palette de commandes">⌘K</button>
       </div>
-      <div class="header-actions">
-        <button id="mark-read-btn" class="btn btn-ghost" onclick="markVisibleAsRead()" disabled data-i18n="btn.markVisible" aria-label="Marquer les articles visibles comme lus">✓ Marquer lus</button>
-        <button id="refresh-btn" class="btn btn-primary" onclick="triggerRefresh()" data-i18n="btn.refresh" aria-label="Rafraîchir les articles">⟳ Rafraîchir</button>
-        <div class="lang-dropdown">
-          <button id="lang-btn" class="btn btn-ghost lang-trigger" onclick="toggleLangMenu()" aria-label="Changer de langue" aria-haspopup="listbox" aria-expanded="false">
-            <span id="lang-flag" aria-hidden="true">🇫🇷</span>
+
+      <button id="search-read-btn" class="btn btn-ghost" onclick="markSearchAsRead()"
+        style="display:none" data-i18n="btn.markSearch" aria-label="Marquer les résultats comme lus">✓ Tout lire</button>
+
+      <button id="refresh-btn" class="btn btn-primary" onclick="triggerRefresh()"
+        data-i18n="btn.refresh" aria-label="Rafraîchir les articles">⟳ Rafraîchir</button>
+
+      <div class="overflow-wrap">
+        <button class="overflow-btn" id="overflow-btn" onclick="toggleOverflowMenu()"
+          aria-label="Plus d'options" aria-haspopup="true" aria-expanded="false">···</button>
+        <div id="overflow-menu" class="overflow-menu" role="menu">
+
+          <!-- Compact toggle -->
+          <button class="overflow-item" id="compact-overflow-item" onclick="toggleCompact()" role="menuitem">
+            ⊟ <span id="compact-label" data-i18n="palette.compact">Mode compact</span>
           </button>
-          <div id="lang-menu" class="lang-menu"></div>
+
+          <!-- Rescore -->
+          <button class="overflow-item" onclick="triggerRescore(); closeOverflowMenu()" role="menuitem">⇄ Re-scorer</button>
+
+          <!-- Topics config -->
+          <button class="overflow-item" onclick="openScoringModal(); closeOverflowMenu()" role="menuitem">⚙ Topics</button>
+
+          <div class="overflow-sep"></div>
+
+          <!-- Accent color picker -->
+          <div class="overflow-color-row">
+            <label for="accent-picker">🎨 Couleur d'accent</label>
+            <input type="color" id="accent-picker" class="accent-picker" value="#5c98a0"
+              oninput="setAccentColor(this.value)" aria-label="Couleur d'accent" />
+            <button class="overflow-reset" onclick="resetAccentColor(event)">Reset</button>
+          </div>
+
+          <div class="overflow-sep"></div>
+
+          <!-- Language list (populated by JS) -->
+          <div id="overflow-lang"></div>
+
+          <div class="overflow-sep"></div>
+
+          <!-- Auth: shown when authenticated -->
+          <div id="overflow-auth" style="display:none">
+            <div class="overflow-username" id="auth-username"></div>
+            <button class="overflow-item" onclick="openPwdModal(); closeOverflowMenu()" role="menuitem">🔑 Mot de passe</button>
+            <button class="overflow-item" onclick="doLogout()" role="menuitem" data-i18n="btn.logout">Déconnexion</button>
+          </div>
+
+          <!-- Auth: shown when not authenticated -->
+          <div id="overflow-login" style="display:none">
+            <a href="/login" class="overflow-item" style="text-decoration:none" data-i18n="btn.login">Connexion</a>
+          </div>
+
         </div>
-        <span id="auth-badge" style="display:none">
-          <span id="auth-username" style="font-size:12px;color:var(--text-3);margin-right:4px"></span>
-          <button class="btn btn-ghost" style="font-size:12px;padding:3px 8px" onclick="doLogout()" data-i18n="btn.logout" aria-label="Se déconnecter">Déconnexion</button>
-        </span>
-        <a id="login-btn" href="/login" class="btn btn-ghost" style="font-size:12px;padding:3px 8px;display:none" data-i18n="btn.login" aria-label="Se connecter">Connexion</a>
       </div>
     </div>
-    <div class="header-filters">
+
+    <!-- Row 2: filters + stats -->
+    <div class="header-row-2">
       <select id="sort-select">
         <option value="score" data-i18n="sort.score">Score</option>
         <option value="date"  data-i18n="sort.date" selected>Date</option>
@@ -59,14 +99,18 @@
           <option value="0"  data-i18n="period.all">Tout</option>
         </select>
       </label>
-      <button id="show-old-btn" class="btn btn-ghost" onclick="toggleShowRead()" data-i18n="btn.showRead" aria-label="Afficher les articles lus">⏪ Lu</button>
+      <button id="show-old-btn" class="btn btn-ghost" onclick="toggleShowRead()"
+        data-i18n="btn.showRead" aria-label="Afficher les articles lus">⏪ Lu</button>
       <span class="filter-sep"></span>
-      <span id="last-refresh-label" class="last-refresh"></span>
-      <button id="compact-btn" class="btn btn-ghost btn-icon" onclick="toggleCompact()" title="Mode compact" aria-label="Mode compact">⊟</button>
-      <button id="rescore-btn" class="btn btn-ghost" onclick="triggerRescore()" data-i18n="btn.rescore" aria-label="Re-scorer les articles">⇄ Re-scorer</button>
-      <button id="scoring-cfg-btn" class="btn btn-ghost" onclick="openScoringModal()" data-i18n="btn.scoringCfg" aria-label="Configurer les topics de scoring">⚙ Topics</button>
-      <button id="pwd-btn" class="btn btn-ghost" onclick="openPwdModal()" data-i18n="btn.changePassword" aria-label="Changer le mot de passe">🔑 Mot de passe</button>
+      <div class="header-stats">
+        <span id="last-refresh-label" class="last-refresh"></span>
+        <span id="stats-badge" style="display:none">
+          · <span id="showing-count">0</span>/<span id="total-count">0</span>
+        </span>
+      </div>
     </div>
+
+    <!-- Topic pills -->
     <div id="topic-bar" class="topic-bar">
       <button class="pill active" id="pill-all" onclick="filterTopic(null)">Tous</button>
     </div>
@@ -103,6 +147,22 @@
     <span id="toast-text">Rafraîchissement...</span>
     <button id="toast-close" onclick="dismissToast()" aria-label="Fermer la notification"
       style="display:none;background:none;border:none;color:inherit;cursor:pointer;font-size:12px;margin-left:2px;padding:4px 6px;min-width:28px;min-height:28px">✕</button>
+  </div>
+
+  <!-- Hidden mark-read-btn for api.js compat -->
+  <button id="mark-read-btn" style="display:none" disabled></button>
+
+  <!-- ⌘K Command Palette -->
+  <div id="cmd-palette" class="palette-overlay" style="display:none"
+    role="dialog" aria-modal="true" aria-label="Palette de commandes">
+    <div class="palette-modal" onclick="event.stopPropagation()">
+      <div class="palette-search-bar">
+        <span class="palette-key-hint">⌘K</span>
+        <input id="palette-input" class="palette-input" type="text"
+          placeholder="Rechercher une commande…" autocomplete="off" />
+      </div>
+      <div id="palette-list" class="palette-list"></div>
+    </div>
   </div>
 
   <!-- Password change modal -->

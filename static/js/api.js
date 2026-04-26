@@ -5,15 +5,16 @@ async function fetchMe() {
   try {
     const data = await (await fetch('/api/me')).json();
     state.authenticated = data.authenticated;
-    const badge = document.getElementById('auth-badge');
-    const loginBtn = document.getElementById('login-btn');
+    const authEl    = document.getElementById('overflow-auth');
+    const loginEl   = document.getElementById('overflow-login');
+    const usernameEl = document.getElementById('auth-username');
     if (data.authenticated) {
-      document.getElementById('auth-username').textContent = data.username || '';
-      badge.style.display = '';
-      loginBtn.style.display = 'none';
+      if (usernameEl) usernameEl.textContent = data.username || '';
+      if (authEl)  authEl.style.display  = '';
+      if (loginEl) loginEl.style.display = 'none';
     } else {
-      badge.style.display = 'none';
-      loginBtn.style.display = '';
+      if (authEl)  authEl.style.display  = 'none';
+      if (loginEl) loginEl.style.display = '';
     }
   } catch {}
 }
@@ -51,8 +52,6 @@ async function loadArticles() {
 async function markVisibleAsRead() {
   const ids = state.filtered.slice(0, state.displayed).map(a => a.id);
   if (!ids.length) return;
-  const btn = document.getElementById('mark-read-btn');
-  btn.disabled = true; btn.textContent = t('toast.marking');
   try {
     const r = await fetch('/api/mark-read', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -62,8 +61,7 @@ async function markVisibleAsRead() {
     for (const id of ids) { _markedIds.add(id); _readQueue.delete(id); }
     saveReadIds();
     state.displayed = 100; buildTopicPills(state.articles.filter(a => !_markedIds.has(a.id))); applyFilters();
-  } catch (e) { alert('Erreur : ' + e.message); }
-  finally { btn.disabled = false; btn.innerHTML = t('btn.markVisible'); }
+  } catch (e) { console.error(e); }
 }
 
 async function markSingleAsRead(id, e) {

@@ -64,6 +64,10 @@ const I18N = {
     'cfg.ph.name':      'Nom du topic',
     'cfg.ph.keywords':  'Un mot-clé par ligne',
     'btn.changePassword': '🔑 Mot de passe',
+    'palette.accent':   '🎨 Couleur d\'accent…',
+    'palette.lang':     '🌐 Langue…',
+    'palette.compact':  'Mode compact',
+    'palette.logout':   'Déconnexion',
     'pwd.title':        'Changer le mot de passe',
     'pwd.current':      'Mot de passe actuel',
     'pwd.new':          'Nouveau mot de passe',
@@ -130,6 +134,10 @@ const I18N = {
     'cfg.ph.name':      'Topic name',
     'cfg.ph.keywords':  'One keyword per line',
     'btn.changePassword': '🔑 Password',
+    'palette.accent':   '🎨 Accent color…',
+    'palette.lang':     '🌐 Language…',
+    'palette.compact':  'Compact mode',
+    'palette.logout':   'Logout',
     'pwd.title':        'Change password',
     'pwd.current':      'Current password',
     'pwd.new':          'New password',
@@ -196,6 +204,10 @@ const I18N = {
     'cfg.ph.name':      'Themenname',
     'cfg.ph.keywords':  'Ein Schlüsselwort pro Zeile',
     'btn.changePassword': '🔑 Passwort',
+    'palette.accent':   '🎨 Akzentfarbe…',
+    'palette.lang':     '🌐 Sprache…',
+    'palette.compact':  'Kompaktmodus',
+    'palette.logout':   'Abmelden',
     'pwd.title':        'Passwort ändern',
     'pwd.current':      'Aktuelles Passwort',
     'pwd.new':          'Neues Passwort',
@@ -262,6 +274,10 @@ const I18N = {
     'cfg.ph.name':      'Nombre del tema',
     'cfg.ph.keywords':  'Una palabra clave por línea',
     'btn.changePassword': '🔑 Contraseña',
+    'palette.accent':   '🎨 Color de acento…',
+    'palette.lang':     '🌐 Idioma…',
+    'palette.compact':  'Modo compacto',
+    'palette.logout':   'Cerrar sesión',
     'pwd.title':        'Cambiar contraseña',
     'pwd.current':      'Contraseña actual',
     'pwd.new':          'Nueva contraseña',
@@ -328,6 +344,10 @@ const I18N = {
     'cfg.ph.name':      'Nome argomento',
     'cfg.ph.keywords':  'Una parola chiave per riga',
     'btn.changePassword': '🔑 Password',
+    'palette.accent':   '🎨 Colore d\'accento…',
+    'palette.lang':     '🌐 Lingua…',
+    'palette.compact':  'Modalità compatta',
+    'palette.logout':   'Disconnetti',
     'pwd.title':        'Cambia password',
     'pwd.current':      'Password attuale',
     'pwd.new':          'Nuova password',
@@ -394,6 +414,10 @@ const I18N = {
     'cfg.ph.name':      'Nome do tópico',
     'cfg.ph.keywords':  'Uma palavra-chave por linha',
     'btn.changePassword': '🔑 Senha',
+    'palette.accent':   '🎨 Cor de acento…',
+    'palette.lang':     '🌐 Idioma…',
+    'palette.compact':  'Modo compacto',
+    'palette.logout':   'Sair',
     'pwd.title':        'Alterar senha',
     'pwd.current':      'Senha atual',
     'pwd.new':          'Nova senha',
@@ -418,51 +442,18 @@ function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const val = t(el.dataset.i18n);
     if (el.tagName === 'INPUT') el.placeholder = val;
-    else if (el.dataset.i18nHtml) el.innerHTML = val;
     else el.textContent = val;
   });
   document.querySelectorAll('[data-i18n-html]').forEach(el => {
     el.innerHTML = t(el.dataset.i18nHtml);
   });
-  const cur = LANGS.find(l => l.code === state.lang) || LANGS[0];
-  const flagEl = document.getElementById('lang-flag');
-  if (flagEl) flagEl.textContent = cur.flag;
-  buildLangMenu();
   buildTopicPills(state.articles);
   renderArticles();
-}
-
-function buildLangMenu() {
-  const menu = document.getElementById('lang-menu');
-  if (!menu) return;
-  menu.innerHTML = LANGS.map(l =>
-    `<button class="lang-menu-item${l.code === state.lang ? ' active' : ''}" onclick="setLang('${l.code}')"
-      role="option" aria-selected="${l.code === state.lang}" lang="${l.code}">
-      <span class="lang-flag" aria-hidden="true">${l.flag}</span><span>${l.label}</span>
-    </button>`
-  ).join('');
-}
-
-function toggleLangMenu() {
-  const menu = document.getElementById('lang-menu');
-  if (!menu) return;
-  const isOpen = menu.classList.toggle('open');
-  document.getElementById('lang-btn')?.setAttribute('aria-expanded', isOpen);
 }
 
 function setLang(code) {
   if (!I18N[code]) return;
   state.lang = code;
   localStorage.setItem('freshrss-lang', code);
-  document.getElementById('lang-menu').classList.remove('open');
-  document.getElementById('lang-btn')?.setAttribute('aria-expanded', 'false');
   applyI18n();
 }
-
-document.addEventListener('click', e => {
-  const dropdown = e.target.closest('.lang-dropdown');
-  if (!dropdown) {
-    const menu = document.getElementById('lang-menu');
-    if (menu) menu.classList.remove('open');
-  }
-});
