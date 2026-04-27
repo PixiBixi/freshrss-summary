@@ -2,7 +2,9 @@
 
 import pytest
 
+import config as config_module
 from app import hash_password, verify_password
+from config import load_config
 
 # ── Password hashing ──────────────────────────────────────────────────────────
 
@@ -47,14 +49,12 @@ class TestLoadConfig:
         monkeypatch.setenv("SERVER_HOST", "0.0.0.0")
         monkeypatch.setenv("SERVER_PORT", "9000")
 
-        import app as app_module
-
-        orig = app_module.CONFIG_PATH
-        app_module.CONFIG_PATH = tmp_path / "nonexistent.yaml"
+        orig = config_module.CONFIG_PATH
+        config_module.CONFIG_PATH = tmp_path / "nonexistent.yaml"
         try:
-            cfg = app_module.load_config()
+            cfg = load_config()
         finally:
-            app_module.CONFIG_PATH = orig
+            config_module.CONFIG_PATH = orig
 
         assert cfg["freshrss"]["url"] == "https://my.freshrss.com"
         assert cfg["freshrss"]["username"] == "testuser"
@@ -67,30 +67,26 @@ class TestLoadConfig:
         monkeypatch.delenv("FRESHRSS_USERNAME", raising=False)
         monkeypatch.delenv("FRESHRSS_API_PASSWORD", raising=False)
 
-        import app as app_module
-
-        orig = app_module.CONFIG_PATH
-        app_module.CONFIG_PATH = tmp_path / "nonexistent.yaml"
+        orig = config_module.CONFIG_PATH
+        config_module.CONFIG_PATH = tmp_path / "nonexistent.yaml"
         try:
             with pytest.raises(RuntimeError, match="Missing FreshRSS config"):
-                app_module.load_config()
+                load_config()
         finally:
-            app_module.CONFIG_PATH = orig
+            config_module.CONFIG_PATH = orig
 
     def test_partial_config_raises_with_missing_fields(self, monkeypatch, tmp_path):
         monkeypatch.setenv("FRESHRSS_URL", "https://rss.example.com")
         monkeypatch.delenv("FRESHRSS_USERNAME", raising=False)
         monkeypatch.delenv("FRESHRSS_API_PASSWORD", raising=False)
 
-        import app as app_module
-
-        orig = app_module.CONFIG_PATH
-        app_module.CONFIG_PATH = tmp_path / "nonexistent.yaml"
+        orig = config_module.CONFIG_PATH
+        config_module.CONFIG_PATH = tmp_path / "nonexistent.yaml"
         try:
             with pytest.raises(RuntimeError) as exc_info:
-                app_module.load_config()
+                load_config()
         finally:
-            app_module.CONFIG_PATH = orig
+            config_module.CONFIG_PATH = orig
 
         assert "username" in str(exc_info.value)
         assert "api_password" in str(exc_info.value)
@@ -101,14 +97,12 @@ class TestLoadConfig:
         monkeypatch.setenv("FRESHRSS_API_PASSWORD", "p")
         monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///test.db")
 
-        import app as app_module
-
-        orig = app_module.CONFIG_PATH
-        app_module.CONFIG_PATH = tmp_path / "nonexistent.yaml"
+        orig = config_module.CONFIG_PATH
+        config_module.CONFIG_PATH = tmp_path / "nonexistent.yaml"
         try:
-            cfg = app_module.load_config()
+            cfg = load_config()
         finally:
-            app_module.CONFIG_PATH = orig
+            config_module.CONFIG_PATH = orig
 
         assert cfg["database"]["url"] == "sqlite+aiosqlite:///test.db"
 

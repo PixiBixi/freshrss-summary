@@ -30,6 +30,7 @@ from pydantic import BaseModel
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
+from config import CONFIG_PATH, load_config
 from db import (
     DEFAULT_DB_URL,
     add_pending_sync,
@@ -56,7 +57,7 @@ from db import (
 )
 from freshrss_client import Article, FreshRSSClient
 from scorer import ScoredArticle, build_topics, score_articles
-from telegram_digest import _register_webhook, check_trending, send_digest, send_snooze_reminders
+from telegram_digest import check_trending, register_webhook, send_digest, send_snooze_reminders
 
 # ---------------------------------------------------------------------------
 # Prometheus metrics
@@ -118,68 +119,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-
-CONFIG_PATH = Path(__file__).parent / "config.yaml"
-
-
-def load_config() -> dict:
-    """
-    Load config from config.yaml (if present), then apply env var overrides.
-
-    Supported env vars (all optional, take priority over config.yaml):
-      FRESHRSS_URL           → freshrss.url
-      FRESHRSS_USERNAME      → freshrss.username
-      FRESHRSS_API_PASSWORD  → freshrss.api_password
-      SERVER_HOST            → server.host
-      SERVER_PORT            → server.port
-    """
-    cfg: dict = {}
-    if CONFIG_PATH.exists():
-        with CONFIG_PATH.open() as f:
-            cfg = yaml.safe_load(f) or {}
-    else:
-        logger.warning("config.yaml not found — relying entirely on environment variables")
-
-    fr = cfg.setdefault("freshrss", {})
-    if v := os.environ.get("FRESHRSS_URL"):
-        fr["url"] = v
-    if v := os.environ.get("FRESHRSS_USERNAME"):
-        fr["username"] = v
-    if v := os.environ.get("FRESHRSS_API_PASSWORD"):
-        fr["api_password"] = v
-
-    srv = cfg.setdefault("server", {})
-    if v := os.environ.get("SERVER_HOST"):
-        srv["host"] = v
-    if v := os.environ.get("SERVER_PORT"):
-        srv["port"] = int(v)
-
-    sched = cfg.setdefault("scheduler", {})
-    if v := os.environ.get("REFRESH_INTERVAL_MINUTES"):
-        sched["interval_minutes"] = int(v)
-
-    db = cfg.setdefault("database", {})
-    if v := os.environ.get("DATABASE_URL"):
-        db["url"] = v
-
-    if v := os.environ.get("TELEGRAM_BOT_TOKEN"):
-        cfg.setdefault("telegram", {})["bot_token"] = v
-    if v := os.environ.get("TELEGRAM_CHAT_ID"):
-        cfg.setdefault("telegram", {})["chat_id"] = v
-    if v := os.environ.get("TELEGRAM_WEBHOOK_SECRET"):
-        cfg.setdefault("telegram", {})["webhook_secret"] = v
-    if v := os.environ.get("PUBLIC_URL"):
-        srv["public_url"] = v
-
-    # Validate required FreshRSS fields
-    missing = [k for k in ("url", "username", "api_password") if not fr.get(k)]
-    if missing:
-        raise RuntimeError(
-            f"Missing FreshRSS config: {', '.join(missing)}. "
-            "Set them in config.yaml or via FRESHRSS_URL / FRESHRSS_USERNAME / FRESHRSS_API_PASSWORD."
-        )
-
-    return cfg
 
 
 # ---------------------------------------------------------------------------
@@ -338,9 +277,9 @@ async def lifespan(app: FastAPI):
             scheduler.start()
         hour = int(tg_cfg.get("digest_hour", 21))
         scheduler.add_job(
-            send_digest,
+            _run_daily_digest,
             CronTrigger(hour=hour, minute=0, timezone="Europe/Paris"),
-            args=[tg_cfg, cache],
+            args=[tg_cfg],
             id="daily_digest",
             max_instances=1,
             coalesce=True,
@@ -368,7 +307,7 @@ async def lifespan(app: FastAPI):
         logger.info("Snooze checker scheduled: every 15min")
         public_url = cfg.get("server", {}).get("public_url", "")
         if public_url:
-            await _register_webhook(tg_cfg, public_url)
+            await register_webhook(tg_cfg, public_url)
         else:
             logger.info(
                 "Telegram: set server.public_url (or PUBLIC_URL env var) to auto-register webhook"
@@ -452,7 +391,7 @@ async def get_status() -> dict[str, Any]:
     }
 
 
-@app.get("/api/articles")
+@app.get("/api/articles", dependencies=[Depends(require_auth)])
 async def get_articles(
     topic: str | None = None,
     min_score: float | None = None,
@@ -754,7 +693,7 @@ def _blocking_mark_as_read(article_ids: list[str]) -> None:
         client.mark_as_read(article_ids)
 
 
-@app.post("/api/mark-read")
+@app.post("/api/mark-read", dependencies=[Depends(require_auth)])
 async def mark_read(req: MarkReadRequest) -> dict[str, str]:
     if not req.article_ids:
         raise HTTPException(status_code=400, detail="No article IDs provided")
@@ -791,7 +730,7 @@ def _blocking_fetch_and_score(cfg: dict, topics_cfg: dict) -> tuple[list[dict], 
     title_weight = int(scoring_cfg.get("title_weight", 3))
     min_score = float(scoring_cfg.get("min_score", 1.0))
 
-    topics = build_topics({"topics": topics_cfg})
+    topics = build_topics(topics_cfg)
     all_articles = []
     total_fetched = 0
 
@@ -814,15 +753,15 @@ def _blocking_fetch_and_score(cfg: dict, topics_cfg: dict) -> tuple[list[dict], 
 
 
 async def _auto_refresh() -> None:
-    """Scheduled job: runs _do_refresh unless a refresh is already in progress."""
+    """Scheduled job: runs _run_refresh unless a refresh is already in progress."""
     if cache.is_loading:
         logger.info("Scheduled refresh skipped — already in progress")
         return
     logger.info("Scheduled refresh starting")
-    await _do_refresh()
+    await _run_refresh()
 
 
-async def _do_refresh() -> None:
+async def _run_refresh() -> None:
     """Background task: fetch → score → persist → populate cache."""
     cache.is_loading = True
     cache.error = None
@@ -876,7 +815,7 @@ async def refresh() -> dict[str, Any]:
     if cache.is_loading:
         return {"status": "already_loading", "progress": cache.load_progress}
 
-    _refresh_task = asyncio.create_task(_do_refresh())
+    _refresh_task = asyncio.create_task(_run_refresh())
     return {"status": "started"}
 
 
@@ -909,7 +848,7 @@ async def refresh_stream() -> StreamingResponse:
         max_batches = int(fetch_cfg.get("max_batches", 10))
         title_weight = int(scoring_cfg.get("title_weight", 3))
         min_score = float(scoring_cfg.get("min_score", 1.0))
-        topics = build_topics({"topics": topics_cfg})
+        topics = build_topics(topics_cfg)
         total_fetched = 0
         all_articles: list[dict] = []
 
@@ -1000,7 +939,7 @@ def _blocking_rescore_compute(raw: list[dict], cfg: dict, topics_cfg: dict) -> l
     scoring_cfg = cfg.get("scoring", {})
     title_weight = int(scoring_cfg.get("title_weight", 3))
     min_score = float(scoring_cfg.get("min_score", 1.0))
-    topics = build_topics({"topics": topics_cfg})
+    topics = build_topics(topics_cfg)
 
     cache.load_progress = f"Re-scoring {len(raw)} articles..."
     articles = [
@@ -1021,7 +960,7 @@ def _blocking_rescore_compute(raw: list[dict], cfg: dict, topics_cfg: dict) -> l
     ]
 
 
-async def _do_rescore() -> None:
+async def _run_rescore() -> None:
     """Background task: rescore from DB → persist → populate cache."""
     cache.is_loading = True
     cache.error = None
@@ -1063,7 +1002,7 @@ async def rescore() -> dict[str, Any]:
             status_code=400, detail="Aucun article en DB. Lance d'abord un Rafraîchir."
         )
 
-    _refresh_task = asyncio.create_task(_do_rescore())
+    _refresh_task = asyncio.create_task(_run_rescore())
     return {"status": "started"}
 
 
@@ -1071,7 +1010,7 @@ class BookmarkRequest(BaseModel):
     article_id: str
 
 
-@app.post("/api/bookmark")
+@app.post("/api/bookmark", dependencies=[Depends(require_auth)])
 async def bookmark(req: BookmarkRequest) -> dict[str, Any]:
     """Toggle bookmark for an article. Returns new bookmark state."""
     if not any(a["id"] == req.article_id for a in cache.articles):
@@ -1178,10 +1117,15 @@ async def change_password(req: ChangePasswordRequest, request: Request) -> dict[
 # ---------------------------------------------------------------------------
 
 
+async def _run_daily_digest(tg_cfg: dict) -> None:
+    """Scheduler job: build and send digest from current cache articles."""
+    await send_digest(tg_cfg, cache.articles)
+
+
 async def _check_trending(tg_cfg: dict) -> None:
     """Scheduler job: alert if a topic is surging in the last 2h."""
     global _trending_alerted
-    _trending_alerted = await check_trending(cache.articles, tg_cfg, _trending_alerted)
+    _trending_alerted = await check_trending(tg_cfg, cache.articles, _trending_alerted)
 
 
 async def _check_snoozes(tg_cfg: dict) -> None:
@@ -1209,7 +1153,7 @@ async def telegram_webhook(request: Request) -> dict:
     body = await request.json()
     text: str = body.get("message", {}).get("text", "")
     if text.startswith("/digest"):
-        asyncio.create_task(send_digest(tg_cfg, cache))
+        asyncio.create_task(send_digest(tg_cfg, cache.articles))
 
     return {}
 

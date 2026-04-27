@@ -10,10 +10,10 @@ import httpx
 import pytest
 
 from telegram_digest import (
-    _register_webhook,
     _split_message,
     build_digest,
     check_trending,
+    register_webhook,
     send_digest,
     send_message,
     send_snooze_reminders,
@@ -168,7 +168,9 @@ class TestSendDigest:
             sent.append({"token": token, "chat_id": chat_id, "text": text})
 
         with patch("telegram_digest.send_message", side_effect=fake_send):
-            await send_digest({"bot_token": "TOK", "chat_id": "42"}, FakeCache())
+            await send_digest(
+                {"bot_token": "TOK", "chat_id": "42"}, [_make_article(title="K8s News", score=50.0)]
+            )
 
         assert len(sent) == 1
         assert sent[0]["token"] == "TOK"
@@ -177,43 +179,37 @@ class TestSendDigest:
 
     @pytest.mark.asyncio
     async def test_send_digest_skips_if_no_token(self):
-        class FakeCache:
-            articles = []
-
         sent: list = []
 
         async def fake_send(*a, **kw):
             sent.append(True)
 
         with patch("telegram_digest.send_message", side_effect=fake_send):
-            await send_digest({"bot_token": "", "chat_id": "42"}, FakeCache())
+            await send_digest({"bot_token": "", "chat_id": "42"}, [])
 
         assert sent == []
 
     @pytest.mark.asyncio
     async def test_send_digest_logs_on_error(self, caplog):
-        class FakeCache:
-            articles = [_make_article()]
-
         async def failing_send(*a, **kw):
             raise httpx.ConnectError("timeout")
 
         with patch("telegram_digest.send_message", side_effect=failing_send):
             with caplog.at_level(logging.ERROR, logger="telegram_digest"):
-                await send_digest({"bot_token": "TOK", "chat_id": "42"}, FakeCache())
+                await send_digest({"bot_token": "TOK", "chat_id": "42"}, [_make_article()])
 
         assert any("failed" in r.message.lower() for r in caplog.records)
 
 
-# ── _register_webhook ─────────────────────────────────────────────────────────
+# ── register_webhook ─────────────────────────────────────────────────────────
 
 
 class TestRegisterWebhook:
     @pytest.mark.asyncio
-    async def test_register_webhook_calls_set_webhook(self):
+    async def testregister_webhook_calls_set_webhook(self):
         calls: list = []
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
-            await _register_webhook(
+            await register_webhook(
                 {"bot_token": "TOK", "webhook_secret": "mysecret"},
                 "https://myapp.example.com",
             )
@@ -223,13 +219,13 @@ class TestRegisterWebhook:
         assert calls[0]["json"]["secret_token"] == "mysecret"
 
     @pytest.mark.asyncio
-    async def test_register_webhook_skips_if_no_token(self):
+    async def testregister_webhook_skips_if_no_token(self):
         with patch("telegram_digest.httpx.AsyncClient") as mock_client:
-            await _register_webhook({"bot_token": ""}, "https://example.com")
+            await register_webhook({"bot_token": ""}, "https://example.com")
         mock_client.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_register_webhook_logs_on_error(self, caplog):
+    async def testregister_webhook_logs_on_error(self, caplog):
         async def failing_post(*a, **kw):
             raise httpx.ConnectError("refused")
 
@@ -240,7 +236,7 @@ class TestRegisterWebhook:
 
         with patch("telegram_digest.httpx.AsyncClient", return_value=fake_client):
             with caplog.at_level(logging.ERROR, logger="telegram_digest"):
-                await _register_webhook({"bot_token": "TOK"}, "https://example.com")
+                await register_webhook({"bot_token": "TOK"}, "https://example.com")
 
         assert any("failed" in r.message.lower() for r in caplog.records)
 
@@ -266,7 +262,7 @@ class TestCheckTrending:
     @pytest.mark.asyncio
     async def test_no_alert_when_no_token(self):
         articles = [_make_trending_article() for _ in range(5)]
-        result = await check_trending(articles, {"bot_token": "", "chat_id": "42"}, set())
+        result = await check_trending({"bot_token": "", "chat_id": "42"}, articles, set())
         assert result == set()
 
     @pytest.mark.asyncio
@@ -275,7 +271,7 @@ class TestCheckTrending:
         calls: list = []
         articles = [_make_trending_article(published_offset=-1800) for _ in range(2)]
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
-            result = await check_trending(articles, {"bot_token": "TOK", "chat_id": "42"}, set())
+            result = await check_trending({"bot_token": "TOK", "chat_id": "42"}, articles, set())
         assert len(calls) == 0
         assert result == set()
 
@@ -285,7 +281,7 @@ class TestCheckTrending:
         calls: list = []
         articles = [_make_trending_article(published_offset=-1800) for _ in range(3)]
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
-            result = await check_trending(articles, {"bot_token": "TOK", "chat_id": "42"}, set())
+            result = await check_trending({"bot_token": "TOK", "chat_id": "42"}, articles, set())
         assert len(calls) == 1
         assert "Trending" in calls[0]["json"]["text"]
         assert len(result) == 1  # (topic, hour_bucket) added
@@ -299,7 +295,7 @@ class TestCheckTrending:
         pre_alerted = {("Kubernetes", hour_bucket)}
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
             result = await check_trending(
-                articles, {"bot_token": "TOK", "chat_id": "42"}, pre_alerted
+                {"bot_token": "TOK", "chat_id": "42"}, articles, pre_alerted
             )
         assert len(calls) == 0
         assert result == pre_alerted
@@ -312,7 +308,7 @@ class TestCheckTrending:
         recent = [_make_trending_article(published_offset=-1800) for _ in range(3)]
         prior = [_make_trending_article(published_offset=-9000) for _ in range(2)]
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
-            await check_trending(recent + prior, {"bot_token": "TOK", "chat_id": "42"}, set())
+            await check_trending({"bot_token": "TOK", "chat_id": "42"}, recent + prior, set())
         assert len(calls) == 0
 
 

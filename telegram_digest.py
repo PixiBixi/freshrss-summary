@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import math
 import time
-from typing import Any
 
 import httpx
 
@@ -109,22 +108,22 @@ async def send_message(bot_token: str, chat_id: str, text: str) -> None:
             r.raise_for_status()
 
 
-async def send_digest(tg_cfg: dict, cache: Any) -> None:
+async def send_digest(tg_cfg: dict, articles: list[dict]) -> None:
     """Build and send the digest. Called by scheduler and webhook handler."""
     bot_token = tg_cfg.get("bot_token", "")
     chat_id = tg_cfg.get("chat_id", "")
     if not bot_token or not chat_id:
         logger.warning("Telegram digest: bot_token or chat_id missing, skipping")
         return
-    text = build_digest(cache.articles)
+    text = build_digest(articles)
     try:
         await send_message(bot_token, chat_id, text)
         logger.info("Telegram digest sent (%d chars)", len(text))
-    except Exception as exc:
-        logger.error("Telegram digest send failed: %s", exc)
+    except Exception:
+        logger.exception("Telegram digest send failed")
 
 
-async def check_trending(articles: list[dict], tg_cfg: dict, alerted: set) -> set:
+async def check_trending(tg_cfg: dict, articles: list[dict], alerted: set) -> set:
     """
     Alert if a topic has ≥3 articles in the last 2h and ≥2x more than the prior 2h window.
     Returns updated alerted set (keyed on (topic, 2h-bucket) to avoid duplicate alerts).
@@ -168,8 +167,8 @@ async def check_trending(articles: list[dict], tg_cfg: dict, alerted: set) -> se
         try:
             await send_message(bot_token, chat_id, "\n".join(lines))
             logger.info("Trending alert sent: %s", [t for t, _, _ in alerts])
-        except Exception as exc:
-            logger.error("Trending alert send failed: %s", exc)
+        except Exception:
+            logger.exception("Trending alert send failed")
 
     return new_alerted
 
@@ -189,12 +188,12 @@ async def send_snooze_reminders(tg_cfg: dict, due: list[dict]) -> list[str]:
             await send_message(bot_token, s.get("chat_id") or chat_id, text)
             sent.append(s["article_id"])
             logger.info("Snooze reminder sent: %s", s["article_id"])
-        except Exception as exc:
-            logger.error("Snooze reminder failed for %s: %s", s["article_id"], exc)
+        except Exception:
+            logger.exception("Snooze reminder failed for %s", s["article_id"])
     return sent
 
 
-async def _register_webhook(tg_cfg: dict, public_url: str) -> None:
+async def register_webhook(tg_cfg: dict, public_url: str) -> None:
     """Call Telegram setWebhook on startup. Logs errors, never raises."""
     bot_token = tg_cfg.get("bot_token", "")
     if not bot_token:
@@ -214,5 +213,5 @@ async def _register_webhook(tg_cfg: dict, public_url: str) -> None:
             )
             r.raise_for_status()
         logger.info("Telegram webhook registered: %s", webhook_url)
-    except Exception as exc:
-        logger.error("Telegram webhook registration failed: %s", exc)
+    except Exception:
+        logger.exception("Telegram webhook registration failed")

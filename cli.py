@@ -5,12 +5,13 @@ import argparse
 import asyncio
 import datetime
 import json
-import os
 import sys
 import time
 from pathlib import Path
 
 import yaml
+
+from config import CONFIG_PATH, load_config
 
 # ── ANSI ───────────────────────────────────────────────────────────────────
 
@@ -45,44 +46,6 @@ def info(msg: str) -> str:
 
 
 # ── Config ─────────────────────────────────────────────────────────────────
-
-CONFIG_PATH = Path(__file__).parent / "config.yaml"
-
-
-def load_config() -> dict:
-    cfg: dict = {}
-    if CONFIG_PATH.exists():
-        with CONFIG_PATH.open() as f:
-            cfg = yaml.safe_load(f) or {}
-    else:
-        print(warn("config.yaml not found — relying on environment variables"))
-
-    fr = cfg.setdefault("freshrss", {})
-    if v := os.environ.get("FRESHRSS_URL"):
-        fr["url"] = v
-    if v := os.environ.get("FRESHRSS_USERNAME"):
-        fr["username"] = v
-    if v := os.environ.get("FRESHRSS_API_PASSWORD"):
-        fr["api_password"] = v
-
-    db = cfg.setdefault("database", {})
-    if v := os.environ.get("DATABASE_URL"):
-        db["url"] = v
-
-    tg = cfg.setdefault("telegram", {})
-    if v := os.environ.get("TELEGRAM_BOT_TOKEN"):
-        tg["bot_token"] = v
-    if v := os.environ.get("TELEGRAM_CHAT_ID"):
-        tg["chat_id"] = v
-
-    missing = [k for k in ("url", "username", "api_password") if not fr.get(k)]
-    if missing:
-        raise RuntimeError(
-            f"Missing FreshRSS config: {', '.join(missing)}. "
-            "Set them in config.yaml (freshrss.url / username / api_password) "
-            "or via FRESHRSS_URL / FRESHRSS_USERNAME / FRESHRSS_API_PASSWORD."
-        )
-    return cfg
 
 
 def make_client(cfg: dict):
@@ -269,7 +232,7 @@ def cmd_fetch(args, cfg: dict) -> int:
 
     from scorer import build_topics, score_articles
 
-    topics = build_topics(cfg)
+    topics = build_topics(cfg.get("topics", {}))
     if not topics:
         print(warn("No topics configured — articles will score 0"))
 
@@ -329,7 +292,7 @@ def cmd_rescore(args, cfg: dict) -> int:
     from freshrss_client import Article
     from scorer import build_topics, score_article
 
-    topics = build_topics(cfg)
+    topics = build_topics(cfg.get("topics", {}))
 
     try:
         raw = asyncio.run(_load_for_rescore(cfg))
@@ -394,7 +357,7 @@ def _import_starred(args, cfg: dict) -> int:
 
     from scorer import build_topics, score_articles
 
-    topics = build_topics(cfg)
+    topics = build_topics(cfg.get("topics", {}))
 
     try:
         with make_client(cfg) as client:
@@ -474,7 +437,7 @@ def _import_file(args, cfg: dict) -> int:
 
     scoring_cfg = cfg.get("scoring", {})
     title_weight = scoring_cfg.get("title_weight", 3)
-    topics = build_topics(cfg)
+    topics = build_topics(cfg.get("topics", {}))
     scored = score_articles(articles, topics, title_weight, min_score=0)
 
     if args.dry_run:
@@ -505,7 +468,7 @@ def cmd_tune(args, cfg: dict) -> int:
 
     from scorer import analyze_favorites, build_topics
 
-    topics = build_topics(cfg)
+    topics = build_topics(cfg.get("topics", {}))
     max_items = args.limit or 200
 
     if not topics:

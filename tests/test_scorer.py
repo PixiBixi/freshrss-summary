@@ -76,29 +76,26 @@ class TestTopicConfig:
 
 class TestBuildTopics:
     def test_builds_from_config(self):
-        cfg = {
-            "topics": {
-                "Kubernetes": {"keywords": ["kubernetes", "kubectl"], "weight": 2.0},
-                "Terraform": {"keywords": ["terraform"], "weight": 1.5},
-            }
+        topics_cfg = {
+            "Kubernetes": {"keywords": ["kubernetes", "kubectl"], "weight": 2.0},
+            "Terraform": {"keywords": ["terraform"], "weight": 1.5},
         }
-        topics = build_topics(cfg)
+        topics = build_topics(topics_cfg)
         assert len(topics) == 2
         assert {t.name for t in topics} == {"Kubernetes", "Terraform"}
 
     def test_keywords_lowercased(self):
-        cfg = {"topics": {"SRE": {"keywords": ["Prometheus", "Grafana"]}}}
-        topics = build_topics(cfg)
+        topics_cfg = {"SRE": {"keywords": ["Prometheus", "Grafana"]}}
+        topics = build_topics(topics_cfg)
         assert topics[0].keywords == ["prometheus", "grafana"]
 
     def test_weight_default(self):
-        cfg = {"topics": {"X": {"keywords": ["x"]}}}
-        topics = build_topics(cfg)
+        topics_cfg = {"X": {"keywords": ["x"]}}
+        topics = build_topics(topics_cfg)
         assert topics[0].weight == 1.0
 
     def test_empty_config(self):
         assert build_topics({}) == []
-        assert build_topics({"topics": {}}) == []
 
 
 # ── score_article ─────────────────────────────────────────────────────────────
