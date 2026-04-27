@@ -8,6 +8,7 @@ import logging.config
 import os
 import secrets
 import time
+from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -30,7 +31,7 @@ from pydantic import BaseModel
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from config import CONFIG_PATH, load_config
+from config import CONFIG_PATH, DEFAULT_TOPICS, load_config
 from db import (
     DEFAULT_DB_URL,
     add_pending_sync,
@@ -56,7 +57,7 @@ from db import (
     upsert_user,
 )
 from freshrss_client import Article, FreshRSSClient
-from scorer import ScoredArticle, build_topics, score_articles
+from scorer import build_topics, score_articles
 from telegram_digest import check_trending, register_webhook, send_digest, send_snooze_reminders
 
 # ---------------------------------------------------------------------------
@@ -434,254 +435,13 @@ class MarkReadRequest(BaseModel):
     article_ids: list[str]
 
 
-_DEFAULT_TOPICS: dict = {
-    "SRE": {
-        "weight": 1.5,
-        "keywords": [
-            "sre",
-            "site reliability",
-            "slo",
-            "sla",
-            "error budget",
-            "toil",
-            "incident",
-            "postmortem",
-            "runbook",
-            "on-call",
-            "oncall",
-            "pagerduty",
-            "chaos engineering",
-            "mttr",
-            "mttd",
-            "capacity planning",
-        ],
-    },
-    "Kubernetes": {
-        "weight": 1.5,
-        "keywords": [
-            "kubernetes",
-            "k8s",
-            "kubectl",
-            "helm",
-            "kustomize",
-            "pod",
-            "deployment",
-            "statefulset",
-            "daemonset",
-            "container runtime",
-            "cri",
-            "cni",
-            "csi",
-            "crd",
-            "operator",
-            "karpenter",
-            "cluster api",
-            "vcluster",
-            "gateway api",
-            "talos",
-            "kairos",
-            "k3s",
-            "rke2",
-            "rancher",
-            "containerd",
-        ],
-    },
-    "GKE": {
-        "weight": 2.0,
-        "keywords": [
-            "gke",
-            "google kubernetes engine",
-            "google cloud",
-            "gcp",
-            "autopilot",
-            "workload identity",
-            "binary authorization",
-            "cloud run",
-            "artifact registry",
-            "cloud armor",
-            "cloud nat",
-            "cloud build",
-            "cloud deploy",
-            "gke enterprise",
-            "anthos",
-        ],
-    },
-    "GitOps": {
-        "weight": 1.5,
-        "keywords": [
-            "argocd",
-            "argo cd",
-            "argo rollouts",
-            "argo workflows",
-            "gitops",
-            "applicationset",
-            "sync wave",
-            "flux",
-            "fluxcd",
-        ],
-    },
-    "Terraform": {
-        "weight": 1.3,
-        "keywords": [
-            "terraform",
-            "opentofu",
-            "tofu",
-            "hcl",
-            "tfstate",
-            "terragrunt",
-            "atlantis",
-            "infrastructure as code",
-            "iac",
-            "pulumi",
-            "crossplane",
-            "spacelift",
-        ],
-    },
-    "Immutable OS": {
-        "weight": 1.4,
-        "keywords": [
-            "immutable",
-            "ostree",
-            "bootc",
-            "rpm-ostree",
-            "flatcar",
-            "coreos",
-            "fedora coreos",
-            "talos",
-            "kairos",
-            "nixos",
-            "butane",
-            "sysext",
-        ],
-    },
-    "Platform Engineering": {
-        "weight": 1.2,
-        "keywords": [
-            "platform engineering",
-            "internal developer platform",
-            "backstage",
-            "developer experience",
-            "devex",
-            "golden path",
-            "crossplane",
-            "self-service",
-            "developer portal",
-        ],
-    },
-    "Observability": {
-        "weight": 1.1,
-        "keywords": [
-            "prometheus",
-            "grafana",
-            "alertmanager",
-            "loki",
-            "tempo",
-            "mimir",
-            "thanos",
-            "opentelemetry",
-            "otel",
-            "tracing",
-            "jaeger",
-            "pyroscope",
-            "monitoring",
-            "observability",
-            "ebpf",
-            "fluent bit",
-            "victoria metrics",
-            "datadog",
-        ],
-    },
-    "Security": {
-        "weight": 1.1,
-        "keywords": [
-            "cve",
-            "vulnerability",
-            "rbac",
-            "iam",
-            "secrets management",
-            "vault",
-            "trivy",
-            "falco",
-            "supply chain",
-            "sbom",
-            "zero trust",
-            "opa",
-            "gatekeeper",
-            "kyverno",
-            "external secrets",
-            "cert-manager",
-            "cosign",
-            "sigstore",
-            "slsa",
-            "kubescape",
-        ],
-    },
-    "CI/CD": {
-        "weight": 1.0,
-        "keywords": [
-            "ci/cd",
-            "github actions",
-            "gitlab ci",
-            "tekton",
-            "pipeline",
-            "continuous integration",
-            "continuous deployment",
-            "dora metrics",
-            "progressive delivery",
-            "canary",
-            "blue-green",
-            "feature flag",
-            "dagger",
-        ],
-    },
-    "Networking": {
-        "weight": 1.0,
-        "keywords": [
-            "service mesh",
-            "istio",
-            "cilium",
-            "calico",
-            "envoy",
-            "linkerd",
-            "ingress",
-            "gateway api",
-            "ebpf",
-            "network policy",
-            "metallb",
-            "external-dns",
-            "coredns",
-            "traefik",
-            "bgp",
-        ],
-    },
-    "FinOps": {
-        "weight": 1.2,
-        "keywords": [
-            "finops",
-            "cost optimization",
-            "rightsizing",
-            "committed use",
-            "spot vm",
-            "preemptible",
-            "reserved instance",
-            "cloud cost",
-            "kubecost",
-            "opencost",
-            "cost allocation",
-            "showback",
-            "chargeback",
-        ],
-    },
-}
-
-
 async def _load_scoring_config() -> dict:
     """Load topics config from DB; seed from config.yaml or built-in defaults on first call."""
     stored = await get_scoring_config()
     if stored is not None:
         return stored
     cfg = load_config()
-    topics = cfg.get("topics") or _DEFAULT_TOPICS
+    topics = cfg.get("topics") or DEFAULT_TOPICS
     await set_scoring_config(topics)
     return topics
 
@@ -711,45 +471,52 @@ async def mark_read(req: MarkReadRequest) -> dict[str, str]:
             "FreshRSS unreachable — queuing %d article(s) for deferred sync", len(req.article_ids)
         )
         await add_pending_sync(req.article_ids)
-        return {"status": "queued"}
+        return {"status": "queued", "marked": str(len(req.article_ids))}
 
     return {"status": "ok", "marked": str(len(req.article_ids))}
 
 
-def _blocking_fetch_and_score(cfg: dict, topics_cfg: dict) -> tuple[list[dict], int]:
+def _fetch_and_score_iter(cfg: dict, topics_cfg: dict) -> Iterator[tuple[list[dict], int]]:
     """
-    Blocking fetch + score — runs in a thread pool via asyncio.to_thread.
-    Updates cache.load_progress directly (thread-safe for simple str assignment).
+    Generator: fetch unread articles in batches, score each, yield (scored_batch, cumulative_count).
+    Runs in a thread pool (blocking I/O). Callers decide whether to stream or accumulate.
     """
     fr_cfg = cfg["freshrss"]
     fetch_cfg = cfg.get("fetch", {})
     scoring_cfg = cfg.get("scoring", {})
-
     batch_size = int(fetch_cfg.get("batch_size", 1000))
     max_batches = int(fetch_cfg.get("max_batches", 10))
     title_weight = int(scoring_cfg.get("title_weight", 3))
     min_score = float(scoring_cfg.get("min_score", 1.0))
-
     topics = build_topics(topics_cfg)
-    all_articles = []
     total_fetched = 0
 
     with FreshRSSClient(fr_cfg["url"], fr_cfg["username"], fr_cfg["api_password"]) as client:
         for batch in client.fetch_unread(batch_size=batch_size, max_batches=max_batches):
             total_fetched += len(batch)
-            cache.load_progress = f"Récupération : {total_fetched} articles..."
-            all_articles.extend(batch)
+            scored = [
+                sa.to_dict()
+                for sa in score_articles(
+                    batch, topics, title_weight=title_weight, min_score=min_score
+                )
+            ]
+            yield scored, total_fetched
 
-    cache.load_progress = f"Scoring {total_fetched} articles..."
-    scored: list[ScoredArticle] = score_articles(
-        all_articles, topics, title_weight=title_weight, min_score=min_score
-    )
+
+def _blocking_fetch_and_score(cfg: dict, topics_cfg: dict) -> tuple[list[dict], int]:
+    """Blocking fetch + score — runs in a thread pool via asyncio.to_thread."""
+    all_articles: list[dict] = []
+    total_fetched = 0
+
+    for scored_batch, total_fetched in _fetch_and_score_iter(cfg, topics_cfg):
+        cache.load_progress = f"Récupération : {total_fetched} articles..."
+        all_articles.extend(scored_batch)
 
     if total_fetched == 0:
         logger.warning("No articles fetched from FreshRSS — DB not modified")
         return [], 0
 
-    return [a.to_dict() for a in scored], total_fetched
+    return all_articles, total_fetched
 
 
 async def _auto_refresh() -> None:
@@ -841,35 +608,15 @@ async def refresh_stream() -> StreamingResponse:
 
     def _worker(topics_cfg: dict) -> None:
         cfg = load_config()
-        fr_cfg = cfg["freshrss"]
-        fetch_cfg = cfg.get("fetch", {})
-        scoring_cfg = cfg.get("scoring", {})
-        batch_size = int(fetch_cfg.get("batch_size", 1000))
-        max_batches = int(fetch_cfg.get("max_batches", 10))
-        title_weight = int(scoring_cfg.get("title_weight", 3))
-        min_score = float(scoring_cfg.get("min_score", 1.0))
-        topics = build_topics(topics_cfg)
-        total_fetched = 0
         all_articles: list[dict] = []
+        total_fetched = 0
 
         try:
-            with FreshRSSClient(
-                fr_cfg["url"], fr_cfg["username"], fr_cfg["api_password"]
-            ) as client:
-                for batch in client.fetch_unread(batch_size=batch_size, max_batches=max_batches):
-                    total_fetched += len(batch)
-                    _put(
-                        {
-                            "type": "progress",
-                            "message": f"Récupération : {total_fetched} articles...",
-                        }
-                    )
-                    for sa in score_articles(
-                        batch, topics, title_weight=title_weight, min_score=min_score
-                    ):
-                        d = sa.to_dict()
-                        all_articles.append(d)
-                        _put({"type": "article", "article": d})
+            for scored_batch, total_fetched in _fetch_and_score_iter(cfg, topics_cfg):
+                _put({"type": "progress", "message": f"Récupération : {total_fetched} articles..."})
+                for d in scored_batch:
+                    all_articles.append(d)
+                    _put({"type": "article", "article": d})
 
             if total_fetched == 0:
                 logger.warning("Stream refresh: 0 articles fetched — DB not modified")
@@ -935,7 +682,7 @@ async def refresh_stream() -> StreamingResponse:
 
 
 def _blocking_rescore_compute(raw: list[dict], cfg: dict, topics_cfg: dict) -> list[dict]:
-    """Pure CPU re-scoring — no I/O. Runs in a thread pool via asyncio.to_thread."""
+    """CPU re-scoring of cached articles. Updates cache.load_progress for progress reporting. Runs in a thread pool via asyncio.to_thread."""
     scoring_cfg = cfg.get("scoring", {})
     title_weight = int(scoring_cfg.get("title_weight", 3))
     min_score = float(scoring_cfg.get("min_score", 1.0))

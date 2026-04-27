@@ -6,7 +6,6 @@ import asyncio
 import datetime
 import json
 import sys
-import time
 from pathlib import Path
 
 import yaml
@@ -95,62 +94,17 @@ async def _load_for_rescore(cfg: dict) -> list[dict]:
 
 
 async def _upsert_articles(cfg: dict, articles: list[dict]) -> None:
-    """Insert-or-replace articles without wiping the full table."""
-    import json as _json
-
-    from sqlalchemy import delete, insert
-
-    from db import articles_table, get_engine
+    from db import upsert_articles
 
     await _init_db(cfg)
-    now = int(time.time())
-    rows = [
-        {
-            "id": a["id"],
-            "title": a["title"],
-            "url": a["url"],
-            "feed_title": a["feed_title"],
-            "published": a["published"],
-            "score": a["score"],
-            "matched_topics": _json.dumps(a["matched_topics"]),
-            "matched_keywords": _json.dumps(a["matched_keywords"]),
-            "top_topic": a.get("top_topic"),
-            "summary": a["summary"],
-            "content": a.get("_content", a["summary"]),
-            "fetched_at": now,
-        }
-        for a in articles
-    ]
-    ids = [r["id"] for r in rows]
-    async with get_engine().begin() as conn:
-        await conn.execute(delete(articles_table).where(articles_table.c.id.in_(ids)))
-        if rows:
-            await conn.execute(insert(articles_table), rows)
+    await upsert_articles(articles)
 
 
 async def _bookmark_all(cfg: dict, ids: list[str]) -> None:
-    """Mark a list of article IDs as bookmarked (skip existing)."""
-    from sqlalchemy import insert, select
-
-    from db import bookmarks_table, get_engine
+    from db import bookmark_articles
 
     await _init_db(cfg)
-    now = int(time.time())
-    async with get_engine().begin() as conn:
-        existing = {
-            r[0]
-            for r in (
-                await conn.execute(
-                    select(bookmarks_table.c.id).where(bookmarks_table.c.id.in_(ids))
-                )
-            ).all()
-        }
-        new_ids = [i for i in ids if i not in existing]
-        if new_ids:
-            await conn.execute(
-                insert(bookmarks_table),
-                [{"id": i, "bookmarked_at": now} for i in new_ids],
-            )
+    await bookmark_articles(ids)
 
 
 # ── Commands ───────────────────────────────────────────────────────────────

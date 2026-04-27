@@ -101,6 +101,20 @@ def get_engine() -> AsyncEngine:
     return _engine
 
 
+async def _run_migrations(conn) -> None:  # type: ignore[no-untyped-def]
+    """Apply additive DDL migrations. Each ALTER is idempotent — duplicate-column errors are expected and swallowed."""
+    _MIGRATIONS = [
+        ("articles", "content", "ALTER TABLE articles ADD COLUMN content TEXT DEFAULT ''"),
+        ("articles", "read_at", "ALTER TABLE articles ADD COLUMN read_at INTEGER"),
+    ]
+    for _table, column, stmt in _MIGRATIONS:
+        try:
+            await conn.execute(text(stmt))
+            logger.info("DB migrated: added %s column", column)
+        except Exception:
+            pass  # column already exists — expected on every run after first
+
+
 async def init_db(url: str = DEFAULT_DB_URL) -> None:
     """Create engine, tables, and run any pending migrations."""
     global _engine
@@ -113,20 +127,7 @@ async def init_db(url: str = DEFAULT_DB_URL) -> None:
 
     async with _engine.begin() as conn:
         await conn.run_sync(metadata.create_all)
-
-        # Migration: content column (pre-existing SQLite DBs)
-        try:
-            await conn.execute(text("ALTER TABLE articles ADD COLUMN content TEXT DEFAULT ''"))
-            logger.info("DB migrated: added content column")
-        except Exception:
-            pass  # column already exists
-
-        # Migration: read_at column
-        try:
-            await conn.execute(text("ALTER TABLE articles ADD COLUMN read_at INTEGER"))
-            logger.info("DB migrated: added read_at column")
-        except Exception:
-            pass  # column already exists
+        await _run_migrations(conn)
 
     safe_url = url.split("@")[-1] if "@" in url else url
     logger.info("DB ready: %s", safe_url)
@@ -175,6 +176,53 @@ async def save_articles(articles: list[dict], total_fetched: int) -> None:
         await _set_meta(conn, "last_refresh", str(now))
         await _set_meta(conn, "total_fetched", str(total_fetched))
     logger.info("Saved %d articles to DB", len(articles))
+
+
+async def upsert_articles(articles: list[dict]) -> None:
+    """Insert or replace articles by id without wiping the full table."""
+    now = int(time.time())
+    rows = [
+        {
+            "id": a["id"],
+            "title": a["title"],
+            "url": a["url"],
+            "feed_title": a["feed_title"],
+            "published": a["published"],
+            "score": a["score"],
+            "matched_topics": json.dumps(a["matched_topics"]),
+            "matched_keywords": json.dumps(a["matched_keywords"]),
+            "top_topic": a.get("top_topic"),
+            "summary": a["summary"],
+            "content": a.get("_content", a["summary"]),
+            "fetched_at": now,
+        }
+        for a in articles
+    ]
+    ids = [r["id"] for r in rows]
+    async with get_engine().begin() as conn:
+        await conn.execute(delete(articles_table).where(articles_table.c.id.in_(ids)))
+        if rows:
+            await conn.execute(insert(articles_table), rows)
+
+
+async def bookmark_articles(ids: list[str]) -> None:
+    """Mark a list of article ids as bookmarked, skipping already-bookmarked ones."""
+    now = int(time.time())
+    async with get_engine().begin() as conn:
+        existing = {
+            r[0]
+            for r in (
+                await conn.execute(
+                    select(bookmarks_table.c.id).where(bookmarks_table.c.id.in_(ids))
+                )
+            ).all()
+        }
+        new_ids = [i for i in ids if i not in existing]
+        if new_ids:
+            await conn.execute(
+                insert(bookmarks_table),
+                [{"id": i, "bookmarked_at": now} for i in new_ids],
+            )
 
 
 async def load_articles() -> tuple[list[dict], float | None, int]:

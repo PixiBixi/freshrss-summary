@@ -72,8 +72,10 @@ class FreshRSSClient:
                 headers=self._auth_headers(),
             )
             resp.raise_for_status()
-            self._csrf_token = resp.text.strip()
-        return self._csrf_token  # type: ignore[return-value]
+            token: str = resp.text.strip()
+            self._csrf_token = token
+            return token
+        return self._csrf_token
 
     # ------------------------------------------------------------------
     # Fetching
