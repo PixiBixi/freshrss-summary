@@ -243,7 +243,7 @@ def cmd_rescore(args, cfg: dict) -> int:
     title_weight = scoring_cfg.get("title_weight", 3)
     min_score = scoring_cfg.get("min_score", 1.0)
 
-    from freshrss_client import Article
+    from freshrss_client import article_from_row
     from scorer import build_topics, score_article
 
     topics = build_topics(cfg.get("topics", {}))
@@ -261,15 +261,7 @@ def cmd_rescore(args, cfg: dict) -> int:
     print(info(f"Rescoring {len(raw)} articles..."))
     rescored = []
     for r in raw:
-        art = Article(
-            id=r["id"],
-            title=r["title"],
-            url=r["url"],
-            content=r["content"],
-            summary="",
-            feed_title=r["feed_title"],
-            published=r["published"],
-        )
+        art = article_from_row(r)
         scored = score_article(art, topics, title_weight)
         if scored.score >= min_score:
             rescored.append(scored.to_dict())

@@ -1,6 +1,7 @@
 """FreshRSS Summary — FastAPI backend."""
 
 import asyncio
+import datetime
 import hashlib
 import json
 import logging
@@ -56,7 +57,7 @@ from db import (
     toggle_bookmark,
     upsert_user,
 )
-from freshrss_client import Article, FreshRSSClient
+from freshrss_client import FreshRSSClient, article_from_row
 from scorer import build_topics, score_articles
 from telegram_digest import check_trending, register_webhook, send_digest, send_snooze_reminders
 
@@ -136,6 +137,8 @@ class Cache:
         self.is_loading: bool = False
         self.load_progress: str = ""
         self.error: str | None = None
+        self.refresh_task: asyncio.Task | None = None
+        self.trending_alerted: set[tuple[str, int]] = set()
 
     def populate(
         self, articles: list[dict], last_refresh: float | None, total_fetched: int
@@ -147,8 +150,6 @@ class Cache:
 
 
 cache = Cache()
-_refresh_task: asyncio.Task | None = None
-_trending_alerted: set = set()
 
 
 # ---------------------------------------------------------------------------
@@ -181,8 +182,6 @@ def verify_password(plain: str, stored: str) -> bool:
 # Admin user initialisation
 # ---------------------------------------------------------------------------
 
-ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
-
 
 async def init_admin_user() -> None:
     """
@@ -192,18 +191,19 @@ async def init_admin_user() -> None:
       for Docker secrets / initial deploy / password reset).
     - Else if DB has no users: generate a random password, store it, log it.
     """
+    admin_username = os.environ.get("ADMIN_USERNAME", "admin")
     admin_password = os.environ.get("ADMIN_PASSWORD")
 
     if admin_password:
-        await upsert_user(ADMIN_USERNAME, hash_password(admin_password))
-        logger.info("Admin user '%s' password applied from ADMIN_PASSWORD env var", ADMIN_USERNAME)
+        await upsert_user(admin_username, hash_password(admin_password))
+        logger.info("Admin user '%s' password applied from ADMIN_PASSWORD env var", admin_username)
     elif not await has_users():
         admin_password = secrets.token_urlsafe(16)
-        await upsert_user(ADMIN_USERNAME, hash_password(admin_password))
+        await upsert_user(admin_username, hash_password(admin_password))
         sep = "=" * 56
         logger.warning(sep)
         logger.warning("  FIRST RUN — admin account created")
-        logger.warning("  Username : %s", ADMIN_USERNAME)
+        logger.warning("  Username : %s", admin_username)
         logger.warning("  Password : %s", admin_password)
         logger.warning("  Set ADMIN_PASSWORD env var to override on restart")
         logger.warning(sep)
@@ -236,6 +236,47 @@ def require_auth(request: Request) -> None:
 # ---------------------------------------------------------------------------
 # App lifespan: init DB and warm cache from persisted data
 # ---------------------------------------------------------------------------
+
+
+async def _setup_telegram_scheduler(scheduler: AsyncIOScheduler, tg_cfg: dict, cfg: dict) -> None:
+    """Register all Telegram-related scheduler jobs and webhook."""
+    hour = int(tg_cfg.get("digest_hour", 21))
+    scheduler.add_job(
+        _run_daily_digest,
+        CronTrigger(hour=hour, minute=0, timezone="Europe/Paris"),
+        args=[tg_cfg],
+        id="daily_digest",
+        max_instances=1,
+        coalesce=True,
+    )
+    logger.info("Telegram digest scheduled at %02dh00 Europe/Paris", hour)
+    scheduler.add_job(
+        _check_trending,
+        "interval",
+        hours=1,
+        args=[tg_cfg],
+        id="trending_check",
+        max_instances=1,
+        coalesce=True,
+    )
+    logger.info("Trending topic checker scheduled: every 1h")
+    scheduler.add_job(
+        _check_snoozes,
+        "interval",
+        minutes=15,
+        args=[tg_cfg],
+        id="snooze_check",
+        max_instances=1,
+        coalesce=True,
+    )
+    logger.info("Snooze checker scheduled: every 15min")
+    public_url = cfg.get("server", {}).get("public_url", "")
+    if public_url:
+        await register_webhook(tg_cfg, public_url)
+    else:
+        logger.info(
+            "Telegram: set server.public_url (or PUBLIC_URL env var) to auto-register webhook"
+        )
 
 
 @asynccontextmanager
@@ -276,43 +317,7 @@ async def lifespan(app: FastAPI):
         if scheduler is None:
             scheduler = AsyncIOScheduler(timezone="UTC")
             scheduler.start()
-        hour = int(tg_cfg.get("digest_hour", 21))
-        scheduler.add_job(
-            _run_daily_digest,
-            CronTrigger(hour=hour, minute=0, timezone="Europe/Paris"),
-            args=[tg_cfg],
-            id="daily_digest",
-            max_instances=1,
-            coalesce=True,
-        )
-        logger.info("Telegram digest scheduled at %02dh00 Europe/Paris", hour)
-        scheduler.add_job(
-            _check_trending,
-            "interval",
-            hours=1,
-            args=[tg_cfg],
-            id="trending_check",
-            max_instances=1,
-            coalesce=True,
-        )
-        logger.info("Trending topic checker scheduled: every 1h")
-        scheduler.add_job(
-            _check_snoozes,
-            "interval",
-            minutes=15,
-            args=[tg_cfg],
-            id="snooze_check",
-            max_instances=1,
-            coalesce=True,
-        )
-        logger.info("Snooze checker scheduled: every 15min")
-        public_url = cfg.get("server", {}).get("public_url", "")
-        if public_url:
-            await register_webhook(tg_cfg, public_url)
-        else:
-            logger.info(
-                "Telegram: set server.public_url (or PUBLIC_URL env var) to auto-register webhook"
-            )
+        await _setup_telegram_scheduler(scheduler, tg_cfg, cfg)
 
     app.state.tg_cfg = tg_cfg
 
@@ -577,12 +582,10 @@ async def _run_refresh() -> None:
 @app.post("/api/refresh", dependencies=[Depends(require_auth)])
 async def refresh() -> dict[str, Any]:
     """Start async refresh. Returns immediately; poll /api/status for progress."""
-    global _refresh_task
-
     if cache.is_loading:
         return {"status": "already_loading", "progress": cache.load_progress}
 
-    _refresh_task = asyncio.create_task(_run_refresh())
+    cache.refresh_task = asyncio.create_task(_run_refresh())
     return {"status": "started"}
 
 
@@ -689,18 +692,7 @@ def _blocking_rescore_compute(raw: list[dict], cfg: dict, topics_cfg: dict) -> l
     topics = build_topics(topics_cfg)
 
     cache.load_progress = f"Re-scoring {len(raw)} articles..."
-    articles = [
-        Article(
-            id=r["id"],
-            title=r["title"],
-            url=r["url"],
-            content=r["content"],
-            summary="",
-            feed_title=r["feed_title"],
-            published=r["published"],
-        )
-        for r in raw
-    ]
+    articles = [article_from_row(r) for r in raw]
     return [
         a.to_dict()
         for a in score_articles(articles, topics, title_weight=title_weight, min_score=min_score)
@@ -739,8 +731,6 @@ async def _run_rescore() -> None:
 @app.post("/api/rescore", dependencies=[Depends(require_auth)])
 async def rescore() -> dict[str, Any]:
     """Re-score cached articles with current config. No FreshRSS fetch."""
-    global _refresh_task
-
     if cache.is_loading:
         return {"status": "already_loading", "progress": cache.load_progress}
 
@@ -749,7 +739,7 @@ async def rescore() -> dict[str, Any]:
             status_code=400, detail="Aucun article en DB. Lance d'abord un Rafraîchir."
         )
 
-    _refresh_task = asyncio.create_task(_run_rescore())
+    cache.refresh_task = asyncio.create_task(_run_rescore())
     return {"status": "started"}
 
 
@@ -786,8 +776,6 @@ class SnoozeRequest(BaseModel):
 @app.post("/api/snooze", dependencies=[Depends(require_auth)])
 async def snooze_article(req: SnoozeRequest, request: Request) -> dict[str, Any]:
     """Schedule a Telegram reminder for an article."""
-    import datetime
-
     article = next((a for a in cache.articles if a["id"] == req.article_id), None)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
@@ -848,7 +836,7 @@ class ChangePasswordRequest(BaseModel):
 @app.post("/api/change-password", dependencies=[Depends(require_auth)])
 async def change_password(req: ChangePasswordRequest, request: Request) -> dict[str, str]:
     """Change the password of the currently authenticated user."""
-    username = request.session.get("username", ADMIN_USERNAME)
+    username = request.session.get("username", os.environ.get("ADMIN_USERNAME", "admin"))
     stored_hash = await get_user_hash(username)
     if not stored_hash or not verify_password(req.current_password, stored_hash):
         raise HTTPException(status_code=400, detail="current_password_wrong")
@@ -871,8 +859,7 @@ async def _run_daily_digest(tg_cfg: dict) -> None:
 
 async def _check_trending(tg_cfg: dict) -> None:
     """Scheduler job: alert if a topic is surging in the last 2h."""
-    global _trending_alerted
-    _trending_alerted = await check_trending(tg_cfg, cache.articles, _trending_alerted)
+    cache.trending_alerted = await check_trending(tg_cfg, cache.articles, cache.trending_alerted)
 
 
 async def _check_snoozes(tg_cfg: dict) -> None:

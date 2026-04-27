@@ -111,8 +111,11 @@ async def _run_migrations(conn) -> None:  # type: ignore[no-untyped-def]
         try:
             await conn.execute(text(stmt))
             logger.info("DB migrated: added %s column", column)
-        except Exception:
-            pass  # column already exists — expected on every run after first
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "duplicate" not in msg and "already exists" not in msg:
+                logger.warning("Migration ALTER failed unexpectedly for %s: %s", column, exc)
+            # else: column already exists — expected on every run after first
 
 
 async def init_db(url: str = DEFAULT_DB_URL) -> None:
@@ -351,10 +354,10 @@ async def set_articles_read(ids: list[str]) -> None:
 
 async def load_read_articles(days: int = 7) -> list[dict]:
     """Load articles marked as read (for 'show read' toggle)."""
-    cutoff = int(time.time()) - days * 86400 if days > 0 else 0
     async with get_engine().connect() as conn:
         q = select(articles_table).where(articles_table.c.read_at.is_not(None))
-        if cutoff > 0:
+        if days > 0:
+            cutoff = int(time.time()) - days * 86400
             q = q.where(articles_table.c.read_at >= cutoff)
         rows = (await conn.execute(q)).mappings().all()
     return [
@@ -465,16 +468,24 @@ async def upsert_user(username: str, password_hash: str) -> None:
 
 async def add_pending_sync(ids: list[str]) -> None:
     """Queue article IDs for deferred mark-as-read sync to FreshRSS."""
+    if not ids:
+        return
     now = int(time.time())
     async with get_engine().begin() as conn:
-        for article_id in ids:
-            existing = (
+        existing = {
+            r[0]
+            for r in (
                 await conn.execute(
-                    select(pending_sync_table.c.id).where(pending_sync_table.c.id == article_id)
+                    select(pending_sync_table.c.id).where(pending_sync_table.c.id.in_(ids))
                 )
-            ).first()
-            if not existing:
-                await conn.execute(insert(pending_sync_table).values(id=article_id, queued_at=now))
+            ).all()
+        }
+        new_ids = [i for i in ids if i not in existing]
+        if new_ids:
+            await conn.execute(
+                insert(pending_sync_table),
+                [{"id": i, "queued_at": now} for i in new_ids],
+            )
     logger.info("Queued %d article(s) for pending FreshRSS sync", len(ids))
 
 
