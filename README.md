@@ -54,7 +54,9 @@ ADMIN_PASSWORD=newpassword python app.py
 docker run -e ADMIN_USERNAME=jeremy -e ADMIN_PASSWORD=mypass ...
 ```
 
-Only **Refresh** and **Rescore** require authentication. Reading articles is public.
+Only **Refresh**, **Rescore**, and **Show read** require authentication. Reading unread articles is public.
+
+Login attempts are rate-limited to **10 per minute per IP**.
 
 ## Config
 
@@ -258,7 +260,7 @@ Weights and keywords are editable live from the UI (⚙ **Topics** button) — p
 - **Auto mark-as-read on scroll**: articles scrolled past are silently marked as read in FreshRSS after a 3s debounce
 - **Mark as read**: single article, all articles in a day group, or all visible
 - **Open all**: open every article in a day group as tabs (with confirmation above 10)
-- **Show read**: toggle to reveal articles marked as read (kept 7 days, purged on refresh)
+- **Show read**: toggle to reveal articles marked as read (kept 7 days, purged on refresh) — requires login
 - **Bookmarks**: starred locally, survive refreshes
 
 ### Filtering & sorting
