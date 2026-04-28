@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.3.0](https://github.com/PixiBixi/freshrss-summary/compare/v1.2.1...v1.3.0) (2026-04-28)
+
+
+### Features
+
+* make /api/articles and /api/status public (read-only view without login) ([be62222](https://github.com/PixiBixi/freshrss-summary/commit/be622226556079ce7fa0fec3a5cc1831760d22ae))
+* snooze reminders, trending alerts, cli digest command ([db95d9f](https://github.com/PixiBixi/freshrss-summary/commit/db95d9fe9a600a7741174b3c34b6ceb98ab71715))
+
+
+### Bug Fixes
+
+* **deps:** re-add itsdangerous — required by starlette SessionMiddleware ([d230444](https://github.com/PixiBixi/freshrss-summary/commit/d23044487f356036086da4ffcefb79ac6f1cac9f))
+* **deps:** re-add python-multipart — required by FastAPI Form() ([dc0e05f](https://github.com/PixiBixi/freshrss-summary/commit/dc0e05faac02141f66646448c8c87af83621f9b6))
+* **js:** redirect to login on 401 from /api/articles instead of crashing ([fe67f23](https://github.com/PixiBixi/freshrss-summary/commit/fe67f23c36bd6272d2b684cdc291199460659a09))
+* **security:** protect /api/status and /metrics with auth ([acb61b4](https://github.com/PixiBixi/freshrss-summary/commit/acb61b456bc07a2365257b20a21e0a721f0b9bb8))
+* **security:** public read-only view, login hardening, code quality ([3b339b2](https://github.com/PixiBixi/freshrss-summary/commit/3b339b276eaa089c28cb7fab1e6884ba45810648))
+* **security:** rate limit login, fix session fixation, show_read behind auth, remove /api/me ([cdbc18e](https://github.com/PixiBixi/freshrss-summary/commit/cdbc18e50b196fdba691fc7e01dd1de200656a3a))
+* **telegram:** cleaner digest format — score prefix, no feed name ([e8a17fd](https://github.com/PixiBixi/freshrss-summary/commit/e8a17fdfe4946fff78719ed011754a7fe6609eef))
+
+
+### Reverts
+
+* **security:** keep /api/status public for unauthenticated status visibility ([3963521](https://github.com/PixiBixi/freshrss-summary/commit/39635215453cbc36e9d57a6e22de3dc90ade7988))
+
 ## [1.2.1](https://github.com/PixiBixi/freshrss-summary/compare/v1.2.0...v1.2.1) (2026-04-26)
 
 
