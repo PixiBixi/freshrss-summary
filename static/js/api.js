@@ -1,28 +1,24 @@
 // ── API ────────────────────────────────────────────────────────────────
 async function fetchStatus() { return (await fetch('/api/status')).json(); }
 
-async function fetchMe() {
-  try {
-    const data = await (await fetch('/api/me')).json();
-    state.authenticated = data.authenticated;
-    const authEl    = document.getElementById('overflow-auth');
-    const loginEl   = document.getElementById('overflow-login');
-    const usernameEl = document.getElementById('auth-username');
-    if (data.authenticated) {
-      if (usernameEl) usernameEl.textContent = data.username || '';
-      if (authEl)  authEl.style.display  = '';
-      if (loginEl) loginEl.style.display = 'none';
-    } else {
-      if (authEl)  authEl.style.display  = 'none';
-      if (loginEl) loginEl.style.display = '';
-    }
-  } catch {}
+function fetchMe() {
+  state.authenticated = !!window._AUTH;
+  const authEl     = document.getElementById('overflow-auth');
+  const loginEl    = document.getElementById('overflow-login');
+  const usernameEl = document.getElementById('auth-username');
+  if (state.authenticated) {
+    if (usernameEl) usernameEl.textContent = window._USER || '';
+    if (authEl)  authEl.style.display  = '';
+    if (loginEl) loginEl.style.display = 'none';
+  } else {
+    if (authEl)  authEl.style.display  = 'none';
+    if (loginEl) loginEl.style.display = '';
+  }
 }
 
 async function doLogout() {
   await fetch('/logout', { method: 'POST' });
-  state.authenticated = false;
-  fetchMe();
+  window.location.href = '/login';
 }
 
 function _requireAuth() {

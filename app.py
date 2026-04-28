@@ -1,6 +1,7 @@
 """FreshRSS Summary — FastAPI backend."""
 
 import asyncio
+import collections
 import datetime
 import hashlib
 import json
@@ -236,6 +237,27 @@ def require_auth(request: Request) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Login rate limiter (in-memory, per IP)
+# ---------------------------------------------------------------------------
+
+_login_attempts: dict[str, collections.deque] = {}
+_LOGIN_MAX = 10
+_LOGIN_WINDOW = 60  # seconds
+
+
+def _login_rate_limit(ip: str) -> bool:
+    """Return True if the IP is within the rate limit, False if blocked."""
+    now = time.time()
+    q = _login_attempts.setdefault(ip, collections.deque())
+    while q and q[0] < now - _LOGIN_WINDOW:
+        q.popleft()
+    if len(q) >= _LOGIN_MAX:
+        return False
+    q.append(now)
+    return True
+
+
+# ---------------------------------------------------------------------------
 # App lifespan: init DB and warm cache from persisted data
 # ---------------------------------------------------------------------------
 
@@ -343,7 +365,14 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        {
+            "authenticated": bool(request.session.get("authenticated")),
+            "username": request.session.get("username", ""),
+        },
+    )
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -359,8 +388,18 @@ async def login(
     username: str = Form(...),
     password: str = Form(...),
 ):
+    ip = request.client.host if request.client else "unknown"
+    if not _login_rate_limit(ip):
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {"error": "Trop de tentatives. Réessayez dans une minute."},
+            status_code=429,
+        )
+
     stored_hash = await get_user_hash(username)
     if stored_hash and verify_password(password, stored_hash):
+        request.session.clear()
         request.session["authenticated"] = True
         request.session["username"] = username
         next_url = request.query_params.get("next", "/")
@@ -375,15 +414,6 @@ async def login(
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
-
-
-@app.get("/api/me")
-async def me(request: Request) -> dict[str, Any]:
-    auth = request.session.get("authenticated", False)
-    return {
-        "authenticated": bool(auth),
-        "username": request.session.get("username") if auth else None,
-    }
 
 
 @app.get("/api/status")
@@ -401,6 +431,7 @@ async def get_status() -> dict[str, Any]:
 
 @app.get("/api/articles")
 async def get_articles(
+    request: Request,
     topic: str | None = None,
     min_score: float | None = None,
     sort: str = "score",
@@ -409,6 +440,8 @@ async def get_articles(
     days: int = 7,
     show_read: bool = False,
 ) -> dict[str, Any]:
+    if show_read and not request.session.get("authenticated"):
+        show_read = False
     articles = cache.articles
 
     if days > 0:
