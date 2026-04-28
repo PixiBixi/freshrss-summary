@@ -386,7 +386,7 @@ async def me(request: Request) -> dict[str, Any]:
     }
 
 
-@app.get("/api/status", dependencies=[Depends(require_auth)])
+@app.get("/api/status")
 async def get_status() -> dict[str, Any]:
     return {
         "is_loading": cache.is_loading,
