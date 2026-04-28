@@ -9,9 +9,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY requirements.txt .
 RUN uv pip install --system --no-cache -r requirements.txt
 
-COPY app.py freshrss_client.py scorer.py db.py telegram_digest.py ./
-COPY templates/ templates/
-COPY static/ static/
+COPY . .
 
 RUN mkdir -p data && chown app:app data
 

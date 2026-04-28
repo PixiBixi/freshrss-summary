@@ -1,5 +1,7 @@
 .git
 .github
+.claude
+.superpowers
 data/
 config.yaml
 __pycache__
@@ -11,3 +13,8 @@ venv/
 .venv/
 *.egg-info
 .env
+tests/
+scorecard.png
+helm/
+*.md
+desloppify/
