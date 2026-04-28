@@ -37,7 +37,9 @@ async function loadArticles() {
   try {
     const params = new URLSearchParams({ days: state.days });
     if (state.showRead) params.set('show_read', 'true');
-    const data = await (await fetch(`/api/articles?${params}`)).json();
+    const r = await fetch(`/api/articles?${params}`);
+    if (r.status === 401) { window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname); return; }
+    const data = await r.json();
     state.articles = data.articles;
     state.displayed = 100; state.everLoaded = true;
     const currentIds = new Set(data.articles.map(a => a.id));
