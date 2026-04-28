@@ -399,7 +399,7 @@ async def get_status() -> dict[str, Any]:
     }
 
 
-@app.get("/api/articles", dependencies=[Depends(require_auth)])
+@app.get("/api/articles")
 async def get_articles(
     topic: str | None = None,
     min_score: float | None = None,
