@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/PixiBixi/freshrss-summary/compare/v1.3.1...v1.3.2) (2026-04-28)
+
+
+### Bug Fixes
+
+* **ui:** mark-as-read broken in compact mode ([5500c67](https://github.com/PixiBixi/freshrss-summary/commit/5500c678c0ed7583a0c1fd93d927d9a8c00dffed))
+
 ## [1.3.1](https://github.com/PixiBixi/freshrss-summary/compare/v1.3.0...v1.3.1) (2026-04-28)
 
 
