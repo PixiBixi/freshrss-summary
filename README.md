@@ -1,5 +1,7 @@
 # FreshRSS Summary
 
+<img src="scorecard.png" width="100%">
+
 Web UI to sort and score unread FreshRSS articles by topic relevance (SRE, Kubernetes, ArgoCD, Terraform...).
 
 ## Setup

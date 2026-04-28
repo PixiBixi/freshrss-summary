@@ -220,6 +220,12 @@ class FreshRSSClient:
             categories=categories,
         )
 
+    def ping(self) -> int:
+        """Authenticate and fetch one article to verify connectivity. Returns article count sampled (0 or 1)."""
+        self._ensure_auth()
+        articles, _ = self._fetch_batch(None, 1)
+        return len(articles)
+
     def fetch_starred(self, max_items: int = 500) -> list[Article]:
         """Fetch starred articles from FreshRSS."""
         self._ensure_auth()

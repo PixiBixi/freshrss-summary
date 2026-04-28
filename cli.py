@@ -120,11 +120,8 @@ def cmd_check(args, cfg: dict) -> int:
 
     try:
         with make_client(cfg) as client:
-            client._login()
-            print(ok("Auth OK"))
-
-            batch, _ = client._fetch_batch(None, 1)
-            print(ok(f"Reading-list API reachable ({len(batch)} article sampled)"))
+            count = client.ping()
+            print(ok(f"Auth OK — reading-list API reachable ({count} article sampled)"))
 
             starred = client.fetch_starred(max_items=10)
             print(ok(f"Starred stream reachable ({len(starred)} fetched, limited to 10)"))

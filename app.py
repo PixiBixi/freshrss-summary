@@ -29,6 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel
+from sqlalchemy import text as sa_text
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -41,6 +42,7 @@ from db import (
     delete_snooze,
     get_bookmarked_ids,
     get_due_snoozes,
+    get_engine,
     get_meta,
     get_pending_sync,
     get_scoring_config,
@@ -384,7 +386,7 @@ async def me(request: Request) -> dict[str, Any]:
     }
 
 
-@app.get("/api/status")
+@app.get("/api/status", dependencies=[Depends(require_auth)])
 async def get_status() -> dict[str, Any]:
     return {
         "is_loading": cache.is_loading,
@@ -440,8 +442,7 @@ class MarkReadRequest(BaseModel):
     article_ids: list[str]
 
 
-async def _load_scoring_config() -> dict:
-    """Load topics config from DB; seed from config.yaml or built-in defaults on first call."""
+async def _get_or_init_scoring_config() -> dict:
     stored = await get_scoring_config()
     if stored is not None:
         return stored
@@ -449,13 +450,6 @@ async def _load_scoring_config() -> dict:
     topics = cfg.get("topics") or DEFAULT_TOPICS
     await set_scoring_config(topics)
     return topics
-
-
-def _blocking_mark_as_read(article_ids: list[str]) -> None:
-    cfg = load_config()
-    fr_cfg = cfg["freshrss"]
-    with FreshRSSClient(fr_cfg["url"], fr_cfg["username"], fr_cfg["api_password"]) as client:
-        client.mark_as_read(article_ids)
 
 
 @app.post("/api/mark-read", dependencies=[Depends(require_auth)])
@@ -470,7 +464,13 @@ async def mark_read(req: MarkReadRequest) -> dict[str, str]:
 
     # Best-effort upstream sync; queue for retry if FreshRSS is unreachable
     try:
-        await asyncio.to_thread(_blocking_mark_as_read, req.article_ids)
+
+        def _sync_mark_read() -> None:
+            fr = load_config()["freshrss"]
+            with FreshRSSClient(fr["url"], fr["username"], fr["api_password"]) as c:
+                c.mark_as_read(req.article_ids)
+
+        await asyncio.to_thread(_sync_mark_read)
     except Exception:
         logger.warning(
             "FreshRSS unreachable — queuing %d article(s) for deferred sync", len(req.article_ids)
@@ -542,13 +542,19 @@ async def _run_refresh() -> None:
 
     try:
         cfg = load_config()
-        topics_cfg = await _load_scoring_config()
+        topics_cfg = await _get_or_init_scoring_config()
 
         # Drain outbox: replay mark-as-read calls that failed when FreshRSS was offline
         pending = await get_pending_sync()
         if pending:
             try:
-                await asyncio.to_thread(_blocking_mark_as_read, pending)
+
+                def _sync_pending() -> None:
+                    fr = load_config()["freshrss"]
+                    with FreshRSSClient(fr["url"], fr["username"], fr["api_password"]) as c:
+                        c.mark_as_read(pending)
+
+                await asyncio.to_thread(_sync_pending)
                 await clear_pending_sync(pending)
                 logger.info("Flushed %d pending read sync(s) to FreshRSS", len(pending))
             except Exception:
@@ -637,7 +643,7 @@ async def refresh_stream() -> StreamingResponse:
         total_fetched = 0
         _t0 = time.perf_counter()
 
-        topics_cfg = await _load_scoring_config()
+        topics_cfg = await _get_or_init_scoring_config()
         asyncio.create_task(asyncio.to_thread(_worker, topics_cfg))
         try:
             while True:
@@ -708,7 +714,7 @@ async def _run_rescore() -> None:
     try:
         raw = await load_for_rescore()
         cfg = load_config()
-        topics_cfg = await _load_scoring_config()
+        topics_cfg = await _get_or_init_scoring_config()
         article_dicts = await asyncio.to_thread(_blocking_rescore_compute, raw, cfg, topics_cfg)
         total_fetched = int(await get_meta("total_fetched", "0"))
         cache.load_progress = "Sauvegarde..."
@@ -784,7 +790,7 @@ async def snooze_article(req: SnoozeRequest, request: Request) -> dict[str, Any]
     if not tg_cfg.get("bot_token") or not tg_cfg.get("chat_id"):
         raise HTTPException(status_code=400, detail="Telegram not configured")
 
-    if req.snooze_until:
+    if req.snooze_until is not None:
         snooze_until = req.snooze_until
     else:
         tomorrow = datetime.date.today() + datetime.timedelta(days=1)
@@ -808,7 +814,7 @@ async def snooze_article(req: SnoozeRequest, request: Request) -> dict[str, Any]
 @app.get("/api/config/scoring", dependencies=[Depends(require_auth)])
 async def get_scoring() -> dict[str, Any]:
     """Return the active scoring topics config (from DB, or seeded from config.yaml)."""
-    return {"topics": await _load_scoring_config()}
+    return {"topics": await _get_or_init_scoring_config()}
 
 
 class ScoringConfigRequest(BaseModel):
@@ -895,10 +901,6 @@ async def telegram_webhook(request: Request) -> dict:
 @app.get("/health")
 async def health() -> JSONResponse:
     """Liveness/readiness probe. No auth required."""
-    from sqlalchemy import text as sa_text
-
-    from db import get_engine
-
     db_status = "ok"
     try:
         async with get_engine().connect() as conn:
@@ -921,9 +923,9 @@ async def health() -> JSONResponse:
     return JSONResponse(content=payload, status_code=200 if status == "ok" else 503)
 
 
-@app.get("/metrics")
+@app.get("/metrics", dependencies=[Depends(require_auth)])
 async def metrics() -> Response:
-    """Prometheus metrics scrape endpoint. No auth required."""
+    """Prometheus metrics scrape endpoint. Requires authentication."""
     _update_prom_cache()
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
