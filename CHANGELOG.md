@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/PixiBixi/freshrss-summary/compare/v1.3.0...v1.3.1) (2026-04-28)
+
+
+### Bug Fixes
+
+* **docker:** COPY . . with proper .dockerignore — avoids missing file errors ([78c428b](https://github.com/PixiBixi/freshrss-summary/commit/78c428b6f61b4220387b6bf7286a58a21f8b80b7))
+
 ## [1.3.0](https://github.com/PixiBixi/freshrss-summary/compare/v1.2.1...v1.3.0) (2026-04-28)
 
 
