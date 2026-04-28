@@ -38,7 +38,7 @@ window.addEventListener('scroll', () => {
   if (currentY <= _lastScrollY) { _lastScrollY = currentY; return; }
   _lastScrollY = currentY;
 
-  document.querySelectorAll('.feed-row[data-id]').forEach(el => {
+  document.querySelectorAll('.feed-row[data-id], .compact-row[data-id]').forEach(el => {
     const rect = el.getBoundingClientRect();
     if (rect.bottom < 0) {
       const id = el.dataset.id;
@@ -67,7 +67,7 @@ async function flushReadQueue() {
       body: JSON.stringify({ article_ids: ids }),
     });
     for (const id of ids) {
-      document.querySelector(`.feed-row[data-id="${CSS.escape(id)}"]`)?.classList.add('read');
+      document.querySelector(`.feed-row[data-id="${CSS.escape(id)}"], .compact-row[data-id="${CSS.escape(id)}"]`)?.classList.add('read');
     }
     saveReadIds();
     applyFilters();

@@ -268,6 +268,10 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 40px; }
 .feed-row.read .row-title { text-decoration: line-through; color: var(--text-3); pointer-events: auto; }
 .feed-row.shown-read { opacity: 0.65; }
 .feed-row.shown-read .row-title { text-decoration: line-through; color: var(--text-3); }
+.compact-row.read { opacity: 0.35; pointer-events: none; transition: opacity 0.3s; }
+.compact-row.read .compact-title { text-decoration: line-through; color: var(--text-3); pointer-events: auto; }
+.compact-row.shown-read { opacity: 0.65; }
+.compact-row.shown-read .compact-title { text-decoration: line-through; color: var(--text-3); }
 .badge-read { font-size: 10px; color: var(--text-3); flex-shrink: 0; white-space: nowrap; }
 
 /* List container — pure list, no card */

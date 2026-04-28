@@ -70,7 +70,7 @@ async function markSingleAsRead(id, e) {
     _markedIds.add(id); _readQueue.delete(id);
     saveReadIds();
     if (state.openRow === id) toggleDetail(id);
-    document.querySelector(`.feed-row[data-id="${CSS.escape(id)}"]`)?.classList.add('read');
+    document.querySelector(`.feed-row[data-id="${CSS.escape(id)}"], .compact-row[data-id="${CSS.escape(id)}"]`)?.classList.add('read');
     buildTopicPills(state.articles.filter(a => !_markedIds.has(a.id)));
     updateStats();
   } catch (e) { console.error(e); }
@@ -91,7 +91,7 @@ async function markDayAsRead(btn) {
     for (const id of ids) { _markedIds.add(id); _readQueue.delete(id); }
     saveReadIds();
     if (s.has(state.openRow)) toggleDetail(state.openRow);
-    group.querySelectorAll('.feed-row').forEach(row => row.classList.add('read'));
+    group.querySelectorAll('.feed-row, .compact-row').forEach(row => row.classList.add('read'));
     buildTopicPills(state.articles.filter(a => !_markedIds.has(a.id)));
     applyFilters();
   } catch (e) { console.error(e); }

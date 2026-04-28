@@ -72,7 +72,7 @@ function renderArticles() {
   `).join('');
 
   _markedIds.forEach(id => {
-    document.querySelector(`.feed-row[data-id="${CSS.escape(id)}"]`)?.classList.add('read');
+    document.querySelector(`.feed-row[data-id="${CSS.escape(id)}"], .compact-row[data-id="${CSS.escape(id)}"]`)?.classList.add('read');
   });
 
   lm.classList.toggle('visible', state.filtered.length > state.displayed);
