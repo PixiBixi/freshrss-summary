@@ -5,12 +5,12 @@ import argparse
 import asyncio
 import datetime
 import json
-import os
 import sys
-import time
 from pathlib import Path
 
 import yaml
+
+from config import CONFIG_PATH, load_config
 
 # ── ANSI ───────────────────────────────────────────────────────────────────
 
@@ -45,38 +45,6 @@ def info(msg: str) -> str:
 
 
 # ── Config ─────────────────────────────────────────────────────────────────
-
-CONFIG_PATH = Path(__file__).parent / "config.yaml"
-
-
-def load_config() -> dict:
-    cfg: dict = {}
-    if CONFIG_PATH.exists():
-        with CONFIG_PATH.open() as f:
-            cfg = yaml.safe_load(f) or {}
-    else:
-        print(warn("config.yaml not found — relying on environment variables"))
-
-    fr = cfg.setdefault("freshrss", {})
-    if v := os.environ.get("FRESHRSS_URL"):
-        fr["url"] = v
-    if v := os.environ.get("FRESHRSS_USERNAME"):
-        fr["username"] = v
-    if v := os.environ.get("FRESHRSS_API_PASSWORD"):
-        fr["api_password"] = v
-
-    db = cfg.setdefault("database", {})
-    if v := os.environ.get("DATABASE_URL"):
-        db["url"] = v
-
-    missing = [k for k in ("url", "username", "api_password") if not fr.get(k)]
-    if missing:
-        raise RuntimeError(
-            f"Missing FreshRSS config: {', '.join(missing)}. "
-            "Set them in config.yaml (freshrss.url / username / api_password) "
-            "or via FRESHRSS_URL / FRESHRSS_USERNAME / FRESHRSS_API_PASSWORD."
-        )
-    return cfg
 
 
 def make_client(cfg: dict):
@@ -126,62 +94,17 @@ async def _load_for_rescore(cfg: dict) -> list[dict]:
 
 
 async def _upsert_articles(cfg: dict, articles: list[dict]) -> None:
-    """Insert-or-replace articles without wiping the full table."""
-    import json as _json
-
-    from sqlalchemy import delete, insert
-
-    from db import articles_table, get_engine
+    from db import upsert_articles
 
     await _init_db(cfg)
-    now = int(time.time())
-    rows = [
-        {
-            "id": a["id"],
-            "title": a["title"],
-            "url": a["url"],
-            "feed_title": a["feed_title"],
-            "published": a["published"],
-            "score": a["score"],
-            "matched_topics": _json.dumps(a["matched_topics"]),
-            "matched_keywords": _json.dumps(a["matched_keywords"]),
-            "top_topic": a.get("top_topic"),
-            "summary": a["summary"],
-            "content": a.get("_content", a["summary"]),
-            "fetched_at": now,
-        }
-        for a in articles
-    ]
-    ids = [r["id"] for r in rows]
-    async with get_engine().begin() as conn:
-        await conn.execute(delete(articles_table).where(articles_table.c.id.in_(ids)))
-        if rows:
-            await conn.execute(insert(articles_table), rows)
+    await upsert_articles(articles)
 
 
 async def _bookmark_all(cfg: dict, ids: list[str]) -> None:
-    """Mark a list of article IDs as bookmarked (skip existing)."""
-    from sqlalchemy import insert, select
-
-    from db import bookmarks_table, get_engine
+    from db import bookmark_articles
 
     await _init_db(cfg)
-    now = int(time.time())
-    async with get_engine().begin() as conn:
-        existing = {
-            r[0]
-            for r in (
-                await conn.execute(
-                    select(bookmarks_table.c.id).where(bookmarks_table.c.id.in_(ids))
-                )
-            ).all()
-        }
-        new_ids = [i for i in ids if i not in existing]
-        if new_ids:
-            await conn.execute(
-                insert(bookmarks_table),
-                [{"id": i, "bookmarked_at": now} for i in new_ids],
-            )
+    await bookmark_articles(ids)
 
 
 # ── Commands ───────────────────────────────────────────────────────────────
@@ -197,11 +120,8 @@ def cmd_check(args, cfg: dict) -> int:
 
     try:
         with make_client(cfg) as client:
-            client._login()
-            print(ok("Auth OK"))
-
-            batch, _ = client._fetch_batch(None, 1)
-            print(ok(f"Reading-list API reachable ({len(batch)} article sampled)"))
+            count = client.ping()
+            print(ok(f"Auth OK — reading-list API reachable ({count} article sampled)"))
 
             starred = client.fetch_starred(max_items=10)
             print(ok(f"Starred stream reachable ({len(starred)} fetched, limited to 10)"))
@@ -263,7 +183,7 @@ def cmd_fetch(args, cfg: dict) -> int:
 
     from scorer import build_topics, score_articles
 
-    topics = build_topics(cfg)
+    topics = build_topics(cfg.get("topics", {}))
     if not topics:
         print(warn("No topics configured — articles will score 0"))
 
@@ -320,10 +240,10 @@ def cmd_rescore(args, cfg: dict) -> int:
     title_weight = scoring_cfg.get("title_weight", 3)
     min_score = scoring_cfg.get("min_score", 1.0)
 
-    from freshrss_client import Article
+    from freshrss_client import article_from_row
     from scorer import build_topics, score_article
 
-    topics = build_topics(cfg)
+    topics = build_topics(cfg.get("topics", {}))
 
     try:
         raw = asyncio.run(_load_for_rescore(cfg))
@@ -338,15 +258,7 @@ def cmd_rescore(args, cfg: dict) -> int:
     print(info(f"Rescoring {len(raw)} articles..."))
     rescored = []
     for r in raw:
-        art = Article(
-            id=r["id"],
-            title=r["title"],
-            url=r["url"],
-            content=r["content"],
-            summary="",
-            feed_title=r["feed_title"],
-            published=r["published"],
-        )
+        art = article_from_row(r)
         scored = score_article(art, topics, title_weight)
         if scored.score >= min_score:
             rescored.append(scored.to_dict())
@@ -388,7 +300,7 @@ def _import_starred(args, cfg: dict) -> int:
 
     from scorer import build_topics, score_articles
 
-    topics = build_topics(cfg)
+    topics = build_topics(cfg.get("topics", {}))
 
     try:
         with make_client(cfg) as client:
@@ -468,7 +380,7 @@ def _import_file(args, cfg: dict) -> int:
 
     scoring_cfg = cfg.get("scoring", {})
     title_weight = scoring_cfg.get("title_weight", 3)
-    topics = build_topics(cfg)
+    topics = build_topics(cfg.get("topics", {}))
     scored = score_articles(articles, topics, title_weight, min_score=0)
 
     if args.dry_run:
@@ -499,7 +411,7 @@ def cmd_tune(args, cfg: dict) -> int:
 
     from scorer import analyze_favorites, build_topics
 
-    topics = build_topics(cfg)
+    topics = build_topics(cfg.get("topics", {}))
     max_items = args.limit or 200
 
     if not topics:
@@ -583,6 +495,45 @@ def cmd_tune(args, cfg: dict) -> int:
     return 0
 
 
+async def _load_articles_for_digest(cfg: dict) -> list[dict]:
+    from db import load_articles
+
+    await _init_db(cfg)
+    articles, _, _ = await load_articles()
+    return articles
+
+
+def cmd_digest(args, cfg: dict) -> int:
+    """Build and print the Telegram digest from DB articles. Optionally send it."""
+    from telegram_digest import build_digest, send_message
+
+    try:
+        articles = asyncio.run(_load_articles_for_digest(cfg))
+    except Exception as e:
+        print(err(f"DB error: {e}"))
+        return 1
+
+    text = build_digest(articles)
+    print(text)
+
+    if args.send:
+        tg = cfg.get("telegram", {})
+        bot_token = tg.get("bot_token", "")
+        chat_id = tg.get("chat_id", "")
+        if not bot_token or not chat_id:
+            print(err("Telegram bot_token or chat_id not configured"))
+            return 1
+        try:
+            asyncio.run(send_message(bot_token, chat_id, text))
+            print(ok("Digest sent via Telegram"))
+        except Exception as e:
+            print(err(f"Send failed: {e}"))
+            return 1
+
+    print()
+    return 0
+
+
 def _apply_weights(cfg: dict, suggestions: dict) -> None:
     if not CONFIG_PATH.exists():
         raise FileNotFoundError("config.yaml not found")
@@ -611,6 +562,7 @@ def main() -> int:
   rescore            Rescore DB articles with current config weights
   import [FILE]      Import from JSON file  |  --starred : from FreshRSS starred
   tune               Analyze starred items, suggest weight adjustments  (--apply to save)
+  digest             Build and print the digest  |  --send : push via Telegram
 
 {BOLD}examples:{RESET}
   python cli.py check
@@ -618,6 +570,8 @@ def main() -> int:
   python cli.py import --starred --limit 300
   python cli.py tune --apply
   python cli.py import articles.json
+  python cli.py digest
+  python cli.py digest --send
 """,
     )
     sub = parser.add_subparsers(dest="command")
@@ -641,6 +595,9 @@ def main() -> int:
     p.add_argument("--apply", action="store_true", help="Write suggestions to config.yaml")
     p.add_argument("--limit", type=int, help="Max starred items to analyze (default: 200)")
 
+    p = sub.add_parser("digest", help="Build and print the Telegram digest (--send to push)")
+    p.add_argument("--send", action="store_true", help="Send the digest via Telegram")
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -659,6 +616,7 @@ def main() -> int:
         "rescore": cmd_rescore,
         "import": cmd_import,
         "tune": cmd_tune,
+        "digest": cmd_digest,
     }
     return dispatch[args.command](args, cfg)
 

@@ -22,6 +22,19 @@ class Article:
     categories: list[str] = field(default_factory=list)
 
 
+def article_from_row(row: dict) -> "Article":
+    """Reconstruct an Article from a DB row dict (for rescore operations)."""
+    return Article(
+        id=row["id"],
+        title=row["title"],
+        url=row["url"],
+        content=row["content"],
+        summary="",
+        feed_title=row["feed_title"],
+        published=row["published"],
+    )
+
+
 class FreshRSSClient:
     def __init__(self, base_url: str, username: str, api_password: str):
         self.base_url = base_url.rstrip("/")
@@ -72,8 +85,12 @@ class FreshRSSClient:
                 headers=self._auth_headers(),
             )
             resp.raise_for_status()
-            self._csrf_token = resp.text.strip()
-        return self._csrf_token  # type: ignore[return-value]
+            token: str = resp.text.strip()
+            if not token:
+                raise RuntimeError("FreshRSS returned empty CSRF token")
+            self._csrf_token = token
+            return token
+        return self._csrf_token
 
     # ------------------------------------------------------------------
     # Fetching
@@ -202,6 +219,12 @@ class FreshRSSClient:
             published=item.get("published", 0),
             categories=categories,
         )
+
+    def ping(self) -> int:
+        """Authenticate and fetch one article to verify connectivity. Returns article count sampled (0 or 1)."""
+        self._ensure_auth()
+        articles, _ = self._fetch_batch(None, 1)
+        return len(articles)
 
     def fetch_starred(self, max_items: int = 500) -> list[Article]:
         """Fetch starred articles from FreshRSS."""

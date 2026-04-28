@@ -74,6 +74,16 @@ pending_sync_table = Table(
     Column("queued_at", Integer, nullable=False),
 )
 
+snooze_table = Table(
+    "snooze",
+    metadata,
+    Column("article_id", Text, primary_key=True),
+    Column("chat_id", Text, nullable=False),
+    Column("snooze_until", Integer, nullable=False),
+    Column("title", Text),
+    Column("url", Text),
+)
+
 users_table = Table(
     "users",
     metadata,
@@ -91,6 +101,23 @@ def get_engine() -> AsyncEngine:
     return _engine
 
 
+async def _run_migrations(conn) -> None:  # type: ignore[no-untyped-def]
+    """Apply additive DDL migrations. Each ALTER is idempotent — duplicate-column errors are expected and swallowed."""
+    _MIGRATIONS = [
+        ("articles", "content", "ALTER TABLE articles ADD COLUMN content TEXT DEFAULT ''"),
+        ("articles", "read_at", "ALTER TABLE articles ADD COLUMN read_at INTEGER"),
+    ]
+    for _table, column, stmt in _MIGRATIONS:
+        try:
+            await conn.execute(text(stmt))
+            logger.info("DB migrated: added %s column", column)
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "duplicate" not in msg and "already exists" not in msg:
+                logger.warning("Migration ALTER failed unexpectedly for %s: %s", column, exc)
+            # else: column already exists — expected on every run after first
+
+
 async def init_db(url: str = DEFAULT_DB_URL) -> None:
     """Create engine, tables, and run any pending migrations."""
     global _engine
@@ -103,20 +130,7 @@ async def init_db(url: str = DEFAULT_DB_URL) -> None:
 
     async with _engine.begin() as conn:
         await conn.run_sync(metadata.create_all)
-
-        # Migration: content column (pre-existing SQLite DBs)
-        try:
-            await conn.execute(text("ALTER TABLE articles ADD COLUMN content TEXT DEFAULT ''"))
-            logger.info("DB migrated: added content column")
-        except Exception:
-            pass  # column already exists
-
-        # Migration: read_at column
-        try:
-            await conn.execute(text("ALTER TABLE articles ADD COLUMN read_at INTEGER"))
-            logger.info("DB migrated: added read_at column")
-        except Exception:
-            pass  # column already exists
+        await _run_migrations(conn)
 
     safe_url = url.split("@")[-1] if "@" in url else url
     logger.info("DB ready: %s", safe_url)
@@ -165,6 +179,53 @@ async def save_articles(articles: list[dict], total_fetched: int) -> None:
         await _set_meta(conn, "last_refresh", str(now))
         await _set_meta(conn, "total_fetched", str(total_fetched))
     logger.info("Saved %d articles to DB", len(articles))
+
+
+async def upsert_articles(articles: list[dict]) -> None:
+    """Insert or replace articles by id without wiping the full table."""
+    now = int(time.time())
+    rows = [
+        {
+            "id": a["id"],
+            "title": a["title"],
+            "url": a["url"],
+            "feed_title": a["feed_title"],
+            "published": a["published"],
+            "score": a["score"],
+            "matched_topics": json.dumps(a["matched_topics"]),
+            "matched_keywords": json.dumps(a["matched_keywords"]),
+            "top_topic": a.get("top_topic"),
+            "summary": a["summary"],
+            "content": a.get("_content", a["summary"]),
+            "fetched_at": now,
+        }
+        for a in articles
+    ]
+    ids = [r["id"] for r in rows]
+    async with get_engine().begin() as conn:
+        await conn.execute(delete(articles_table).where(articles_table.c.id.in_(ids)))
+        if rows:
+            await conn.execute(insert(articles_table), rows)
+
+
+async def bookmark_articles(ids: list[str]) -> None:
+    """Mark a list of article ids as bookmarked, skipping already-bookmarked ones."""
+    now = int(time.time())
+    async with get_engine().begin() as conn:
+        existing = {
+            r[0]
+            for r in (
+                await conn.execute(
+                    select(bookmarks_table.c.id).where(bookmarks_table.c.id.in_(ids))
+                )
+            ).all()
+        }
+        new_ids = [i for i in ids if i not in existing]
+        if new_ids:
+            await conn.execute(
+                insert(bookmarks_table),
+                [{"id": i, "bookmarked_at": now} for i in new_ids],
+            )
 
 
 async def load_articles() -> tuple[list[dict], float | None, int]:
@@ -293,10 +354,10 @@ async def set_articles_read(ids: list[str]) -> None:
 
 async def load_read_articles(days: int = 7) -> list[dict]:
     """Load articles marked as read (for 'show read' toggle)."""
-    cutoff = int(time.time()) - days * 86400 if days > 0 else 0
     async with get_engine().connect() as conn:
         q = select(articles_table).where(articles_table.c.read_at.is_not(None))
-        if cutoff > 0:
+        if days > 0:
+            cutoff = int(time.time()) - days * 86400
             q = q.where(articles_table.c.read_at >= cutoff)
         rows = (await conn.execute(q)).mappings().all()
     return [
@@ -407,16 +468,24 @@ async def upsert_user(username: str, password_hash: str) -> None:
 
 async def add_pending_sync(ids: list[str]) -> None:
     """Queue article IDs for deferred mark-as-read sync to FreshRSS."""
+    if not ids:
+        return
     now = int(time.time())
     async with get_engine().begin() as conn:
-        for article_id in ids:
-            existing = (
+        existing = {
+            r[0]
+            for r in (
                 await conn.execute(
-                    select(pending_sync_table.c.id).where(pending_sync_table.c.id == article_id)
+                    select(pending_sync_table.c.id).where(pending_sync_table.c.id.in_(ids))
                 )
-            ).first()
-            if not existing:
-                await conn.execute(insert(pending_sync_table).values(id=article_id, queued_at=now))
+            ).all()
+        }
+        new_ids = [i for i in ids if i not in existing]
+        if new_ids:
+            await conn.execute(
+                insert(pending_sync_table),
+                [{"id": i, "queued_at": now} for i in new_ids],
+            )
     logger.info("Queued %d article(s) for pending FreshRSS sync", len(ids))
 
 
@@ -436,6 +505,46 @@ async def clear_pending_sync(ids: list[str]) -> None:
         for i in range(0, len(ids), chunk_size):
             chunk = ids[i : i + chunk_size]
             await conn.execute(delete(pending_sync_table).where(pending_sync_table.c.id.in_(chunk)))
+
+
+# ---------------------------------------------------------------------------
+# Snooze reminders
+# ---------------------------------------------------------------------------
+
+
+async def add_snooze(
+    article_id: str, chat_id: str, snooze_until: int, title: str, url: str
+) -> None:
+    """Schedule a Telegram reminder for an article. Overwrites any existing snooze."""
+    async with get_engine().begin() as conn:
+        await conn.execute(delete(snooze_table).where(snooze_table.c.article_id == article_id))
+        await conn.execute(
+            insert(snooze_table).values(
+                article_id=article_id,
+                chat_id=chat_id,
+                snooze_until=snooze_until,
+                title=title,
+                url=url,
+            )
+        )
+
+
+async def get_due_snoozes(now: int | None = None) -> list[dict]:
+    """Return snooze entries whose reminder time has passed."""
+    if now is None:
+        now = int(time.time())
+    async with get_engine().connect() as conn:
+        rows = (
+            (await conn.execute(select(snooze_table).where(snooze_table.c.snooze_until <= now)))
+            .mappings()
+            .all()
+        )
+    return [dict(r) for r in rows]
+
+
+async def delete_snooze(article_id: str) -> None:
+    async with get_engine().begin() as conn:
+        await conn.execute(delete(snooze_table).where(snooze_table.c.article_id == article_id))
 
 
 # ---------------------------------------------------------------------------

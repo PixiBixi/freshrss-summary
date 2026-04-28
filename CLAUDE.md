@@ -16,7 +16,11 @@ L'utilisateur est SRE/Platform Engineer — les topics prioritaires sont SRE, GK
 | `templates/index.html` | HTML pur — structure seulement |
 | `templates/login.html` | Page de connexion HTML pur |
 | `static/css/app.css` | Styles de l'interface principale |
-| `static/js/app.js` | Toute la logique JS (i18n, state, fetch, SSE…) |
+| `static/js/api.js` | Appels API, SSE, mark-as-read |
+| `static/js/ui.js` | Init UI, event listeners, palette de commandes |
+| `static/js/render.js` | Rendu DOM des articles |
+| `static/js/state.js` | État global partagé |
+| `static/js/i18n.js` | Traductions (fr/en/de/es/it/pt) |
 | `static/css/login.css` | Styles de la page de connexion |
 | `static/js/login.js` | i18n de la page de connexion |
 | `config.yaml` | Credentials + topics (gitignored) |
@@ -30,14 +34,25 @@ L'utilisateur est SRE/Platform Engineer — les topics prioritaires sont SRE, GK
 - Cache in-memory rechargé depuis SQLite au démarrage (lifespan FastAPI)
 - Topics et keywords entièrement configurables dans `config.yaml`
 
-## Règle MD obligatoire
+## Règle MD obligatoire (note : CLAUDE/ n'existe pas encore)
 
 À chaque modification technique, mettre à jour **sans attendre d'être demandé** :
-- `CLAUDE/progress.md` — ligne dans le tableau de changements
-- `CLAUDE/architecture.md` — si la structure ou une décision technique change
+- `CLAUDE/progress.md` — ligne dans le tableau de changements (créer si absent)
+- `CLAUDE/architecture.md` — si la structure ou une décision technique change (créer si absent)
 - `README.md` — si une feature, un flag ou un comportement change
+
+## Auth model
+
+- Endpoints publics : `/`, `/api/articles` (sans `show_read`), `/api/status`, `/health`
+- Endpoints protégés (`require_auth`) : `/api/refresh/stream`, `/api/mark-read`, `/api/rescore`, `/api/config/scoring` (PUT), `/api/bookmark`, `/api/snooze`, `/api/change-password`, `/metrics`
+- `show_read=True` sur `/api/articles` est silencieusement ignoré pour les anonymes
+- Auth state côté client : `window._AUTH` (bool) et `window._USER` (string) injectés par Jinja2 — pas de fetch `/api/me`
+
+## Pre-commit hooks
+
+- `ruff-format` auto-modifie `app.py` lors du premier commit → re-stager le fichier et recommiter
 
 ## Detailed docs
 
-- `CLAUDE/architecture.md` — décisions techniques
-- `CLAUDE/progress.md` — historique des changements
+- `CLAUDE/architecture.md` — décisions techniques (créer si absent)
+- `CLAUDE/progress.md` — historique des changements (créer si absent)

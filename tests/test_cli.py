@@ -2,6 +2,9 @@
 
 import pytest
 
+import config as config_module
+from config import load_config
+
 # ── ANSI helpers ──────────────────────────────────────────────────────────────
 
 
@@ -44,14 +47,12 @@ class TestLoadConfig:
         monkeypatch.setenv("FRESHRSS_USERNAME", "myuser")
         monkeypatch.setenv("FRESHRSS_API_PASSWORD", "mypass")
 
-        import cli as cli_module
-
-        orig = cli_module.CONFIG_PATH
-        cli_module.CONFIG_PATH = tmp_path / "no_config.yaml"
+        orig = config_module.CONFIG_PATH
+        config_module.CONFIG_PATH = tmp_path / "no_config.yaml"
         try:
-            cfg = cli_module.load_config()
+            cfg = load_config()
         finally:
-            cli_module.CONFIG_PATH = orig
+            config_module.CONFIG_PATH = orig
 
         assert cfg["freshrss"]["url"] == "https://rss.example.com"
         assert cfg["freshrss"]["username"] == "myuser"
@@ -62,30 +63,26 @@ class TestLoadConfig:
         monkeypatch.setenv("FRESHRSS_USERNAME", "u")
         monkeypatch.setenv("FRESHRSS_API_PASSWORD", "p")
 
-        import cli as cli_module
-
-        orig = cli_module.CONFIG_PATH
-        cli_module.CONFIG_PATH = tmp_path / "no_config.yaml"
+        orig = config_module.CONFIG_PATH
+        config_module.CONFIG_PATH = tmp_path / "no_config.yaml"
         try:
             with pytest.raises(RuntimeError, match="url"):
-                cli_module.load_config()
+                load_config()
         finally:
-            cli_module.CONFIG_PATH = orig
+            config_module.CONFIG_PATH = orig
 
     def test_missing_all_required_raises(self, monkeypatch, tmp_path):
         monkeypatch.delenv("FRESHRSS_URL", raising=False)
         monkeypatch.delenv("FRESHRSS_USERNAME", raising=False)
         monkeypatch.delenv("FRESHRSS_API_PASSWORD", raising=False)
 
-        import cli as cli_module
-
-        orig = cli_module.CONFIG_PATH
-        cli_module.CONFIG_PATH = tmp_path / "no_config.yaml"
+        orig = config_module.CONFIG_PATH
+        config_module.CONFIG_PATH = tmp_path / "no_config.yaml"
         try:
             with pytest.raises(RuntimeError, match="Missing FreshRSS config"):
-                cli_module.load_config()
+                load_config()
         finally:
-            cli_module.CONFIG_PATH = orig
+            config_module.CONFIG_PATH = orig
 
     def test_database_url_from_env(self, monkeypatch, tmp_path):
         monkeypatch.setenv("FRESHRSS_URL", "https://rss.example.com")
@@ -93,14 +90,12 @@ class TestLoadConfig:
         monkeypatch.setenv("FRESHRSS_API_PASSWORD", "p")
         monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///test.db")
 
-        import cli as cli_module
-
-        orig = cli_module.CONFIG_PATH
-        cli_module.CONFIG_PATH = tmp_path / "no_config.yaml"
+        orig = config_module.CONFIG_PATH
+        config_module.CONFIG_PATH = tmp_path / "no_config.yaml"
         try:
-            cfg = cli_module.load_config()
+            cfg = load_config()
         finally:
-            cli_module.CONFIG_PATH = orig
+            config_module.CONFIG_PATH = orig
 
         assert cfg["database"]["url"] == "sqlite+aiosqlite:///test.db"
 
@@ -112,14 +107,13 @@ class TestLoadConfig:
             "  username: yamluser\n"
             "  api_password: yamlpass\n"
         )
-        import cli as cli_module
 
-        orig = cli_module.CONFIG_PATH
-        cli_module.CONFIG_PATH = config_file
+        orig = config_module.CONFIG_PATH
+        config_module.CONFIG_PATH = config_file
         try:
-            cfg = cli_module.load_config()
+            cfg = load_config()
         finally:
-            cli_module.CONFIG_PATH = orig
+            config_module.CONFIG_PATH = orig
 
         assert cfg["freshrss"]["url"] == "https://from-yaml.com"
         assert cfg["freshrss"]["username"] == "yamluser"

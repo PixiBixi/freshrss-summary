@@ -1,6 +1,8 @@
 """FreshRSS Summary — FastAPI backend."""
 
 import asyncio
+import collections
+import datetime
 import hashlib
 import json
 import logging
@@ -8,6 +10,7 @@ import logging.config
 import os
 import secrets
 import time
+from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -27,14 +30,20 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel
+from sqlalchemy import text as sa_text
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
+from config import CONFIG_PATH, DEFAULT_TOPICS, load_config
 from db import (
     DEFAULT_DB_URL,
     add_pending_sync,
+    add_snooze,
     clear_pending_sync,
+    delete_snooze,
     get_bookmarked_ids,
+    get_due_snoozes,
+    get_engine,
     get_meta,
     get_pending_sync,
     get_scoring_config,
@@ -51,9 +60,9 @@ from db import (
     toggle_bookmark,
     upsert_user,
 )
-from freshrss_client import Article, FreshRSSClient
-from scorer import ScoredArticle, build_topics, score_articles
-from telegram_digest import _register_webhook, send_digest
+from freshrss_client import FreshRSSClient, article_from_row
+from scorer import build_topics, score_articles
+from telegram_digest import check_trending, register_webhook, send_digest, send_snooze_reminders
 
 # ---------------------------------------------------------------------------
 # Prometheus metrics
@@ -116,68 +125,6 @@ logger = logging.getLogger(__name__)
 # Config
 # ---------------------------------------------------------------------------
 
-CONFIG_PATH = Path(__file__).parent / "config.yaml"
-
-
-def load_config() -> dict:
-    """
-    Load config from config.yaml (if present), then apply env var overrides.
-
-    Supported env vars (all optional, take priority over config.yaml):
-      FRESHRSS_URL           → freshrss.url
-      FRESHRSS_USERNAME      → freshrss.username
-      FRESHRSS_API_PASSWORD  → freshrss.api_password
-      SERVER_HOST            → server.host
-      SERVER_PORT            → server.port
-    """
-    cfg: dict = {}
-    if CONFIG_PATH.exists():
-        with CONFIG_PATH.open() as f:
-            cfg = yaml.safe_load(f) or {}
-    else:
-        logger.warning("config.yaml not found — relying entirely on environment variables")
-
-    fr = cfg.setdefault("freshrss", {})
-    if v := os.environ.get("FRESHRSS_URL"):
-        fr["url"] = v
-    if v := os.environ.get("FRESHRSS_USERNAME"):
-        fr["username"] = v
-    if v := os.environ.get("FRESHRSS_API_PASSWORD"):
-        fr["api_password"] = v
-
-    srv = cfg.setdefault("server", {})
-    if v := os.environ.get("SERVER_HOST"):
-        srv["host"] = v
-    if v := os.environ.get("SERVER_PORT"):
-        srv["port"] = int(v)
-
-    sched = cfg.setdefault("scheduler", {})
-    if v := os.environ.get("REFRESH_INTERVAL_MINUTES"):
-        sched["interval_minutes"] = int(v)
-
-    db = cfg.setdefault("database", {})
-    if v := os.environ.get("DATABASE_URL"):
-        db["url"] = v
-
-    if v := os.environ.get("TELEGRAM_BOT_TOKEN"):
-        cfg.setdefault("telegram", {})["bot_token"] = v
-    if v := os.environ.get("TELEGRAM_CHAT_ID"):
-        cfg.setdefault("telegram", {})["chat_id"] = v
-    if v := os.environ.get("TELEGRAM_WEBHOOK_SECRET"):
-        cfg.setdefault("telegram", {})["webhook_secret"] = v
-    if v := os.environ.get("PUBLIC_URL"):
-        srv["public_url"] = v
-
-    # Validate required FreshRSS fields
-    missing = [k for k in ("url", "username", "api_password") if not fr.get(k)]
-    if missing:
-        raise RuntimeError(
-            f"Missing FreshRSS config: {', '.join(missing)}. "
-            "Set them in config.yaml or via FRESHRSS_URL / FRESHRSS_USERNAME / FRESHRSS_API_PASSWORD."
-        )
-
-    return cfg
-
 
 # ---------------------------------------------------------------------------
 # In-memory cache
@@ -193,6 +140,8 @@ class Cache:
         self.is_loading: bool = False
         self.load_progress: str = ""
         self.error: str | None = None
+        self.refresh_task: asyncio.Task | None = None
+        self.trending_alerted: set[tuple[str, int]] = set()
 
     def populate(
         self, articles: list[dict], last_refresh: float | None, total_fetched: int
@@ -204,7 +153,6 @@ class Cache:
 
 
 cache = Cache()
-_refresh_task: asyncio.Task | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -237,8 +185,6 @@ def verify_password(plain: str, stored: str) -> bool:
 # Admin user initialisation
 # ---------------------------------------------------------------------------
 
-ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
-
 
 async def init_admin_user() -> None:
     """
@@ -248,18 +194,19 @@ async def init_admin_user() -> None:
       for Docker secrets / initial deploy / password reset).
     - Else if DB has no users: generate a random password, store it, log it.
     """
+    admin_username = os.environ.get("ADMIN_USERNAME", "admin")
     admin_password = os.environ.get("ADMIN_PASSWORD")
 
     if admin_password:
-        await upsert_user(ADMIN_USERNAME, hash_password(admin_password))
-        logger.info("Admin user '%s' password applied from ADMIN_PASSWORD env var", ADMIN_USERNAME)
+        await upsert_user(admin_username, hash_password(admin_password))
+        logger.info("Admin user '%s' password applied from ADMIN_PASSWORD env var", admin_username)
     elif not await has_users():
         admin_password = secrets.token_urlsafe(16)
-        await upsert_user(ADMIN_USERNAME, hash_password(admin_password))
+        await upsert_user(admin_username, hash_password(admin_password))
         sep = "=" * 56
         logger.warning(sep)
         logger.warning("  FIRST RUN — admin account created")
-        logger.warning("  Username : %s", ADMIN_USERNAME)
+        logger.warning("  Username : %s", admin_username)
         logger.warning("  Password : %s", admin_password)
         logger.warning("  Set ADMIN_PASSWORD env var to override on restart")
         logger.warning(sep)
@@ -290,8 +237,70 @@ def require_auth(request: Request) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Login rate limiter (in-memory, per IP)
+# ---------------------------------------------------------------------------
+
+_login_attempts: dict[str, collections.deque] = {}
+_LOGIN_MAX = 10
+_LOGIN_WINDOW = 60  # seconds
+
+
+def _login_rate_limit(ip: str) -> bool:
+    """Return True if the IP is within the rate limit, False if blocked."""
+    now = time.time()
+    q = _login_attempts.setdefault(ip, collections.deque())
+    while q and q[0] < now - _LOGIN_WINDOW:
+        q.popleft()
+    if len(q) >= _LOGIN_MAX:
+        return False
+    q.append(now)
+    return True
+
+
+# ---------------------------------------------------------------------------
 # App lifespan: init DB and warm cache from persisted data
 # ---------------------------------------------------------------------------
+
+
+async def _setup_telegram_scheduler(scheduler: AsyncIOScheduler, tg_cfg: dict, cfg: dict) -> None:
+    """Register all Telegram-related scheduler jobs and webhook."""
+    hour = int(tg_cfg.get("digest_hour", 21))
+    scheduler.add_job(
+        _run_daily_digest,
+        CronTrigger(hour=hour, minute=0, timezone="Europe/Paris"),
+        args=[tg_cfg],
+        id="daily_digest",
+        max_instances=1,
+        coalesce=True,
+    )
+    logger.info("Telegram digest scheduled at %02dh00 Europe/Paris", hour)
+    scheduler.add_job(
+        _check_trending,
+        "interval",
+        hours=1,
+        args=[tg_cfg],
+        id="trending_check",
+        max_instances=1,
+        coalesce=True,
+    )
+    logger.info("Trending topic checker scheduled: every 1h")
+    scheduler.add_job(
+        _check_snoozes,
+        "interval",
+        minutes=15,
+        args=[tg_cfg],
+        id="snooze_check",
+        max_instances=1,
+        coalesce=True,
+    )
+    logger.info("Snooze checker scheduled: every 15min")
+    public_url = cfg.get("server", {}).get("public_url", "")
+    if public_url:
+        await register_webhook(tg_cfg, public_url)
+    else:
+        logger.info(
+            "Telegram: set server.public_url (or PUBLIC_URL env var) to auto-register webhook"
+        )
 
 
 @asynccontextmanager
@@ -332,23 +341,7 @@ async def lifespan(app: FastAPI):
         if scheduler is None:
             scheduler = AsyncIOScheduler(timezone="UTC")
             scheduler.start()
-        hour = int(tg_cfg.get("digest_hour", 21))
-        scheduler.add_job(
-            send_digest,
-            CronTrigger(hour=hour, minute=0, timezone="Europe/Paris"),
-            args=[tg_cfg, cache],
-            id="daily_digest",
-            max_instances=1,
-            coalesce=True,
-        )
-        logger.info("Telegram digest scheduled at %02dh00 Europe/Paris", hour)
-        public_url = cfg.get("server", {}).get("public_url", "")
-        if public_url:
-            await _register_webhook(tg_cfg, public_url)
-        else:
-            logger.info(
-                "Telegram: set server.public_url (or PUBLIC_URL env var) to auto-register webhook"
-            )
+        await _setup_telegram_scheduler(scheduler, tg_cfg, cfg)
 
     app.state.tg_cfg = tg_cfg
 
@@ -372,7 +365,14 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        {
+            "authenticated": bool(request.session.get("authenticated")),
+            "username": request.session.get("username", ""),
+        },
+    )
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -388,8 +388,18 @@ async def login(
     username: str = Form(...),
     password: str = Form(...),
 ):
+    ip = request.client.host if request.client else "unknown"
+    if not _login_rate_limit(ip):
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {"error": "Trop de tentatives. Réessayez dans une minute."},
+            status_code=429,
+        )
+
     stored_hash = await get_user_hash(username)
     if stored_hash and verify_password(password, stored_hash):
+        request.session.clear()
         request.session["authenticated"] = True
         request.session["username"] = username
         next_url = request.query_params.get("next", "/")
@@ -404,15 +414,6 @@ async def login(
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
-
-
-@app.get("/api/me")
-async def me(request: Request) -> dict[str, Any]:
-    auth = request.session.get("authenticated", False)
-    return {
-        "authenticated": bool(auth),
-        "username": request.session.get("username") if auth else None,
-    }
 
 
 @app.get("/api/status")
@@ -430,6 +431,7 @@ async def get_status() -> dict[str, Any]:
 
 @app.get("/api/articles")
 async def get_articles(
+    request: Request,
     topic: str | None = None,
     min_score: float | None = None,
     sort: str = "score",
@@ -438,6 +440,8 @@ async def get_articles(
     days: int = 7,
     show_read: bool = False,
 ) -> dict[str, Any]:
+    if show_read and not request.session.get("authenticated"):
+        show_read = False
     articles = cache.articles
 
     if days > 0:
@@ -471,266 +475,17 @@ class MarkReadRequest(BaseModel):
     article_ids: list[str]
 
 
-_DEFAULT_TOPICS: dict = {
-    "SRE": {
-        "weight": 1.5,
-        "keywords": [
-            "sre",
-            "site reliability",
-            "slo",
-            "sla",
-            "error budget",
-            "toil",
-            "incident",
-            "postmortem",
-            "runbook",
-            "on-call",
-            "oncall",
-            "pagerduty",
-            "chaos engineering",
-            "mttr",
-            "mttd",
-            "capacity planning",
-        ],
-    },
-    "Kubernetes": {
-        "weight": 1.5,
-        "keywords": [
-            "kubernetes",
-            "k8s",
-            "kubectl",
-            "helm",
-            "kustomize",
-            "pod",
-            "deployment",
-            "statefulset",
-            "daemonset",
-            "container runtime",
-            "cri",
-            "cni",
-            "csi",
-            "crd",
-            "operator",
-            "karpenter",
-            "cluster api",
-            "vcluster",
-            "gateway api",
-            "talos",
-            "kairos",
-            "k3s",
-            "rke2",
-            "rancher",
-            "containerd",
-        ],
-    },
-    "GKE": {
-        "weight": 2.0,
-        "keywords": [
-            "gke",
-            "google kubernetes engine",
-            "google cloud",
-            "gcp",
-            "autopilot",
-            "workload identity",
-            "binary authorization",
-            "cloud run",
-            "artifact registry",
-            "cloud armor",
-            "cloud nat",
-            "cloud build",
-            "cloud deploy",
-            "gke enterprise",
-            "anthos",
-        ],
-    },
-    "GitOps": {
-        "weight": 1.5,
-        "keywords": [
-            "argocd",
-            "argo cd",
-            "argo rollouts",
-            "argo workflows",
-            "gitops",
-            "applicationset",
-            "sync wave",
-            "flux",
-            "fluxcd",
-        ],
-    },
-    "Terraform": {
-        "weight": 1.3,
-        "keywords": [
-            "terraform",
-            "opentofu",
-            "tofu",
-            "hcl",
-            "tfstate",
-            "terragrunt",
-            "atlantis",
-            "infrastructure as code",
-            "iac",
-            "pulumi",
-            "crossplane",
-            "spacelift",
-        ],
-    },
-    "Immutable OS": {
-        "weight": 1.4,
-        "keywords": [
-            "immutable",
-            "ostree",
-            "bootc",
-            "rpm-ostree",
-            "flatcar",
-            "coreos",
-            "fedora coreos",
-            "talos",
-            "kairos",
-            "nixos",
-            "butane",
-            "sysext",
-        ],
-    },
-    "Platform Engineering": {
-        "weight": 1.2,
-        "keywords": [
-            "platform engineering",
-            "internal developer platform",
-            "backstage",
-            "developer experience",
-            "devex",
-            "golden path",
-            "crossplane",
-            "self-service",
-            "developer portal",
-        ],
-    },
-    "Observability": {
-        "weight": 1.1,
-        "keywords": [
-            "prometheus",
-            "grafana",
-            "alertmanager",
-            "loki",
-            "tempo",
-            "mimir",
-            "thanos",
-            "opentelemetry",
-            "otel",
-            "tracing",
-            "jaeger",
-            "pyroscope",
-            "monitoring",
-            "observability",
-            "ebpf",
-            "fluent bit",
-            "victoria metrics",
-            "datadog",
-        ],
-    },
-    "Security": {
-        "weight": 1.1,
-        "keywords": [
-            "cve",
-            "vulnerability",
-            "rbac",
-            "iam",
-            "secrets management",
-            "vault",
-            "trivy",
-            "falco",
-            "supply chain",
-            "sbom",
-            "zero trust",
-            "opa",
-            "gatekeeper",
-            "kyverno",
-            "external secrets",
-            "cert-manager",
-            "cosign",
-            "sigstore",
-            "slsa",
-            "kubescape",
-        ],
-    },
-    "CI/CD": {
-        "weight": 1.0,
-        "keywords": [
-            "ci/cd",
-            "github actions",
-            "gitlab ci",
-            "tekton",
-            "pipeline",
-            "continuous integration",
-            "continuous deployment",
-            "dora metrics",
-            "progressive delivery",
-            "canary",
-            "blue-green",
-            "feature flag",
-            "dagger",
-        ],
-    },
-    "Networking": {
-        "weight": 1.0,
-        "keywords": [
-            "service mesh",
-            "istio",
-            "cilium",
-            "calico",
-            "envoy",
-            "linkerd",
-            "ingress",
-            "gateway api",
-            "ebpf",
-            "network policy",
-            "metallb",
-            "external-dns",
-            "coredns",
-            "traefik",
-            "bgp",
-        ],
-    },
-    "FinOps": {
-        "weight": 1.2,
-        "keywords": [
-            "finops",
-            "cost optimization",
-            "rightsizing",
-            "committed use",
-            "spot vm",
-            "preemptible",
-            "reserved instance",
-            "cloud cost",
-            "kubecost",
-            "opencost",
-            "cost allocation",
-            "showback",
-            "chargeback",
-        ],
-    },
-}
-
-
-async def _load_scoring_config() -> dict:
-    """Load topics config from DB; seed from config.yaml or built-in defaults on first call."""
+async def _get_or_init_scoring_config() -> dict:
     stored = await get_scoring_config()
     if stored is not None:
         return stored
     cfg = load_config()
-    topics = cfg.get("topics") or _DEFAULT_TOPICS
+    topics = cfg.get("topics") or DEFAULT_TOPICS
     await set_scoring_config(topics)
     return topics
 
 
-def _blocking_mark_as_read(article_ids: list[str]) -> None:
-    cfg = load_config()
-    fr_cfg = cfg["freshrss"]
-    with FreshRSSClient(fr_cfg["url"], fr_cfg["username"], fr_cfg["api_password"]) as client:
-        client.mark_as_read(article_ids)
-
-
-@app.post("/api/mark-read")
+@app.post("/api/mark-read", dependencies=[Depends(require_auth)])
 async def mark_read(req: MarkReadRequest) -> dict[str, str]:
     if not req.article_ids:
         raise HTTPException(status_code=400, detail="No article IDs provided")
@@ -742,63 +497,76 @@ async def mark_read(req: MarkReadRequest) -> dict[str, str]:
 
     # Best-effort upstream sync; queue for retry if FreshRSS is unreachable
     try:
-        await asyncio.to_thread(_blocking_mark_as_read, req.article_ids)
+
+        def _sync_mark_read() -> None:
+            fr = load_config()["freshrss"]
+            with FreshRSSClient(fr["url"], fr["username"], fr["api_password"]) as c:
+                c.mark_as_read(req.article_ids)
+
+        await asyncio.to_thread(_sync_mark_read)
     except Exception:
         logger.warning(
             "FreshRSS unreachable — queuing %d article(s) for deferred sync", len(req.article_ids)
         )
         await add_pending_sync(req.article_ids)
-        return {"status": "queued"}
+        return {"status": "queued", "marked": str(len(req.article_ids))}
 
     return {"status": "ok", "marked": str(len(req.article_ids))}
 
 
-def _blocking_fetch_and_score(cfg: dict, topics_cfg: dict) -> tuple[list[dict], int]:
+def _fetch_and_score_iter(cfg: dict, topics_cfg: dict) -> Iterator[tuple[list[dict], int]]:
     """
-    Blocking fetch + score — runs in a thread pool via asyncio.to_thread.
-    Updates cache.load_progress directly (thread-safe for simple str assignment).
+    Generator: fetch unread articles in batches, score each, yield (scored_batch, cumulative_count).
+    Runs in a thread pool (blocking I/O). Callers decide whether to stream or accumulate.
     """
     fr_cfg = cfg["freshrss"]
     fetch_cfg = cfg.get("fetch", {})
     scoring_cfg = cfg.get("scoring", {})
-
     batch_size = int(fetch_cfg.get("batch_size", 1000))
     max_batches = int(fetch_cfg.get("max_batches", 10))
     title_weight = int(scoring_cfg.get("title_weight", 3))
     min_score = float(scoring_cfg.get("min_score", 1.0))
-
-    topics = build_topics({"topics": topics_cfg})
-    all_articles = []
+    topics = build_topics(topics_cfg)
     total_fetched = 0
 
     with FreshRSSClient(fr_cfg["url"], fr_cfg["username"], fr_cfg["api_password"]) as client:
         for batch in client.fetch_unread(batch_size=batch_size, max_batches=max_batches):
             total_fetched += len(batch)
-            cache.load_progress = f"Récupération : {total_fetched} articles..."
-            all_articles.extend(batch)
+            scored = [
+                sa.to_dict()
+                for sa in score_articles(
+                    batch, topics, title_weight=title_weight, min_score=min_score
+                )
+            ]
+            yield scored, total_fetched
 
-    cache.load_progress = f"Scoring {total_fetched} articles..."
-    scored: list[ScoredArticle] = score_articles(
-        all_articles, topics, title_weight=title_weight, min_score=min_score
-    )
+
+def _blocking_fetch_and_score(cfg: dict, topics_cfg: dict) -> tuple[list[dict], int]:
+    """Blocking fetch + score — runs in a thread pool via asyncio.to_thread."""
+    all_articles: list[dict] = []
+    total_fetched = 0
+
+    for scored_batch, total_fetched in _fetch_and_score_iter(cfg, topics_cfg):
+        cache.load_progress = f"Récupération : {total_fetched} articles..."
+        all_articles.extend(scored_batch)
 
     if total_fetched == 0:
         logger.warning("No articles fetched from FreshRSS — DB not modified")
         return [], 0
 
-    return [a.to_dict() for a in scored], total_fetched
+    return all_articles, total_fetched
 
 
 async def _auto_refresh() -> None:
-    """Scheduled job: runs _do_refresh unless a refresh is already in progress."""
+    """Scheduled job: runs _run_refresh unless a refresh is already in progress."""
     if cache.is_loading:
         logger.info("Scheduled refresh skipped — already in progress")
         return
     logger.info("Scheduled refresh starting")
-    await _do_refresh()
+    await _run_refresh()
 
 
-async def _do_refresh() -> None:
+async def _run_refresh() -> None:
     """Background task: fetch → score → persist → populate cache."""
     cache.is_loading = True
     cache.error = None
@@ -807,13 +575,19 @@ async def _do_refresh() -> None:
 
     try:
         cfg = load_config()
-        topics_cfg = await _load_scoring_config()
+        topics_cfg = await _get_or_init_scoring_config()
 
         # Drain outbox: replay mark-as-read calls that failed when FreshRSS was offline
         pending = await get_pending_sync()
         if pending:
             try:
-                await asyncio.to_thread(_blocking_mark_as_read, pending)
+
+                def _sync_pending() -> None:
+                    fr = load_config()["freshrss"]
+                    with FreshRSSClient(fr["url"], fr["username"], fr["api_password"]) as c:
+                        c.mark_as_read(pending)
+
+                await asyncio.to_thread(_sync_pending)
                 await clear_pending_sync(pending)
                 logger.info("Flushed %d pending read sync(s) to FreshRSS", len(pending))
             except Exception:
@@ -847,12 +621,10 @@ async def _do_refresh() -> None:
 @app.post("/api/refresh", dependencies=[Depends(require_auth)])
 async def refresh() -> dict[str, Any]:
     """Start async refresh. Returns immediately; poll /api/status for progress."""
-    global _refresh_task
-
     if cache.is_loading:
         return {"status": "already_loading", "progress": cache.load_progress}
 
-    _refresh_task = asyncio.create_task(_do_refresh())
+    cache.refresh_task = asyncio.create_task(_run_refresh())
     return {"status": "started"}
 
 
@@ -878,35 +650,15 @@ async def refresh_stream() -> StreamingResponse:
 
     def _worker(topics_cfg: dict) -> None:
         cfg = load_config()
-        fr_cfg = cfg["freshrss"]
-        fetch_cfg = cfg.get("fetch", {})
-        scoring_cfg = cfg.get("scoring", {})
-        batch_size = int(fetch_cfg.get("batch_size", 1000))
-        max_batches = int(fetch_cfg.get("max_batches", 10))
-        title_weight = int(scoring_cfg.get("title_weight", 3))
-        min_score = float(scoring_cfg.get("min_score", 1.0))
-        topics = build_topics({"topics": topics_cfg})
-        total_fetched = 0
         all_articles: list[dict] = []
+        total_fetched = 0
 
         try:
-            with FreshRSSClient(
-                fr_cfg["url"], fr_cfg["username"], fr_cfg["api_password"]
-            ) as client:
-                for batch in client.fetch_unread(batch_size=batch_size, max_batches=max_batches):
-                    total_fetched += len(batch)
-                    _put(
-                        {
-                            "type": "progress",
-                            "message": f"Récupération : {total_fetched} articles...",
-                        }
-                    )
-                    for sa in score_articles(
-                        batch, topics, title_weight=title_weight, min_score=min_score
-                    ):
-                        d = sa.to_dict()
-                        all_articles.append(d)
-                        _put({"type": "article", "article": d})
+            for scored_batch, total_fetched in _fetch_and_score_iter(cfg, topics_cfg):
+                _put({"type": "progress", "message": f"Récupération : {total_fetched} articles..."})
+                for d in scored_batch:
+                    all_articles.append(d)
+                    _put({"type": "article", "article": d})
 
             if total_fetched == 0:
                 logger.warning("Stream refresh: 0 articles fetched — DB not modified")
@@ -924,7 +676,7 @@ async def refresh_stream() -> StreamingResponse:
         total_fetched = 0
         _t0 = time.perf_counter()
 
-        topics_cfg = await _load_scoring_config()
+        topics_cfg = await _get_or_init_scoring_config()
         asyncio.create_task(asyncio.to_thread(_worker, topics_cfg))
         try:
             while True:
@@ -972,32 +724,21 @@ async def refresh_stream() -> StreamingResponse:
 
 
 def _blocking_rescore_compute(raw: list[dict], cfg: dict, topics_cfg: dict) -> list[dict]:
-    """Pure CPU re-scoring — no I/O. Runs in a thread pool via asyncio.to_thread."""
+    """CPU re-scoring of cached articles. Updates cache.load_progress for progress reporting. Runs in a thread pool via asyncio.to_thread."""
     scoring_cfg = cfg.get("scoring", {})
     title_weight = int(scoring_cfg.get("title_weight", 3))
     min_score = float(scoring_cfg.get("min_score", 1.0))
-    topics = build_topics({"topics": topics_cfg})
+    topics = build_topics(topics_cfg)
 
     cache.load_progress = f"Re-scoring {len(raw)} articles..."
-    articles = [
-        Article(
-            id=r["id"],
-            title=r["title"],
-            url=r["url"],
-            content=r["content"],
-            summary="",
-            feed_title=r["feed_title"],
-            published=r["published"],
-        )
-        for r in raw
-    ]
+    articles = [article_from_row(r) for r in raw]
     return [
         a.to_dict()
         for a in score_articles(articles, topics, title_weight=title_weight, min_score=min_score)
     ]
 
 
-async def _do_rescore() -> None:
+async def _run_rescore() -> None:
     """Background task: rescore from DB → persist → populate cache."""
     cache.is_loading = True
     cache.error = None
@@ -1006,7 +747,7 @@ async def _do_rescore() -> None:
     try:
         raw = await load_for_rescore()
         cfg = load_config()
-        topics_cfg = await _load_scoring_config()
+        topics_cfg = await _get_or_init_scoring_config()
         article_dicts = await asyncio.to_thread(_blocking_rescore_compute, raw, cfg, topics_cfg)
         total_fetched = int(await get_meta("total_fetched", "0"))
         cache.load_progress = "Sauvegarde..."
@@ -1029,8 +770,6 @@ async def _do_rescore() -> None:
 @app.post("/api/rescore", dependencies=[Depends(require_auth)])
 async def rescore() -> dict[str, Any]:
     """Re-score cached articles with current config. No FreshRSS fetch."""
-    global _refresh_task
-
     if cache.is_loading:
         return {"status": "already_loading", "progress": cache.load_progress}
 
@@ -1039,7 +778,7 @@ async def rescore() -> dict[str, Any]:
             status_code=400, detail="Aucun article en DB. Lance d'abord un Rafraîchir."
         )
 
-    _refresh_task = asyncio.create_task(_do_rescore())
+    cache.refresh_task = asyncio.create_task(_run_rescore())
     return {"status": "started"}
 
 
@@ -1047,7 +786,7 @@ class BookmarkRequest(BaseModel):
     article_id: str
 
 
-@app.post("/api/bookmark")
+@app.post("/api/bookmark", dependencies=[Depends(require_auth)])
 async def bookmark(req: BookmarkRequest) -> dict[str, Any]:
     """Toggle bookmark for an article. Returns new bookmark state."""
     if not any(a["id"] == req.article_id for a in cache.articles):
@@ -1064,6 +803,43 @@ async def bookmark(req: BookmarkRequest) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Snooze
+# ---------------------------------------------------------------------------
+
+
+class SnoozeRequest(BaseModel):
+    article_id: str
+    snooze_until: int | None = None  # Unix timestamp; default = tomorrow 08:00 local
+
+
+@app.post("/api/snooze", dependencies=[Depends(require_auth)])
+async def snooze_article(req: SnoozeRequest, request: Request) -> dict[str, Any]:
+    """Schedule a Telegram reminder for an article."""
+    article = next((a for a in cache.articles if a["id"] == req.article_id), None)
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    tg_cfg: dict = getattr(request.app.state, "tg_cfg", {})
+    if not tg_cfg.get("bot_token") or not tg_cfg.get("chat_id"):
+        raise HTTPException(status_code=400, detail="Telegram not configured")
+
+    if req.snooze_until is not None:
+        snooze_until = req.snooze_until
+    else:
+        tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+        snooze_until = int(datetime.datetime.combine(tomorrow, datetime.time(8, 0)).timestamp())
+
+    await add_snooze(
+        req.article_id,
+        tg_cfg["chat_id"],
+        snooze_until,
+        article["title"],
+        article["url"],
+    )
+    return {"status": "ok", "snooze_until": snooze_until}
+
+
+# ---------------------------------------------------------------------------
 # Scoring config
 # ---------------------------------------------------------------------------
 
@@ -1071,7 +847,7 @@ async def bookmark(req: BookmarkRequest) -> dict[str, Any]:
 @app.get("/api/config/scoring", dependencies=[Depends(require_auth)])
 async def get_scoring() -> dict[str, Any]:
     """Return the active scoring topics config (from DB, or seeded from config.yaml)."""
-    return {"topics": await _load_scoring_config()}
+    return {"topics": await _get_or_init_scoring_config()}
 
 
 class ScoringConfigRequest(BaseModel):
@@ -1099,7 +875,7 @@ class ChangePasswordRequest(BaseModel):
 @app.post("/api/change-password", dependencies=[Depends(require_auth)])
 async def change_password(req: ChangePasswordRequest, request: Request) -> dict[str, str]:
     """Change the password of the currently authenticated user."""
-    username = request.session.get("username", ADMIN_USERNAME)
+    username = request.session.get("username", os.environ.get("ADMIN_USERNAME", "admin"))
     stored_hash = await get_user_hash(username)
     if not stored_hash or not verify_password(req.current_password, stored_hash):
         raise HTTPException(status_code=400, detail="current_password_wrong")
@@ -1113,6 +889,26 @@ async def change_password(req: ChangePasswordRequest, request: Request) -> dict[
 # ---------------------------------------------------------------------------
 # Health & metrics
 # ---------------------------------------------------------------------------
+
+
+async def _run_daily_digest(tg_cfg: dict) -> None:
+    """Scheduler job: build and send digest from current cache articles."""
+    await send_digest(tg_cfg, cache.articles)
+
+
+async def _check_trending(tg_cfg: dict) -> None:
+    """Scheduler job: alert if a topic is surging in the last 2h."""
+    cache.trending_alerted = await check_trending(tg_cfg, cache.articles, cache.trending_alerted)
+
+
+async def _check_snoozes(tg_cfg: dict) -> None:
+    """Scheduler job: deliver due snooze reminders and remove them from DB."""
+    due = await get_due_snoozes()
+    if not due:
+        return
+    sent = await send_snooze_reminders(tg_cfg, due)
+    for article_id in sent:
+        await delete_snooze(article_id)
 
 
 @app.post("/telegram/webhook")
@@ -1130,7 +926,7 @@ async def telegram_webhook(request: Request) -> dict:
     body = await request.json()
     text: str = body.get("message", {}).get("text", "")
     if text.startswith("/digest"):
-        asyncio.create_task(send_digest(tg_cfg, cache))
+        asyncio.create_task(send_digest(tg_cfg, cache.articles))
 
     return {}
 
@@ -1138,10 +934,6 @@ async def telegram_webhook(request: Request) -> dict:
 @app.get("/health")
 async def health() -> JSONResponse:
     """Liveness/readiness probe. No auth required."""
-    from sqlalchemy import text as sa_text
-
-    from db import get_engine
-
     db_status = "ok"
     try:
         async with get_engine().connect() as conn:
@@ -1164,9 +956,9 @@ async def health() -> JSONResponse:
     return JSONResponse(content=payload, status_code=200 if status == "ok" else 503)
 
 
-@app.get("/metrics")
+@app.get("/metrics", dependencies=[Depends(require_auth)])
 async def metrics() -> Response:
-    """Prometheus metrics scrape endpoint. No auth required."""
+    """Prometheus metrics scrape endpoint. Requires authentication."""
     _update_prom_cache()
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 

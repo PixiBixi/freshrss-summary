@@ -11,7 +11,7 @@ class TopicConfig:
     name: str
     keywords: list[str]
     weight: float = 1.0
-    pattern: re.Pattern = field(default=None, init=False, repr=False)
+    pattern: re.Pattern | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
         if self.keywords:
@@ -51,17 +51,17 @@ class ScoredArticle:
         }
 
 
-def build_topics(config: dict) -> list[TopicConfig]:
-    topics = []
-    for name, cfg in config.get("topics", {}).items():
-        topics.append(
+def build_topics(topics: dict) -> list[TopicConfig]:
+    result = []
+    for name, cfg in topics.items():
+        result.append(
             TopicConfig(
                 name=name,
                 keywords=[kw.lower() for kw in cfg.get("keywords", [])],
                 weight=float(cfg.get("weight", 1.0)),
             )
         )
-    return topics
+    return result
 
 
 def score_article(
