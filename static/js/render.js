@@ -38,13 +38,21 @@ function loadMore() { state.displayed += 100; renderArticles(); }
 function renderArticles() {
   const grid     = document.getElementById('articles-grid');
   const empty    = document.getElementById('empty-state');
+  const loading  = document.getElementById('loading-state');
   const allread  = document.getElementById('allread-state');
   const lm       = document.getElementById('load-more-bar');
 
   if (!state.filtered.length) {
     grid.classList.remove('visible'); lm.classList.remove('visible');
     document.getElementById('mark-read-btn').disabled = true;
-    const allDone = state.everLoaded && state.articles.length === 0 && !state.showRead;
+    if (!state.everLoaded) {
+      allread.style.display = 'none';
+      empty.style.display   = 'none';
+      if (loading) loading.style.display = 'flex';
+      return;
+    }
+    if (loading) loading.style.display = 'none';
+    const allDone = state.articles.length === 0 && !state.showRead;
     allread.style.display = allDone ? 'flex' : 'none';
     empty.style.display   = allDone ? 'none'  : 'flex';
     return;
@@ -52,6 +60,7 @@ function renderArticles() {
 
   allread.style.display = 'none';
   empty.style.display = 'none';
+  if (loading) loading.style.display = 'none';
   grid.classList.add('visible');
   document.getElementById('mark-read-btn').disabled = false;
 
@@ -132,10 +141,12 @@ function renderRow(a) {
   const topTopics = Object.keys(a.matched_topics).slice(0, 2);
   const kws = a.matched_keywords.slice(0, 6).map(k => `<span class="tag-kw">${esc(k)}</span>`).join('');
   const summary = a.summary ? `<p style="margin-bottom:6px">${esc(a.summary)}</p>` : '';
+  const feedLine = (a.feed_weight && Math.abs(a.feed_weight - 1.0) > 0.001)
+    ? ` · feed\u00a0\u00d7${a.feed_weight.toFixed(2)}` : '';
   const tooltip = Object.entries(a.matched_topics)
     .sort((x, y) => y[1] - x[1])
     .map(([topic, v]) => `${topic}\u00a0${v.toFixed(1)}`)
-    .join(' · ');
+    .join(' · ') + feedLine;
 
   const metaParts = [`<span>${esc(a.feed_title)}</span>`, `<span>${fmtAgo(a.published)}</span>`];
   for (const topic of topTopics) {
@@ -175,10 +186,12 @@ function renderRow(a) {
 function renderCompactRow(a) {
   const sc = a.score >= 8 ? 'hi' : 'lo';
   const topTopics = Object.keys(a.matched_topics).slice(0, 2);
+  const feedLine = (a.feed_weight && Math.abs(a.feed_weight - 1.0) > 0.001)
+    ? ` · feed\u00a0\u00d7${a.feed_weight.toFixed(2)}` : '';
   const tooltip = Object.entries(a.matched_topics)
     .sort((x, y) => y[1] - x[1])
     .map(([topic, v]) => `${topic}\u00a0${v.toFixed(1)}`)
-    .join(' · ');
+    .join(' · ') + feedLine;
   const metaParts = [`<span>${esc(a.feed_title)}</span>`];
   for (const topic of topTopics) metaParts.push(`<span class="row-topic-tag">${esc(topic)}</span>`);
 
