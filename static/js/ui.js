@@ -312,7 +312,13 @@ function switchScoringTab(tab) {
 function _renderFeedRows(feedWeights) {
   const container = document.getElementById('scoring-feeds');
   const dbFeeds = _scoringState.allFeeds || [];
-  const allFeeds = [...new Set([...dbFeeds, ...Object.keys(feedWeights)])].sort();
+  const allFeeds = [...new Set([...dbFeeds, ...Object.keys(feedWeights)])]
+    .sort((a, b) => {
+      const wa = feedWeights[a] ?? 1.0;
+      const wb = feedWeights[b] ?? 1.0;
+      if (wb !== wa) return wb - wa;
+      return a.localeCompare(b);
+    });
   if (!allFeeds.length) {
     container.innerHTML = `<p style="color:var(--text-3);font-size:13px">${esc(t('cfg.noFeeds'))}</p>`;
     return;
