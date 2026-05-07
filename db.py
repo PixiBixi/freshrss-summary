@@ -327,6 +327,21 @@ async def set_scoring_config(topics: dict) -> None:
         await _set_meta(conn, "scoring_config", json.dumps(topics, ensure_ascii=False))
 
 
+async def get_feed_weights() -> dict[str, float]:
+    """Return feed weight multipliers from DB, or {} if not set."""
+    async with get_engine().connect() as conn:
+        row = (
+            await conn.execute(select(meta_table.c.value).where(meta_table.c.key == "feed_weights"))
+        ).first()
+    return json.loads(row[0]) if row else {}
+
+
+async def set_feed_weights(weights: dict[str, float]) -> None:
+    """Persist feed weight multipliers to DB."""
+    async with get_engine().begin() as conn:
+        await _set_meta(conn, "feed_weights", json.dumps(weights, ensure_ascii=False))
+
+
 async def get_meta(key: str, default: str = "0") -> str:
     async with get_engine().connect() as conn:
         row = (

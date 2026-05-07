@@ -9,6 +9,7 @@ from db import (
     delete_snooze,
     get_bookmarked_ids,
     get_due_snoozes,
+    get_feed_weights,
     get_pending_sync,
     get_scoring_config,
     get_user_hash,
@@ -18,6 +19,7 @@ from db import (
     load_read_articles,
     save_articles,
     set_articles_read,
+    set_feed_weights,
     set_scoring_config,
     toggle_bookmark,
     upsert_user,
@@ -260,6 +262,31 @@ class TestScoringConfig:
         result = await get_scoring_config()
         assert "New" in result
         assert "Old" not in result
+
+
+class TestFeedWeights:
+    async def test_defaults_empty(self, db):
+        result = await get_feed_weights()
+        assert result == {}
+
+    async def test_roundtrip(self, db):
+        weights = {"Hacker News": 0.5, "InfoQ": 2.0}
+        await set_feed_weights(weights)
+        result = await get_feed_weights()
+        assert result == weights
+
+    async def test_overwrite(self, db):
+        await set_feed_weights({"Old Feed": 0.5})
+        await set_feed_weights({"New Feed": 1.5})
+        result = await get_feed_weights()
+        assert "New Feed" in result
+        assert "Old Feed" not in result
+
+    async def test_empty_dict(self, db):
+        await set_feed_weights({"Some Feed": 1.5})
+        await set_feed_weights({})
+        result = await get_feed_weights()
+        assert result == {}
 
 
 class TestLoadForRescore:
