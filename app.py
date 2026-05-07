@@ -41,6 +41,7 @@ from db import (
     add_snooze,
     clear_pending_sync,
     delete_snooze,
+    get_all_feed_titles,
     get_bookmarked_ids,
     get_due_snoozes,
     get_engine,
@@ -871,6 +872,12 @@ async def snooze_article(req: SnoozeRequest, request: Request) -> dict[str, Any]
 # ---------------------------------------------------------------------------
 # Scoring config
 # ---------------------------------------------------------------------------
+
+
+@app.get("/api/feeds", dependencies=[Depends(require_auth)])
+async def list_feeds() -> dict[str, Any]:
+    """Return all distinct feed titles stored in the DB."""
+    return {"feeds": await get_all_feed_titles()}
 
 
 @app.get("/api/config/scoring", dependencies=[Depends(require_auth)])

@@ -270,8 +270,17 @@ async function openScoringModal() {
   document.getElementById('scoring-feeds').innerHTML = '';
 
   try {
-    const { topics, feed_weights } = await fetchScoringConfig();
-    _scoringState = { activeTab: 'topics', topics: {}, feedWeights: { ...(feed_weights || {}) } };
+    const [cfg, feedsResp] = await Promise.all([
+      fetchScoringConfig(),
+      fetch('/api/feeds').then(r => r.json()),
+    ]);
+    const { topics, feed_weights } = cfg;
+    _scoringState = {
+      activeTab: 'topics',
+      topics: {},
+      feedWeights: { ...(feed_weights || {}) },
+      allFeeds: feedsResp.feeds || [],
+    };
     _renderScoringTopics(topics);
     switchScoringTab('topics');
   } catch (e) {
@@ -302,8 +311,8 @@ function switchScoringTab(tab) {
 
 function _renderFeedRows(feedWeights) {
   const container = document.getElementById('scoring-feeds');
-  const feedsFromArticles = [...new Set(state.articles.map(a => a.feed_title))].sort();
-  const allFeeds = [...new Set([...feedsFromArticles, ...Object.keys(feedWeights)])].sort();
+  const dbFeeds = _scoringState.allFeeds || [];
+  const allFeeds = [...new Set([...dbFeeds, ...Object.keys(feedWeights)])].sort();
   if (!allFeeds.length) {
     container.innerHTML = `<p style="color:var(--text-3);font-size:13px">${esc(t('cfg.noFeeds'))}</p>`;
     return;

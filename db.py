@@ -342,6 +342,15 @@ async def set_feed_weights(weights: dict[str, float]) -> None:
         await _set_meta(conn, "feed_weights", json.dumps(weights, ensure_ascii=False))
 
 
+async def get_all_feed_titles() -> list[str]:
+    """Return all distinct feed titles from the articles table, sorted."""
+    async with get_engine().connect() as conn:
+        rows = await conn.execute(
+            select(articles_table.c.feed_title).distinct().order_by(articles_table.c.feed_title)
+        )
+    return [r[0] for r in rows if r[0]]
+
+
 async def get_meta(key: str, default: str = "0") -> str:
     async with get_engine().connect() as conn:
         row = (
