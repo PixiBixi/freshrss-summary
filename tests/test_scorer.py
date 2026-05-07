@@ -260,6 +260,53 @@ class TestToDict:
         assert d["score"] == round(d["score"], 2)
 
 
+# ── TestFeedWeights ───────────────────────────────────────────────────────────
+
+
+class TestFeedWeights:
+    def test_multiplier_applied_to_score(self):
+        # 1 title match × title_weight 3 = 3.0, then × 0.5 = 1.5
+        article = make_article(title="kubernetes", feed_title="Hacker News")
+        topic = make_topic("k8s", ["kubernetes"], weight=1.0)
+        result = score_article(article, [topic], title_weight=3, feed_weights={"Hacker News": 0.5})
+        assert result.score == pytest.approx(1.5)
+
+    def test_feed_weight_stored_on_result(self):
+        article = make_article(title="kubernetes", feed_title="Hacker News")
+        topic = make_topic("k8s", ["kubernetes"])
+        result = score_article(article, [topic], feed_weights={"Hacker News": 2.0})
+        assert result.feed_weight == pytest.approx(2.0)
+
+    def test_unknown_feed_defaults_to_1(self):
+        article = make_article(title="kubernetes", feed_title="Unknown Feed")
+        topic = make_topic("k8s", ["kubernetes"], weight=1.0)
+        result = score_article(article, [topic], title_weight=3, feed_weights={"Other Feed": 0.5})
+        assert result.score == pytest.approx(3.0)
+        assert result.feed_weight == pytest.approx(1.0)
+
+    def test_none_feed_weights_defaults_to_1(self):
+        article = make_article(title="kubernetes", feed_title="Any Feed")
+        topic = make_topic("k8s", ["kubernetes"], weight=1.0)
+        result = score_article(article, [topic], title_weight=3, feed_weights=None)
+        assert result.score == pytest.approx(3.0)
+        assert result.feed_weight == pytest.approx(1.0)
+
+    def test_to_dict_includes_feed_weight(self):
+        article = make_article(title="kubernetes", feed_title="Hacker News")
+        topic = make_topic("k8s", ["kubernetes"])
+        d = score_article(article, [topic], feed_weights={"Hacker News": 1.5}).to_dict()
+        assert "feed_weight" in d
+        assert d["feed_weight"] == pytest.approx(1.5)
+
+    def test_score_articles_forwards_feed_weights(self):
+        articles = [make_article(id="a", title="kubernetes", feed_title="HN")]
+        topic = make_topic("k8s", ["kubernetes"], weight=1.0)
+        result = score_articles(
+            articles, [topic], title_weight=3, min_score=0, feed_weights={"HN": 0.5}
+        )
+        assert result[0].score == pytest.approx(1.5)
+
+
 # ── analyze_favorites ─────────────────────────────────────────────────────────
 
 

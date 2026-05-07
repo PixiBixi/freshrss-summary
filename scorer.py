@@ -26,6 +26,7 @@ class ScoredArticle:
     score: float
     matched_topics: dict[str, float]  # topic_name -> contribution score
     matched_keywords: list[str]
+    feed_weight: float = 1.0
     _stripped_content: str = field(default="", repr=False)
 
     @property
@@ -46,6 +47,7 @@ class ScoredArticle:
             "matched_topics": {k: round(v, 2) for k, v in self.matched_topics.items()},
             "matched_keywords": self.matched_keywords[:10],
             "top_topic": self.top_topic,
+            "feed_weight": round(self.feed_weight, 2),
             "summary": stripped[:400],
             "_content": stripped,  # full text, stored in DB for rescore — not sent to frontend
         }
@@ -68,6 +70,7 @@ def score_article(
     article: Article,
     topics: list[TopicConfig],
     title_weight: int = 3,
+    feed_weights: dict[str, float] | None = None,
 ) -> ScoredArticle:
     title_lower = article.title.lower()
     stripped_content = _strip_html(article.content)
@@ -87,13 +90,15 @@ def score_article(
             all_keywords.update(title_matches)
             all_keywords.update(content_matches)
 
-    total_score = sum(matched_topics.values())
+    feed_mult = (feed_weights or {}).get(article.feed_title, 1.0)
+    total_score = sum(matched_topics.values()) * feed_mult
 
     return ScoredArticle(
         article=article,
         score=total_score,
         matched_topics=matched_topics,
         matched_keywords=sorted(all_keywords),
+        feed_weight=feed_mult,
         _stripped_content=stripped_content,
     )
 
@@ -103,10 +108,11 @@ def score_articles(
     topics: list[TopicConfig],
     title_weight: int = 3,
     min_score: float = 1.0,
+    feed_weights: dict[str, float] | None = None,
 ) -> list[ScoredArticle]:
     scored = []
     for article in articles:
-        result = score_article(article, topics, title_weight)
+        result = score_article(article, topics, title_weight, feed_weights=feed_weights)
         if result.score >= min_score:
             scored.append(result)
 
