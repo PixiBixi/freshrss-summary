@@ -323,7 +323,15 @@ function _renderFeedRows(feedWeights) {
     container.innerHTML = `<p style="color:var(--text-3);font-size:13px">${esc(t('cfg.noFeeds'))}</p>`;
     return;
   }
-  container.innerHTML = allFeeds.map(feed => _feedWeightRowHtml(feed, feedWeights[feed] ?? 1.0)).join('');
+  const custom  = allFeeds.filter(f => Math.abs((feedWeights[f] ?? 1.0) - 1.0) > 0.001);
+  const defaults = allFeeds.filter(f => Math.abs((feedWeights[f] ?? 1.0) - 1.0) <= 0.001);
+  const sep = defaults.length
+    ? `<div class="fw-sep">${custom.length ? '─── par défaut ───' : ''}</div>`
+    : '';
+  container.innerHTML =
+    custom.map(f => _feedWeightRowHtml(f, feedWeights[f])).join('') +
+    sep +
+    defaults.map(f => _feedWeightRowHtml(f, 1.0)).join('');
 }
 
 function _feedWeightRowHtml(feed, weight) {
@@ -333,7 +341,7 @@ function _feedWeightRowHtml(feed, weight) {
     <input type="number" class="fw-mult" value="${weight}" min="0.1" max="5" step="0.1"
       aria-label="Multiplicateur"
       oninput="this.closest('.fw-row').classList.toggle('fw-row--custom',Math.abs(parseFloat(this.value)||1-1.0)>0.001)" />
-    <button class="btn btn-ghost" onclick="resetFeedWeight(this)" style="padding:2px 8px;font-size:11px">↺</button>
+    <button class="btn btn-ghost fw-reset" onclick="resetFeedWeight(this)" title="Remettre à 1">↺</button>
   </div>`;
 }
 
