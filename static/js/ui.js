@@ -323,7 +323,7 @@ function _renderFeedRows(feedWeights) {
     container.innerHTML = `<p style="color:var(--text-3);font-size:13px">${esc(t('cfg.noFeeds'))}</p>`;
     return;
   }
-  const custom  = allFeeds.filter(f => Math.abs((feedWeights[f] ?? 1.0) - 1.0) > 0.001);
+  const custom   = allFeeds.filter(f => Math.abs((feedWeights[f] ?? 1.0) - 1.0) > 0.001);
   const defaults = allFeeds.filter(f => Math.abs((feedWeights[f] ?? 1.0) - 1.0) <= 0.001);
   const sep = (custom.length && defaults.length)
     ? `<div class="fw-sep">par défaut</div>`
@@ -335,12 +335,13 @@ function _renderFeedRows(feedWeights) {
 }
 
 function _feedWeightRowHtml(feed, weight) {
-  const custom = Math.abs(weight - 1.0) > 0.001;
-  return `<div class="fw-row${custom ? ' fw-row--custom' : ''}" data-feed="${esc(feed)}">
+  const diff = weight - 1.0;
+  const cls = Math.abs(diff) <= 0.001 ? '' : diff > 0 ? ' fw-row--boost' : ' fw-row--malus';
+  return `<div class="fw-row${cls}" data-feed="${esc(feed)}">
     <span class="fw-name" title="${esc(feed)}">${esc(feed)}</span>
     <input type="number" class="fw-mult" value="${weight}" min="0.1" max="5" step="0.1"
       aria-label="Multiplicateur"
-      oninput="this.closest('.fw-row').classList.toggle('fw-row--custom',Math.abs(parseFloat(this.value)||1-1.0)>0.001)" />
+      oninput="(function(r,v){r.classList.remove('fw-row--boost','fw-row--malus');var d=v-1;if(Math.abs(d)>0.001)r.classList.add(d>0?'fw-row--boost':'fw-row--malus')})(this.closest('.fw-row'),parseFloat(this.value)||1)" />
     <button class="btn btn-ghost fw-reset" onclick="resetFeedWeight(this)" title="Remettre à 1">↺</button>
   </div>`;
 }
@@ -348,7 +349,7 @@ function _feedWeightRowHtml(feed, weight) {
 function resetFeedWeight(btn) {
   const row = btn.closest('.fw-row');
   row.querySelector('.fw-mult').value = 1.0;
-  row.classList.remove('fw-row--custom');
+  row.classList.remove('fw-row--boost', 'fw-row--malus');
 }
 
 function _collectFeedWeights() {
