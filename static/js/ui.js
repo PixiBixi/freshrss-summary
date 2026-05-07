@@ -325,8 +325,8 @@ function _renderFeedRows(feedWeights) {
   }
   const custom  = allFeeds.filter(f => Math.abs((feedWeights[f] ?? 1.0) - 1.0) > 0.001);
   const defaults = allFeeds.filter(f => Math.abs((feedWeights[f] ?? 1.0) - 1.0) <= 0.001);
-  const sep = defaults.length
-    ? `<div class="fw-sep">${custom.length ? '─── par défaut ───' : ''}</div>`
+  const sep = (custom.length && defaults.length)
+    ? `<div class="fw-sep">par défaut</div>`
     : '';
   container.innerHTML =
     custom.map(f => _feedWeightRowHtml(f, feedWeights[f])).join('') +

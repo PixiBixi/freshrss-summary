@@ -566,26 +566,33 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 40px; }
 /* ── Feed weight rows ────────────────────────────── */
 .fw-row {
   display: flex; align-items: center; gap: 8px;
-  padding: 6px 0; border-bottom: 1px solid var(--sep);
+  padding: 3px 0; min-height: 30px;
 }
-.fw-row:last-child { border-bottom: none; }
 .fw-row--custom .fw-name { font-weight: 600; color: var(--accent); }
 .fw-name {
   flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .fw-mult {
-  width: 70px; background: var(--card); border: 1px solid var(--border); border-radius: 6px;
-  color: var(--text); font-family: inherit; font-size: 12px;
-  padding: 4px 8px; text-align: right; flex-shrink: 0;
+  width: 56px; background: transparent; border: 1px solid transparent; border-radius: 6px;
+  color: var(--text-3); font-family: inherit; font-size: 12px;
+  padding: 3px 6px; text-align: right; flex-shrink: 0; transition: border-color 0.15s, color 0.15s;
 }
-.fw-mult:focus { border-color: var(--accent); outline: none; }
-.fw-row--custom .fw-mult { border-color: var(--accent); }
-.fw-reset { visibility: hidden; padding: 2px 8px !important; font-size: 11px !important; flex-shrink: 0; }
+.fw-mult:hover { border-color: var(--border); color: var(--text); }
+.fw-mult:focus { border-color: var(--accent); color: var(--text); outline: none; }
+.fw-row--custom .fw-mult {
+  background: var(--card); border-color: var(--accent);
+  color: var(--text); font-weight: 600;
+}
+.fw-reset {
+  visibility: hidden; width: 24px; padding: 2px 4px !important;
+  font-size: 12px !important; flex-shrink: 0; color: var(--text-3) !important;
+}
 .fw-row--custom .fw-reset { visibility: visible; }
 .fw-sep {
-  font-size: 11px; color: var(--text-3); text-align: center;
-  padding: 8px 0 4px; letter-spacing: 0.04em;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; color: var(--text-3); padding: 6px 0;
 }
+.fw-sep::before, .fw-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
 /* ── Skip link ───────────────────────────────────── */
 .skip-link {
