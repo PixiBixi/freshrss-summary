@@ -276,14 +276,14 @@ function stopPolling() {
 async function fetchScoringConfig() {
   const r = await fetch('/api/config/scoring');
   if (!r.ok) throw new Error('Failed to load scoring config');
-  return (await r.json()).topics;
+  return r.json();
 }
 
-async function updateScoringConfig(topics) {
+async function updateScoringConfig(topics, feed_weights = {}) {
   const r = await fetch('/api/config/scoring', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ topics }),
+    body: JSON.stringify({ topics, feed_weights }),
   });
   if (!r.ok) throw new Error('Failed to save scoring config');
 }

@@ -260,15 +260,20 @@ function openDayLinks(btn) {
 }
 
 // ── Scoring config modal ────────────────────────────────────────────────
+let _scoringState = { activeTab: 'topics', topics: {}, feedWeights: {} };
+
 async function openScoringModal() {
   if (!_requireAuth()) return;
   const modal = document.getElementById('scoring-modal');
   modal.style.display = 'flex';
   document.getElementById('scoring-topics').innerHTML = '<p style="color:var(--text-3);font-size:13px">Chargement…</p>';
+  document.getElementById('scoring-feeds').innerHTML = '';
 
   try {
-    const topics = await fetchScoringConfig();
+    const { topics, feed_weights } = await fetchScoringConfig();
+    _scoringState = { activeTab: 'topics', topics: {}, feedWeights: { ...(feed_weights || {}) } };
     _renderScoringTopics(topics);
+    switchScoringTab('topics');
   } catch (e) {
     document.getElementById('scoring-topics').innerHTML =
       `<p style="color:#dc2626">${esc(e.message)}</p>`;
@@ -276,6 +281,61 @@ async function openScoringModal() {
 
   modal.onclick = (e) => { if (e.target === modal) closeScoringModal(); };
   document.addEventListener('keydown', _scoringEscHandler);
+}
+
+function switchScoringTab(tab) {
+  if (_scoringState.activeTab === 'topics') {
+    _scoringState.topics = _collectTopics();
+  } else {
+    _scoringState.feedWeights = _collectFeedWeights();
+  }
+  _scoringState.activeTab = tab;
+
+  document.getElementById('tab-topics').classList.toggle('active', tab === 'topics');
+  document.getElementById('tab-feeds').classList.toggle('active', tab === 'feeds');
+  document.getElementById('scoring-topics').style.display = tab === 'topics' ? '' : 'none';
+  document.getElementById('scoring-feeds').style.display = tab === 'feeds' ? '' : 'none';
+  document.getElementById('scoring-add-topic').style.display = tab === 'topics' ? '' : 'none';
+
+  if (tab === 'feeds') _renderFeedRows(_scoringState.feedWeights);
+}
+
+function _renderFeedRows(feedWeights) {
+  const container = document.getElementById('scoring-feeds');
+  const feedsFromArticles = [...new Set(state.articles.map(a => a.feed_title))].sort();
+  const allFeeds = [...new Set([...feedsFromArticles, ...Object.keys(feedWeights)])].sort();
+  if (!allFeeds.length) {
+    container.innerHTML = `<p style="color:var(--text-3);font-size:13px">${esc(t('cfg.noFeeds'))}</p>`;
+    return;
+  }
+  container.innerHTML = allFeeds.map(feed => _feedWeightRowHtml(feed, feedWeights[feed] ?? 1.0)).join('');
+}
+
+function _feedWeightRowHtml(feed, weight) {
+  const custom = Math.abs(weight - 1.0) > 0.001;
+  return `<div class="fw-row${custom ? ' fw-row--custom' : ''}" data-feed="${esc(feed)}">
+    <span class="fw-name" title="${esc(feed)}">${esc(feed)}</span>
+    <input type="number" class="fw-mult" value="${weight}" min="0.1" max="5" step="0.1"
+      aria-label="Multiplicateur"
+      oninput="this.closest('.fw-row').classList.toggle('fw-row--custom',Math.abs(parseFloat(this.value)||1-1.0)>0.001)" />
+    <button class="btn btn-ghost" onclick="resetFeedWeight(this)" style="padding:2px 8px;font-size:11px">↺</button>
+  </div>`;
+}
+
+function resetFeedWeight(btn) {
+  const row = btn.closest('.fw-row');
+  row.querySelector('.fw-mult').value = 1.0;
+  row.classList.remove('fw-row--custom');
+}
+
+function _collectFeedWeights() {
+  const weights = {};
+  for (const row of document.querySelectorAll('.fw-row')) {
+    const feed = row.dataset.feed;
+    const mult = parseFloat(row.querySelector('.fw-mult').value) || 1.0;
+    if (Math.abs(mult - 1.0) > 0.001) weights[feed] = mult;
+  }
+  return weights;
 }
 
 function _scoringEscHandler(e) {
@@ -343,8 +403,12 @@ async function saveScoringConfig() {
   const btn = document.getElementById('scoring-save-btn');
   btn.disabled = true;
   try {
-    const topics = _collectTopics();
-    await updateScoringConfig(topics);
+    if (_scoringState.activeTab === 'topics') {
+      _scoringState.topics = _collectTopics();
+    } else {
+      _scoringState.feedWeights = _collectFeedWeights();
+    }
+    await updateScoringConfig(_scoringState.topics, _scoringState.feedWeights);
     closeScoringModal();
     showToast(t('cfg.saved'));
     _doRescore();
@@ -556,8 +620,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   fetchStatus().then(status => {
     updateLastRefresh(status.last_refresh);
-    if (status.is_loading) { setRefreshBtnLoading(true); showToast(status.load_progress || t('toast.loading')); startPolling(); }
-    else if (status.article_count > 0) loadArticles();
+    if (status.is_loading) {
+      if (state.authenticated) { setRefreshBtnLoading(true); showToast(status.load_progress || t('toast.loading')); startPolling(); }
+      loadArticles();
+    } else loadArticles();
   });
 
   setInterval(async () => { const s = await fetchStatus(); updateLastRefresh(s.last_refresh); }, 60000);

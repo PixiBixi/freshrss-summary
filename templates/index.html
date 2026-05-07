@@ -120,7 +120,11 @@
   <main>
     <div id="error-state" class="state-error"></div>
 
-    <div id="empty-state" class="state-empty">
+    <div id="loading-state" class="state-loading">
+      <div class="loading-spinner"></div>
+    </div>
+
+    <div id="empty-state" class="state-empty" style="display:none">
       <div class="state-empty-icon">📭</div>
       <p data-i18n="empty.title">Aucun article chargé.</p>
       <p data-i18n-html="empty.hint">Clique sur <strong>Rafraîchir</strong> pour fetcher tes flux.</p>
@@ -205,9 +209,14 @@
         <h2 id="scoring-modal-title" data-i18n="cfg.title">Configuration du scoring</h2>
         <button class="modal-close btn btn-ghost btn-icon" onclick="closeScoringModal()" aria-label="Fermer">✕</button>
       </div>
+      <div class="modal-tabs">
+        <button class="modal-tab active" id="tab-topics" onclick="switchScoringTab('topics')" data-i18n="cfg.tabTopics">Topics</button>
+        <button class="modal-tab" id="tab-feeds" onclick="switchScoringTab('feeds')" data-i18n="cfg.tabFeeds">Feeds</button>
+      </div>
       <div class="modal-body" id="scoring-topics"></div>
+      <div class="modal-body" id="scoring-feeds" style="display:none"></div>
       <div class="modal-footer">
-        <button class="btn btn-ghost" onclick="addTopicRow()" data-i18n="cfg.addTopic">+ Ajouter un topic</button>
+        <button class="btn btn-ghost" id="scoring-add-topic" onclick="addTopicRow()" data-i18n="cfg.addTopic">+ Ajouter un topic</button>
         <span style="flex:1"></span>
         <button class="btn btn-ghost" onclick="closeScoringModal()" data-i18n="cfg.cancel">Annuler</button>
         <button class="btn btn-primary" id="scoring-save-btn" onclick="saveScoringConfig()" data-i18n="cfg.save">⇄ Enregistrer & re-scorer</button>
