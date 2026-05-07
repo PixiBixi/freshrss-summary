@@ -44,6 +44,7 @@ from db import (
     get_bookmarked_ids,
     get_due_snoozes,
     get_engine,
+    get_feed_weights,
     get_meta,
     get_pending_sync,
     get_scoring_config,
@@ -55,6 +56,7 @@ from db import (
     load_read_articles,
     save_articles,
     set_articles_read,
+    set_feed_weights,
     set_scoring_config,
     set_user_password,
     toggle_bookmark,
@@ -514,7 +516,9 @@ async def mark_read(req: MarkReadRequest) -> dict[str, str]:
     return {"status": "ok", "marked": str(len(req.article_ids))}
 
 
-def _fetch_and_score_iter(cfg: dict, topics_cfg: dict) -> Iterator[tuple[list[dict], int]]:
+def _fetch_and_score_iter(
+    cfg: dict, topics_cfg: dict, feed_weights: dict[str, float] | None = None
+) -> Iterator[tuple[list[dict], int]]:
     """
     Generator: fetch unread articles in batches, score each, yield (scored_batch, cumulative_count).
     Runs in a thread pool (blocking I/O). Callers decide whether to stream or accumulate.
@@ -535,18 +539,24 @@ def _fetch_and_score_iter(cfg: dict, topics_cfg: dict) -> Iterator[tuple[list[di
             scored = [
                 sa.to_dict()
                 for sa in score_articles(
-                    batch, topics, title_weight=title_weight, min_score=min_score
+                    batch,
+                    topics,
+                    title_weight=title_weight,
+                    min_score=min_score,
+                    feed_weights=feed_weights,
                 )
             ]
             yield scored, total_fetched
 
 
-def _blocking_fetch_and_score(cfg: dict, topics_cfg: dict) -> tuple[list[dict], int]:
+def _blocking_fetch_and_score(
+    cfg: dict, topics_cfg: dict, feed_weights: dict[str, float] | None = None
+) -> tuple[list[dict], int]:
     """Blocking fetch + score — runs in a thread pool via asyncio.to_thread."""
     all_articles: list[dict] = []
     total_fetched = 0
 
-    for scored_batch, total_fetched in _fetch_and_score_iter(cfg, topics_cfg):
+    for scored_batch, total_fetched in _fetch_and_score_iter(cfg, topics_cfg, feed_weights):
         cache.load_progress = f"Récupération : {total_fetched} articles..."
         all_articles.extend(scored_batch)
 
@@ -576,6 +586,7 @@ async def _run_refresh() -> None:
     try:
         cfg = load_config()
         topics_cfg = await _get_or_init_scoring_config()
+        feed_weights = await get_feed_weights()
 
         # Drain outbox: replay mark-as-read calls that failed when FreshRSS was offline
         pending = await get_pending_sync()
@@ -594,7 +605,7 @@ async def _run_refresh() -> None:
                 logger.warning("Pending sync flush failed, will retry on next refresh")
 
         article_dicts, total_fetched = await asyncio.to_thread(
-            _blocking_fetch_and_score, cfg, topics_cfg
+            _blocking_fetch_and_score, cfg, topics_cfg, feed_weights
         )
         if total_fetched == 0:
             cache.load_progress = "Aucun article non lu récupéré — DB inchangée"
@@ -648,73 +659,77 @@ async def refresh_stream() -> StreamingResponse:
     def _put(event: dict) -> None:
         loop.call_soon_threadsafe(q.put_nowait, event)
 
-    def _worker(topics_cfg: dict) -> None:
+    def _worker(topics_cfg: dict, feed_weights: dict[str, float]) -> None:
+        # Runs in a thread pool — survives SSE client disconnections.
+        # Responsible for DB save, cache populate, and clearing is_loading.
         cfg = load_config()
         all_articles: list[dict] = []
         total_fetched = 0
+        _t0 = time.perf_counter()
 
         try:
-            for scored_batch, total_fetched in _fetch_and_score_iter(cfg, topics_cfg):
-                _put({"type": "progress", "message": f"Récupération : {total_fetched} articles..."})
+            for scored_batch, total_fetched in _fetch_and_score_iter(cfg, topics_cfg, feed_weights):
+                cache.load_progress = f"Récupération : {total_fetched} articles..."
+                _put({"type": "progress", "message": cache.load_progress})
                 for d in scored_batch:
                     all_articles.append(d)
                     _put({"type": "article", "article": d})
 
             if total_fetched == 0:
                 logger.warning("Stream refresh: 0 articles fetched — DB not modified")
+            else:
+                cache.load_progress = "Sauvegarde..."
+                asyncio.run_coroutine_threadsafe(
+                    save_articles(all_articles, total_fetched), loop
+                ).result()
+                bookmarked = asyncio.run_coroutine_threadsafe(get_bookmarked_ids(), loop).result()
+                for a in all_articles:
+                    a["bookmarked"] = a["id"] in bookmarked
+                cache.populate(all_articles, time.time(), total_fetched)
+                _prom_refreshes.inc()
+                _prom_refresh_dur.observe(time.perf_counter() - _t0)
+                _update_prom_cache()
+                logger.info(
+                    "Stream refresh done: %d fetched, %d relevant",
+                    total_fetched,
+                    len(all_articles),
+                )
 
+            cache.load_progress = "Terminé"
             _put({"type": "done", "total_fetched": total_fetched, "count": len(all_articles)})
         except Exception as e:
             logger.exception("refresh-stream worker failed")
+            cache.error = str(e)
+            cache.load_progress = "Erreur"
             _put({"type": "error", "message": str(e)})
+        finally:
+            cache.is_loading = False
 
     async def _event_gen():
         cache.is_loading = True
         cache.error = None
         cache.load_progress = "Démarrage..."
-        all_articles: list[dict] = []
-        total_fetched = 0
-        _t0 = time.perf_counter()
 
-        topics_cfg = await _get_or_init_scoring_config()
-        asyncio.create_task(asyncio.to_thread(_worker, topics_cfg))
+        try:
+            topics_cfg = await _get_or_init_scoring_config()
+            feed_weights = await get_feed_weights()
+        except Exception as e:
+            cache.error = str(e)
+            cache.load_progress = "Erreur"
+            cache.is_loading = False
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            return
+
+        asyncio.create_task(asyncio.to_thread(_worker, topics_cfg, feed_weights))
         try:
             while True:
                 event = await q.get()
-                if event["type"] == "article":
-                    all_articles.append(event["article"])
-                elif event["type"] == "progress":
-                    cache.load_progress = event["message"]
-                elif event["type"] == "done":
-                    total_fetched = event["total_fetched"]
-                    if total_fetched > 0:
-                        cache.load_progress = "Sauvegarde..."
-                        await save_articles(all_articles, total_fetched)
-                        bookmarked = await get_bookmarked_ids()
-                        for a in all_articles:
-                            a["bookmarked"] = a["id"] in bookmarked
-                        cache.populate(all_articles, time.time(), total_fetched)
-                        _prom_refreshes.inc()
-                        _prom_refresh_dur.observe(time.perf_counter() - _t0)
-                        _update_prom_cache()
-                    cache.load_progress = "Terminé"
-                    logger.info(
-                        "Stream refresh done: %d fetched, %d relevant",
-                        total_fetched,
-                        len(all_articles),
-                    )
-                elif event["type"] == "error":
-                    cache.error = event["message"]
-                    cache.load_progress = "Erreur"
-
                 yield f"data: {json.dumps(event)}\n\n"
-
                 if event["type"] in ("done", "error"):
                     break
         except asyncio.CancelledError:
             pass
-        finally:
-            cache.is_loading = False
+        # cache.is_loading is managed by the worker thread
 
     return StreamingResponse(
         _event_gen(),
@@ -723,7 +738,12 @@ async def refresh_stream() -> StreamingResponse:
     )
 
 
-def _blocking_rescore_compute(raw: list[dict], cfg: dict, topics_cfg: dict) -> list[dict]:
+def _blocking_rescore_compute(
+    raw: list[dict],
+    cfg: dict,
+    topics_cfg: dict,
+    feed_weights: dict[str, float] | None = None,
+) -> list[dict]:
     """CPU re-scoring of cached articles. Updates cache.load_progress for progress reporting. Runs in a thread pool via asyncio.to_thread."""
     scoring_cfg = cfg.get("scoring", {})
     title_weight = int(scoring_cfg.get("title_weight", 3))
@@ -734,7 +754,13 @@ def _blocking_rescore_compute(raw: list[dict], cfg: dict, topics_cfg: dict) -> l
     articles = [article_from_row(r) for r in raw]
     return [
         a.to_dict()
-        for a in score_articles(articles, topics, title_weight=title_weight, min_score=min_score)
+        for a in score_articles(
+            articles,
+            topics,
+            title_weight=title_weight,
+            min_score=min_score,
+            feed_weights=feed_weights,
+        )
     ]
 
 
@@ -748,7 +774,10 @@ async def _run_rescore() -> None:
         raw = await load_for_rescore()
         cfg = load_config()
         topics_cfg = await _get_or_init_scoring_config()
-        article_dicts = await asyncio.to_thread(_blocking_rescore_compute, raw, cfg, topics_cfg)
+        feed_weights = await get_feed_weights()
+        article_dicts = await asyncio.to_thread(
+            _blocking_rescore_compute, raw, cfg, topics_cfg, feed_weights
+        )
         total_fetched = int(await get_meta("total_fetched", "0"))
         cache.load_progress = "Sauvegarde..."
         await save_articles(article_dicts, total_fetched)
@@ -846,19 +875,32 @@ async def snooze_article(req: SnoozeRequest, request: Request) -> dict[str, Any]
 
 @app.get("/api/config/scoring", dependencies=[Depends(require_auth)])
 async def get_scoring() -> dict[str, Any]:
-    """Return the active scoring topics config (from DB, or seeded from config.yaml)."""
-    return {"topics": await _get_or_init_scoring_config()}
+    """Return the active scoring topics config and feed weights (from DB, or seeded from config.yaml)."""
+    return {
+        "topics": await _get_or_init_scoring_config(),
+        "feed_weights": await get_feed_weights(),
+    }
 
 
 class ScoringConfigRequest(BaseModel):
     topics: dict[str, Any]
+    feed_weights: dict[str, float] = {}
 
 
 @app.put("/api/config/scoring", dependencies=[Depends(require_auth)])
 async def update_scoring(req: ScoringConfigRequest) -> dict[str, str]:
     """Persist a new scoring config to DB. Takes effect on next refresh or rescore."""
+    for feed, mult in req.feed_weights.items():
+        if not (0.1 <= mult <= 5.0):
+            raise HTTPException(
+                status_code=422,
+                detail=f"feed_weight for '{feed}' must be in [0.1, 5.0], got {mult}",
+            )
     await set_scoring_config(req.topics)
-    logger.info("Scoring config updated: %d topics", len(req.topics))
+    await set_feed_weights(req.feed_weights)
+    logger.info(
+        "Scoring config updated: %d topics, %d feed weights", len(req.topics), len(req.feed_weights)
+    )
     return {"status": "ok"}
 
 
