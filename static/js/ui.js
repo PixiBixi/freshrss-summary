@@ -325,6 +325,7 @@ function _renderFeedRows(feedWeights) {
   }
   const custom   = allFeeds.filter(f => Math.abs((feedWeights[f] ?? 1.0) - 1.0) > 0.001);
   const defaults = allFeeds.filter(f => Math.abs((feedWeights[f] ?? 1.0) - 1.0) <= 0.001);
+
   const sep = (custom.length && defaults.length)
     ? `<div class="fw-sep">par défaut</div>`
     : '';
@@ -334,14 +335,20 @@ function _renderFeedRows(feedWeights) {
     defaults.map(f => _feedWeightRowHtml(f, 1.0)).join('');
 }
 
+function _fwClass(w) {
+  const d = w - 1.0;
+  if (Math.abs(d) <= 0.001) return '';
+  if (d > 0) return d >= 2 ? ' fw-boost-hi' : d >= 0.5 ? ' fw-boost-md' : ' fw-boost-lo';
+  return Math.abs(d) >= 0.5 ? ' fw-malus-hi' : ' fw-malus-lo';
+}
+
 function _feedWeightRowHtml(feed, weight) {
-  const diff = weight - 1.0;
-  const cls = Math.abs(diff) <= 0.001 ? '' : diff > 0 ? ' fw-row--boost' : ' fw-row--malus';
+  const cls = _fwClass(weight);
   return `<div class="fw-row${cls}" data-feed="${esc(feed)}">
     <span class="fw-name" title="${esc(feed)}">${esc(feed)}</span>
     <input type="number" class="fw-mult" value="${weight}" min="0.1" max="5" step="0.1"
       aria-label="Multiplicateur"
-      oninput="(function(r,v){r.classList.remove('fw-row--boost','fw-row--malus');var d=v-1;if(Math.abs(d)>0.001)r.classList.add(d>0?'fw-row--boost':'fw-row--malus')})(this.closest('.fw-row'),parseFloat(this.value)||1)" />
+      oninput="(function(r,v){r.classList.remove('fw-boost-hi','fw-boost-md','fw-boost-lo','fw-malus-hi','fw-malus-lo');var c=_fwClass(v).trim();if(c)r.classList.add(c)})(this.closest('.fw-row'),parseFloat(this.value)||1)" />
     <button class="btn btn-ghost fw-reset" onclick="resetFeedWeight(this)" title="Remettre à 1">↺</button>
   </div>`;
 }
@@ -349,7 +356,7 @@ function _feedWeightRowHtml(feed, weight) {
 function resetFeedWeight(btn) {
   const row = btn.closest('.fw-row');
   row.querySelector('.fw-mult').value = 1.0;
-  row.classList.remove('fw-row--boost', 'fw-row--malus');
+  row.classList.remove('fw-boost-hi', 'fw-boost-md', 'fw-boost-lo', 'fw-malus-hi', 'fw-malus-lo');
 }
 
 function _collectFeedWeights() {

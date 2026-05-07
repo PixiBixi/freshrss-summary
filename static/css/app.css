@@ -568,8 +568,22 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 40px; }
   display: flex; align-items: center; gap: 8px;
   padding: 3px 0; min-height: 30px;
 }
-.fw-row--boost .fw-name { font-weight: 600; color: var(--accent); }
-.fw-row--malus .fw-name { font-weight: 600; color: #e07070; }
+/* boost-hi ≥ +2 : accent plein + gras */
+.fw-boost-hi .fw-name { font-weight: 700; color: var(--accent); }
+.fw-boost-hi .fw-mult { background: var(--card); border-color: var(--accent); color: var(--text); font-weight: 700; }
+/* boost-md +0.5–2 : accent atténué */
+.fw-boost-md .fw-name { font-weight: 600; color: var(--accent); opacity: .75; }
+.fw-boost-md .fw-mult { background: var(--card); border-color: var(--accent); color: var(--text); opacity: .8; }
+/* boost-lo < +0.5 : juste un filet de couleur */
+.fw-boost-lo .fw-name { color: var(--accent); opacity: .5; }
+.fw-boost-lo .fw-mult { background: var(--card); border-color: var(--accent); opacity: .55; }
+/* malus-hi ≤ −0.5 : rouge vif */
+.fw-malus-hi .fw-name { font-weight: 600; color: #d45; }
+.fw-malus-hi .fw-mult { background: var(--card); border-color: #d45; color: var(--text); }
+/* malus-lo > −0.5 : rouge doux */
+.fw-malus-lo .fw-name { color: #d45; opacity: .55; }
+.fw-malus-lo .fw-mult { background: var(--card); border-color: #d45; opacity: .55; }
+
 .fw-name {
   flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -580,13 +594,12 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 40px; }
 }
 .fw-mult:hover { border-color: var(--border); color: var(--text); }
 .fw-mult:focus { border-color: var(--accent); color: var(--text); outline: none; }
-.fw-row--boost .fw-mult { background: var(--card); border-color: var(--accent); color: var(--text); font-weight: 600; }
-.fw-row--malus .fw-mult { background: var(--card); border-color: #e07070;   color: var(--text); font-weight: 600; }
 .fw-reset {
   visibility: hidden; width: 24px; padding: 2px 4px !important;
   font-size: 12px !important; flex-shrink: 0; color: var(--text-3) !important;
 }
-.fw-row--boost .fw-reset, .fw-row--malus .fw-reset { visibility: visible; }
+.fw-boost-hi .fw-reset, .fw-boost-md .fw-reset, .fw-boost-lo .fw-reset,
+.fw-malus-hi .fw-reset, .fw-malus-lo .fw-reset { visibility: visible; }
 .fw-sep {
   display: flex; align-items: center; gap: 8px;
   font-size: 11px; color: var(--text-3); padding: 6px 0;
