@@ -13,7 +13,7 @@ function applyFilters() {
   else if (state.sort === 'feed') a.sort((x, y) => x.feed_title.localeCompare(y.feed_title));
   state.filtered = a;
   state.focusedIdx = -1;
-  document.getElementById('search-read-btn').style.display = state.search && a.length ? '' : 'none';
+  document.getElementById('search-read-btn').style.display = a.length ? '' : 'none';
   renderArticles(); updateStats();
 }
 

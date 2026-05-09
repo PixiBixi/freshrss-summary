@@ -89,9 +89,9 @@ async function markDayAsRead(btn) {
     });
     const s = new Set(ids);
     for (const id of ids) { _markedIds.add(id); _readQueue.delete(id); }
+    state.articles = state.articles.filter(a => !s.has(a.id));
     saveReadIds();
-    if (s.has(state.openRow)) toggleDetail(state.openRow);
-    group.querySelectorAll('.feed-row, .compact-row').forEach(row => row.classList.add('read'));
+    if (s.has(state.openRow)) { state.openRow = null; }
     buildTopicPills(state.articles.filter(a => !_markedIds.has(a.id)));
     applyFilters();
   } catch (e) { console.error(e); }
@@ -99,7 +99,7 @@ async function markDayAsRead(btn) {
 }
 
 async function markSearchAsRead() {
-  const ids = state.filtered.map(a => a.id);
+  const ids = state.filtered.slice(0, state.displayed).map(a => a.id);
   if (!ids.length) return;
   const btn = document.getElementById('search-read-btn');
   btn.disabled = true; btn.textContent = t('toast.marking');
@@ -109,7 +109,9 @@ async function markSearchAsRead() {
       body: JSON.stringify({ article_ids: ids }),
     });
     if (!r.ok) throw new Error('Failed');
+    const idSet = new Set(ids);
     for (const id of ids) { _markedIds.add(id); _readQueue.delete(id); }
+    state.articles = state.articles.filter(a => !idSet.has(a.id));
     saveReadIds();
     state.displayed = 100;
     buildTopicPills(state.articles.filter(a => !_markedIds.has(a.id))); applyFilters();
