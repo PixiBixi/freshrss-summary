@@ -1,7 +1,5 @@
 # FreshRSS Summary
 
-<img src="scorecard.png" width="100%">
-
 Web UI to sort and score unread FreshRSS articles by topic relevance (SRE, Kubernetes, ArgoCD, Terraform...).
 
 ## Setup
@@ -340,3 +338,7 @@ uv run pytest -v
 | `test_freshrss_client.py` | `_parse_item`, login, `_fetch_batch`, `fetch_unread`, `mark_as_read`, context manager |
 | `test_app.py` | Password hashing, `load_config`, `Cache.populate` |
 | `test_cli.py` | `load_config`, ANSI helpers |
+
+## Code Quality
+
+<img src="scorecard.png" width="100%">
