@@ -346,7 +346,7 @@ function _feedWeightRowHtml(feed, weight) {
   const cls = _fwClass(weight);
   return `<div class="fw-row${cls}" data-feed="${esc(feed)}">
     <span class="fw-name" title="${esc(feed)}">${esc(feed)}</span>
-    <input type="number" class="fw-mult" value="${weight}" min="0.1" max="5" step="0.1"
+    <input type="number" class="fw-mult" value="${weight}" min="0.1" max="10" step="0.1"
       aria-label="Multiplicateur"
       oninput="(function(r,v){r.classList.remove('fw-boost-hi','fw-boost-md','fw-boost-lo','fw-malus-hi','fw-malus-lo');var c=_fwClass(v).trim();if(c)r.classList.add(c)})(this.closest('.fw-row'),parseFloat(this.value)||1)" />
     <button class="btn btn-ghost fw-reset" onclick="resetFeedWeight(this)" title="Remettre à 1">↺</button>

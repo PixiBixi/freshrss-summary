@@ -287,7 +287,10 @@ async function updateScoringConfig(topics, feed_weights = {}) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ topics, feed_weights }),
   });
-  if (!r.ok) throw new Error('Failed to save scoring config');
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.detail || 'Failed to save scoring config');
+  }
 }
 
 async function snoozeArticle(id, e) {

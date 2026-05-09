@@ -898,10 +898,10 @@ class ScoringConfigRequest(BaseModel):
 async def update_scoring(req: ScoringConfigRequest) -> dict[str, str]:
     """Persist a new scoring config to DB. Takes effect on next refresh or rescore."""
     for feed, mult in req.feed_weights.items():
-        if not (0.1 <= mult <= 5.0):
+        if not (0.1 <= mult <= 10.0):
             raise HTTPException(
                 status_code=422,
-                detail=f"feed_weight for '{feed}' must be in [0.1, 5.0], got {mult}",
+                detail=f"feed_weight for '{feed}' must be in [0.1, 10.0], got {mult}",
             )
     await set_scoring_config(req.topics)
     await set_feed_weights(req.feed_weights)
