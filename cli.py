@@ -5,12 +5,15 @@ import argparse
 import asyncio
 import datetime
 import json
+import logging
 import sys
 from pathlib import Path
 
 import yaml
 
 from config import CONFIG_PATH, load_config
+
+logger = logging.getLogger(__name__)
 
 # ── ANSI ───────────────────────────────────────────────────────────────────
 
@@ -126,6 +129,7 @@ def cmd_check(args, cfg: dict) -> int:
             starred = client.fetch_starred(max_items=10)
             print(ok(f"Starred stream reachable ({len(starred)} fetched, limited to 10)"))
     except Exception as e:
+        logger.exception("check: FreshRSS connection failed")
         print(err(f"FreshRSS error: {e}"))
         return 1
 
@@ -136,6 +140,7 @@ def cmd_check(args, cfg: dict) -> int:
         print(info(f"DB URL   : {db_url}"))
         print(ok(f"DB reachable — {s['articles']} articles, {s['bookmarks']} bookmarks"))
     except Exception as e:
+        logger.exception("check: DB stats failed")
         print(warn(f"DB check failed: {e}"))
 
     print()
@@ -148,6 +153,7 @@ def cmd_stats(args, cfg: dict) -> int:
     try:
         s = asyncio.run(_db_stats(cfg))
     except Exception as e:
+        logger.exception("stats: DB query failed")
         print(err(f"DB error: {e}"))
         return 1
 
@@ -199,6 +205,7 @@ def cmd_fetch(args, cfg: dict) -> int:
                 all_scored.extend(scored)
                 print(info(f"Batch: {len(batch)} fetched, {relevant} relevant"))
     except Exception as e:
+        logger.exception("fetch: FreshRSS fetch failed")
         print(err(f"Fetch error: {e}"))
         return 1
 
@@ -225,6 +232,7 @@ def cmd_fetch(args, cfg: dict) -> int:
             asyncio.run(_save(cfg, [a.to_dict() for a in relevant], total_fetched))
             print(ok("Saved to DB"))
         except Exception as e:
+            logger.exception("fetch: DB save failed")
             print(err(f"DB save failed: {e}"))
             return 1
 
@@ -248,6 +256,7 @@ def cmd_rescore(args, cfg: dict) -> int:
     try:
         raw = asyncio.run(_load_for_rescore(cfg))
     except Exception as e:
+        logger.exception("rescore: DB load failed")
         print(err(f"DB load failed: {e}"))
         return 1
 
@@ -273,6 +282,7 @@ def cmd_rescore(args, cfg: dict) -> int:
             asyncio.run(_save(cfg, rescored, len(raw)))
             print(ok("Saved to DB"))
         except Exception as e:
+            logger.exception("rescore: DB save failed")
             print(err(f"DB save failed: {e}"))
             return 1
 
@@ -307,6 +317,7 @@ def _import_starred(args, cfg: dict) -> int:
             print(info(f"Fetching up to {max_items} starred articles..."))
             starred = client.fetch_starred(max_items=max_items)
     except Exception as e:
+        logger.exception("import-starred: FreshRSS fetch failed")
         print(err(f"Fetch error: {e}"))
         return 1
 
@@ -328,6 +339,7 @@ def _import_starred(args, cfg: dict) -> int:
             asyncio.run(_bookmark_all(cfg, [a.article.id for a in scored]))
             print(ok(f"Imported {len(scored)} articles — all bookmarked"))
         except Exception as e:
+            logger.exception("import-starred: DB upsert/bookmark failed")
             print(err(f"DB error: {e}"))
             return 1
 
@@ -347,6 +359,7 @@ def _import_file(args, cfg: dict) -> int:
     try:
         data = json.loads(path.read_text())
     except Exception as e:
+        logger.exception("import-file: JSON parse failed")
         print(err(f"JSON parse error: {e}"))
         return 1
 
@@ -392,6 +405,7 @@ def _import_file(args, cfg: dict) -> int:
             asyncio.run(_upsert_articles(cfg, [a.to_dict() for a in scored]))
             print(ok(f"Imported {len(scored)} articles"))
         except Exception as e:
+            logger.exception("import-file: DB upsert failed")
             print(err(f"DB error: {e}"))
             return 1
 
@@ -423,6 +437,7 @@ def cmd_tune(args, cfg: dict) -> int:
             print(info(f"Fetching up to {max_items} starred articles..."))
             starred = client.fetch_starred(max_items=max_items)
     except Exception as e:
+        logger.exception("tune: FreshRSS fetch failed")
         print(err(f"Fetch error: {e}"))
         return 1
 
@@ -486,6 +501,7 @@ def cmd_tune(args, cfg: dict) -> int:
             print(ok(f"Weights written to {CONFIG_PATH}"))
             print(info("Run  python cli.py rescore  to apply new weights to existing DB articles"))
         except Exception as e:
+            logger.exception("tune: failed to write config")
             print(err(f"Failed to write config: {e}"))
             return 1
     else:
@@ -510,6 +526,7 @@ def cmd_digest(args, cfg: dict) -> int:
     try:
         articles = asyncio.run(_load_articles_for_digest(cfg))
     except Exception as e:
+        logger.exception("digest: DB load failed")
         print(err(f"DB error: {e}"))
         return 1
 
@@ -527,6 +544,7 @@ def cmd_digest(args, cfg: dict) -> int:
             asyncio.run(send_message(bot_token, chat_id, text))
             print(ok("Digest sent via Telegram"))
         except Exception as e:
+            logger.exception("digest: Telegram send failed")
             print(err(f"Send failed: {e}"))
             return 1
 

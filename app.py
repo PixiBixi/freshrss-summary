@@ -180,7 +180,7 @@ def verify_password(plain: str, stored: str) -> bool:
         salt_hex, key_hex = stored.split(":", 1)
         key = hashlib.scrypt(plain.encode(), salt=bytes.fromhex(salt_hex), n=16384, r=8, p=1)
         return key.hex() == key_hex
-    except Exception:
+    except Exception:  # noqa: BLE001 — broad catch intentional: any malformed hash → reject
         return False
 
 
@@ -715,6 +715,7 @@ async def refresh_stream() -> StreamingResponse:
             topics_cfg = await _get_or_init_scoring_config()
             feed_weights = await get_feed_weights()
         except Exception as e:
+            logger.exception("refresh-stream init failed")
             cache.error = str(e)
             cache.load_progress = "Erreur"
             cache.is_loading = False
