@@ -269,7 +269,7 @@ async def _setup_telegram_scheduler(scheduler: AsyncIOScheduler, tg_cfg: dict, c
     """Register all Telegram-related scheduler jobs and webhook."""
     hour = int(tg_cfg.get("digest_hour", 21))
     scheduler.add_job(
-        _run_daily_digest,
+        _dispatch_daily_digest,
         CronTrigger(hour=hour, minute=0, timezone="Europe/Paris"),
         args=[tg_cfg],
         id="daily_digest",
@@ -419,7 +419,7 @@ async def logout(request: Request):
     return RedirectResponse(url="/login", status_code=303)
 
 
-@app.get("/api/status")
+@app.get("/api/status", dependencies=[Depends(require_auth)])
 async def get_status() -> dict[str, Any]:
     return {
         "is_loading": cache.is_loading,
@@ -569,15 +569,15 @@ def _blocking_fetch_and_score(
 
 
 async def _auto_refresh() -> None:
-    """Scheduled job: runs _run_refresh unless a refresh is already in progress."""
+    """Scheduled job: runs _do_fetch_and_score unless a refresh is already in progress."""
     if cache.is_loading:
         logger.info("Scheduled refresh skipped — already in progress")
         return
     logger.info("Scheduled refresh starting")
-    await _run_refresh()
+    await _do_fetch_and_score()
 
 
-async def _run_refresh() -> None:
+async def _do_fetch_and_score() -> None:
     """Background task: fetch → score → persist → populate cache."""
     cache.is_loading = True
     cache.error = None
@@ -636,7 +636,7 @@ async def refresh() -> dict[str, Any]:
     if cache.is_loading:
         return {"status": "already_loading", "progress": cache.load_progress}
 
-    cache.refresh_task = asyncio.create_task(_run_refresh())
+    cache.refresh_task = asyncio.create_task(_do_fetch_and_score())
     return {"status": "started"}
 
 
@@ -729,7 +729,7 @@ async def refresh_stream() -> StreamingResponse:
                 if event["type"] in ("done", "error"):
                     break
         except asyncio.CancelledError:
-            pass
+            raise
         # cache.is_loading is managed by the worker thread
 
     return StreamingResponse(
@@ -765,7 +765,7 @@ def _blocking_rescore_compute(
     ]
 
 
-async def _run_rescore() -> None:
+async def _do_rescore_from_db() -> None:
     """Background task: rescore from DB → persist → populate cache."""
     cache.is_loading = True
     cache.error = None
@@ -808,7 +808,7 @@ async def rescore() -> dict[str, Any]:
             status_code=400, detail="Aucun article en DB. Lance d'abord un Rafraîchir."
         )
 
-    cache.refresh_task = asyncio.create_task(_run_rescore())
+    cache.refresh_task = asyncio.create_task(_do_rescore_from_db())
     return {"status": "started"}
 
 
@@ -940,7 +940,7 @@ async def change_password(req: ChangePasswordRequest, request: Request) -> dict[
 # ---------------------------------------------------------------------------
 
 
-async def _run_daily_digest(tg_cfg: dict) -> None:
+async def _dispatch_daily_digest(tg_cfg: dict) -> None:
     """Scheduler job: build and send digest from current cache articles."""
     await send_digest(tg_cfg, cache.articles)
 
