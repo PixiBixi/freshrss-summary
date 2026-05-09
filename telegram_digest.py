@@ -123,7 +123,9 @@ async def send_digest(tg_cfg: dict, articles: list[dict]) -> None:
         logger.exception("Telegram digest send failed")
 
 
-async def check_trending(tg_cfg: dict, articles: list[dict], alerted: set) -> set:
+async def check_trending(
+    tg_cfg: dict, articles: list[dict], alerted: set[tuple[str, int]]
+) -> set[tuple[str, int]]:
     """
     Alert if a topic has ≥3 articles in the last 2h and ≥2x more than the prior 2h window.
     Returns updated alerted set (keyed on (topic, 2h-bucket) to avoid duplicate alerts).

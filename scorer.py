@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from freshrss_client import Article
 
@@ -35,7 +36,7 @@ class ScoredArticle:
             return None
         return max(self.matched_topics, key=lambda t: self.matched_topics[t])
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         stripped = self._stripped_content
         return {
             "id": self.article.id,
@@ -53,7 +54,7 @@ class ScoredArticle:
         }
 
 
-def build_topics(topics: dict) -> list[TopicConfig]:
+def build_topics(topics: dict[str, Any]) -> list[TopicConfig]:
     result = []
     for name, cfg in topics.items():
         result.append(
@@ -124,7 +125,7 @@ def analyze_favorites(
     starred: list[Article],
     topics: list[TopicConfig],
     title_weight: int = 3,
-) -> dict:
+) -> dict[str, Any]:
     """
     Analyze starred articles to suggest weight adjustments.
 
