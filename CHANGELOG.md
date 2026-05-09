@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/PixiBixi/freshrss-summary/compare/v1.4.0...v1.4.1) (2026-05-09)
+
+
+### Bug Fixes
+
+* **db:** exclude read articles from load_for_rescore to prevent UNIQUE constraint failure ([bc75de6](https://github.com/PixiBixi/freshrss-summary/commit/bc75de6ed5168d2267dd8c36ce1378195b26afba))
+
 ## [1.4.0](https://github.com/PixiBixi/freshrss-summary/compare/v1.3.2...v1.4.0) (2026-05-09)
 
 
