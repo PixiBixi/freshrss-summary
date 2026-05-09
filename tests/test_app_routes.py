@@ -1,0 +1,175 @@
+"""Route handler tests using httpx AsyncClient + ASGITransport."""
+
+import time
+
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from app import app, cache
+from db import metadata, set_engine_for_testing
+
+TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+
+_ARTICLE = {
+    "id": "tag:a",
+    "title": "K8s guide",
+    "url": "https://example.com/k8s",
+    "feed_title": "CNCF",
+    "published": int(time.time()) - 3600,  # 1 hour ago — within any days window
+    "score": 12.0,
+    "matched_topics": {"Kubernetes": 12.0},
+    "matched_keywords": ["kubernetes"],
+    "top_topic": "Kubernetes",
+    "summary": "A guide to Kubernetes.",
+    "bookmarked": False,
+}
+
+
+@pytest_asyncio.fixture
+async def db_engine():
+    engine = create_async_engine(TEST_DB_URL, echo=False)
+    set_engine_for_testing(engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(metadata.create_all)
+    yield engine
+    await engine.dispose()
+    set_engine_for_testing(None)
+
+
+@pytest_asyncio.fixture
+async def client(db_engine):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def authed_client(db_engine):
+    """Client with an authenticated session via login."""
+    import os
+
+    from app import hash_password
+    from db import upsert_user
+
+    await upsert_user("admin", hash_password("testpass"))
+    os.environ.setdefault("SECRET_KEY", "test-secret-key-for-tests")
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        resp = await ac.post("/login", data={"username": "admin", "password": "testpass"})
+        assert resp.status_code in (200, 303)
+        yield ac
+
+
+# ── /api/articles ──────────────────────────────────────────────────────────────
+
+
+class TestGetArticles:
+    async def test_returns_empty_when_cache_empty(self, client):
+        cache.articles = []
+        resp = await client.get("/api/articles")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["articles"] == []
+        assert data["total"] == 0
+
+    async def test_returns_articles_from_cache(self, client):
+        cache.articles = [dict(_ARTICLE)]
+        resp = await client.get("/api/articles")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["articles"]) == 1
+        assert data["articles"][0]["id"] == "tag:a"
+
+    async def test_days_filter_excludes_old_articles(self, client):
+        import time
+
+        old = dict(_ARTICLE, id="old", published=int(time.time()) - 30 * 86400)
+        recent = dict(_ARTICLE, id="recent", published=int(time.time()) - 1 * 86400)
+        cache.articles = [old, recent]
+
+        resp = await client.get("/api/articles?days=7")
+        assert resp.status_code == 200
+        ids = [a["id"] for a in resp.json()["articles"]]
+        assert "recent" in ids
+        assert "old" not in ids
+
+    async def test_days_0_returns_all(self, client):
+        import time
+
+        old = dict(_ARTICLE, id="old", published=int(time.time()) - 30 * 86400)
+        cache.articles = [old]
+        resp = await client.get("/api/articles?days=0")
+        assert resp.status_code == 200
+        assert len(resp.json()["articles"]) == 1
+
+    async def test_min_score_filter(self, client):
+        low = dict(_ARTICLE, id="low", score=2.0)
+        high = dict(_ARTICLE, id="high", score=50.0)
+        cache.articles = [low, high]
+        resp = await client.get("/api/articles?min_score=10")
+        ids = [a["id"] for a in resp.json()["articles"]]
+        assert "high" in ids
+        assert "low" not in ids
+
+    async def test_topic_filter(self, client):
+        k8s = dict(_ARTICLE, id="k8s", matched_topics={"Kubernetes": 5.0})
+        sre = dict(_ARTICLE, id="sre", matched_topics={"SRE": 3.0})
+        cache.articles = [k8s, sre]
+        resp = await client.get("/api/articles?topic=Kubernetes")
+        ids = [a["id"] for a in resp.json()["articles"]]
+        assert "k8s" in ids
+        assert "sre" not in ids
+
+
+# ── /api/mark-read ─────────────────────────────────────────────────────────────
+
+
+class TestMarkRead:
+    async def test_requires_auth(self, client, db_engine):
+        resp = await client.post(
+            "/api/mark-read",
+            json={"article_ids": ["tag:a"]},
+        )
+        assert resp.status_code == 401
+
+    async def test_marks_article_authenticated(self, authed_client, db_engine):
+        from db import save_articles
+
+        await save_articles([dict(_ARTICLE)], total_fetched=1)
+        cache.articles = [dict(_ARTICLE)]
+
+        resp = await authed_client.post(
+            "/api/mark-read",
+            json={"article_ids": ["tag:a"]},
+        )
+        assert resp.status_code == 200
+        assert cache.articles == []
+
+    async def test_empty_ids_returns_400(self, authed_client, db_engine):
+        resp = await authed_client.post("/api/mark-read", json={"article_ids": []})
+        assert resp.status_code == 400
+
+
+# ── /health ────────────────────────────────────────────────────────────────────
+
+
+class TestHealth:
+    async def test_health_ok_with_db(self, client, db_engine):
+        resp = await client.get("/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["db"] == "ok"
+
+    async def test_health_no_auth_required(self, client, db_engine):
+        """Health endpoint is public — no session needed."""
+        resp = await client.get("/health")
+        assert resp.status_code == 200
+
+    async def test_health_returns_article_count(self, client, db_engine):
+        cache.articles = [dict(_ARTICLE)]
+        resp = await client.get("/health")
+        assert resp.json()["articles"] == 1
+        cache.articles = []

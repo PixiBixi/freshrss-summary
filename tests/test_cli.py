@@ -117,3 +117,158 @@ class TestLoadConfig:
 
         assert cfg["freshrss"]["url"] == "https://from-yaml.com"
         assert cfg["freshrss"]["username"] == "yamluser"
+
+
+# ── CLI command handlers ───────────────────────────────────────────────────────
+
+_MINIMAL_CFG = {
+    "freshrss": {"url": "http://x", "username": "u", "api_password": "p"},
+    "database": {},
+    "scoring": {"title_weight": 3, "min_score": 1.0},
+    "topics": {},
+}
+
+_DB_STATS = {
+    "articles": 5,
+    "total_fetched": 10,
+    "last_refresh": 1_700_000_000.0,
+    "bookmarks": 2,
+    "topics": ["Kubernetes", "SRE"],
+}
+
+
+class TestCmdStats:
+    def test_returns_0_on_success(self, capsys):
+        import argparse
+        from unittest.mock import patch
+
+        from cli import cmd_stats
+
+        with patch("cli.asyncio.run", return_value=_DB_STATS):
+            args = argparse.Namespace()
+            rc = cmd_stats(args, _MINIMAL_CFG)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "5" in out
+
+    def test_db_error_returns_1(self, monkeypatch, capsys):
+        from unittest.mock import patch
+
+        with patch("cli.asyncio.run", side_effect=RuntimeError("DB unreachable")):
+            import argparse
+
+            from cli import cmd_stats
+
+            args = argparse.Namespace()
+            rc = cmd_stats(args, _MINIMAL_CFG)
+        assert rc == 1
+        out = capsys.readouterr().out
+        assert "DB" in out
+
+
+class TestCmdRescore:
+    def test_dry_run_no_save(self, monkeypatch, capsys):
+        from unittest.mock import patch
+
+        raw = [
+            {
+                "id": "1",
+                "title": "K8s",
+                "url": "http://x",
+                "feed_title": "F",
+                "published": 1700000000,
+                "content": "kubernetes cluster",
+            }
+        ]
+
+        import argparse
+
+        args = argparse.Namespace(dry_run=True)
+
+        call_count = {"n": 0}
+
+        def fake_run(coro):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                return raw  # _load_for_rescore
+            return None  # should not be called again in dry_run
+
+        from cli import cmd_rescore
+
+        with patch("cli.asyncio.run", side_effect=fake_run):
+            rc = cmd_rescore(args, _MINIMAL_CFG)
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "dry-run" in out.lower() or "dry_run" in out.lower() or "--dry-run" in out
+
+    def test_empty_db_returns_0(self, monkeypatch, capsys):
+        import argparse
+        from unittest.mock import patch
+
+        args = argparse.Namespace(dry_run=False)
+
+        from cli import cmd_rescore
+
+        with patch("cli.asyncio.run", return_value=[]):
+            rc = cmd_rescore(args, _MINIMAL_CFG)
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "No articles" in out
+
+    def test_db_load_error_returns_1(self, monkeypatch, capsys):
+        import argparse
+        from unittest.mock import patch
+
+        args = argparse.Namespace(dry_run=False)
+
+        from cli import cmd_rescore
+
+        with patch("cli.asyncio.run", side_effect=RuntimeError("load failed")):
+            rc = cmd_rescore(args, _MINIMAL_CFG)
+
+        assert rc == 1
+
+
+class TestCmdCheck:
+    def test_success_returns_0(self, monkeypatch, capsys):
+        from unittest.mock import MagicMock, patch
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.ping.return_value = 1
+        mock_client.fetch_starred.return_value = []
+
+        import argparse
+
+        args = argparse.Namespace()
+
+        from cli import cmd_check
+
+        with patch("cli.make_client", return_value=mock_client):
+            with patch("cli.asyncio.run", return_value=_DB_STATS):
+                rc = cmd_check(args, _MINIMAL_CFG)
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Auth OK" in out
+
+    def test_freshrss_error_returns_1(self, monkeypatch, capsys):
+        from unittest.mock import MagicMock, patch
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(side_effect=RuntimeError("connection refused"))
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        import argparse
+
+        args = argparse.Namespace()
+
+        from cli import cmd_check
+
+        with patch("cli.make_client", return_value=mock_client):
+            rc = cmd_check(args, _MINIMAL_CFG)
+
+        assert rc == 1
