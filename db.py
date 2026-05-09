@@ -95,6 +95,12 @@ users_table = Table(
 _engine: AsyncEngine | None = None
 
 
+def set_engine_for_testing(engine: "AsyncEngine") -> None:
+    """Expose engine injection for tests instead of direct module mutation."""
+    global _engine
+    _engine = engine
+
+
 def get_engine() -> AsyncEngine:
     if _engine is None:
         raise RuntimeError("Database not initialised. Call init_db() first.")

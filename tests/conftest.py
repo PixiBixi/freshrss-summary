@@ -3,8 +3,7 @@
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
 
-import db as db_module
-from db import metadata
+from db import metadata, set_engine_for_testing
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -13,9 +12,9 @@ TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 async def db():
     """Fresh in-memory SQLite database for each test function."""
     engine = create_async_engine(TEST_DB_URL, echo=False)
-    db_module._engine = engine
+    set_engine_for_testing(engine)
     async with engine.begin() as conn:
         await conn.run_sync(metadata.create_all)
     yield engine
     await engine.dispose()
-    db_module._engine = None
+    set_engine_for_testing(None)
