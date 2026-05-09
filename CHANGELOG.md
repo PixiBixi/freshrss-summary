@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.4.0](https://github.com/PixiBixi/freshrss-summary/compare/v1.3.2...v1.4.0) (2026-05-09)
+
+
+### Features
+
+* **app:** pass feed_weights through all scoring pipelines and extend scoring API ([743b880](https://github.com/PixiBixi/freshrss-summary/commit/743b8804323f21daa7d72c20ccc90c8345e91ba8))
+* **db:** add get_feed_weights and set_feed_weights ([8748215](https://github.com/PixiBixi/freshrss-summary/commit/8748215492c376cca22c6fb39e525d976250914d))
+* **i18n:** add cfg.tabTopics, cfg.tabFeeds, cfg.noFeeds for all 6 languages ([3f856ff](https://github.com/PixiBixi/freshrss-summary/commit/3f856ff99dabf877df33fb23fb6c725fbd3ae8e5))
+* **render:** show feed_weight multiplier in score tooltip ([6aa05d6](https://github.com/PixiBixi/freshrss-summary/commit/6aa05d662e621937ac583da3bb3e034f0efd729f))
+* **scorer:** add feed_weights multiplier to score_article and score_articles ([1c0cf48](https://github.com/PixiBixi/freshrss-summary/commit/1c0cf480c9cd26af96de21f3f8bf6e522507b432))
+* **ui:** add Topics/Feeds tabs to scoring modal with feed weight rows ([5f0aa27](https://github.com/PixiBixi/freshrss-summary/commit/5f0aa274a6bbe5582b2721ec94a4814a1805af57))
+* **ui:** mark-as-read actions remove articles from page immediately ([d84c256](https://github.com/PixiBixi/freshrss-summary/commit/d84c2561b85aab40224fd358c2c57fac9f0d73d3))
+
+
+### Bug Fixes
+
+* **ui:** cleaner feed weight rows — muted inputs for defaults, compact rows, proper separator ([6f8d0d6](https://github.com/PixiBixi/freshrss-summary/commit/6f8d0d65284c1a1fee0e7bbe200bea2e5c96ddfb))
+* **ui:** differentiate boost (accent) vs malus (red) feed weight colors ([dea0c06](https://github.com/PixiBixi/freshrss-summary/commit/dea0c06247d713787d3b615103f9356a4eee1103))
+* **ui:** graduated feed weight colors — 3 boost levels + 2 malus levels ([b8cb9ab](https://github.com/PixiBixi/freshrss-summary/commit/b8cb9ab2477c9c06f85f7261a6ade700bc1cb153))
+* **ui:** hide reset button on default feeds, add custom/default section separator ([6bae802](https://github.com/PixiBixi/freshrss-summary/commit/6bae802b890e804450330ccd4688a10309e31440))
+* **ui:** show all feeds from DB instead of only currently loaded articles ([38b46e2](https://github.com/PixiBixi/freshrss-summary/commit/38b46e2013ad4ac0646b5b4147d433d048496f14))
+* **ui:** sort feed weight rows by multiplier descending, then alphabetically ([573c80a](https://github.com/PixiBixi/freshrss-summary/commit/573c80ac60b02192a65d0eeb2ba847e853050f36))
+
 ## [1.3.2](https://github.com/PixiBixi/freshrss-summary/compare/v1.3.1...v1.3.2) (2026-04-28)
 
 
