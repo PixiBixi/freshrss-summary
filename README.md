@@ -226,10 +226,10 @@ python cli.py import articles.json
 ## Scoring
 
 ```
-score = Σ (title_occurrences × title_weight + body_occurrences) × topic_weight
+score = Σ (title_occurrences × title_weight + body_occurrences) × topic_weight × feed_weight
 ```
 
-The highest-scoring article best matches your configured topics. Score breakdown per topic is shown as a tooltip on each article's score badge.
+The highest-scoring article best matches your configured topics. Score breakdown per topic — plus feed multiplier if non-default — is shown as a tooltip on each article's score badge.
 
 ### Topics (default config)
 
@@ -252,13 +252,17 @@ The highest-scoring article best matches your configured topics. Score breakdown
 
 Weights and keywords are editable live from the UI (⚙ **Topics** button) — persisted in the database, no restart required. The `config.yaml` topics section is only used to seed the database on first startup. Use `python cli.py tune --apply` to suggest weight adjustments based on your starred articles.
 
+### Per-feed multipliers
+
+The **Feeds** tab in the scoring modal (⚙ Topics → Feeds) lets you set a score multiplier per feed (0.1–5.0). Feeds with non-default multipliers are shown first, color-coded by intensity (boost in accent color, malus in red). Default is `1.0` (no effect).
+
 ## UI Features
 
 ### Reading
 
 - **SSE streaming**: articles appear progressively as they are fetched, no full-page wait
 - **Auto mark-as-read on scroll**: articles scrolled past are silently marked as read in FreshRSS after a 3s debounce
-- **Mark as read**: single article, all articles in a day group, or all visible
+- **Mark as read**: single article (✓ Lu), all articles in a day group (Mark Day), or all visible (✓ Tout lire) — articles disappear from the page immediately on mark
 - **Open all**: open every article in a day group as tabs (with confirmation above 10)
 - **Show read**: toggle to reveal articles marked as read (kept 7 days, purged on refresh) — requires login
 - **Bookmarks**: starred locally, survive refreshes
@@ -269,7 +273,8 @@ Weights and keywords are editable live from the UI (⚙ **Topics** button) — p
 - **Sort**: by score (default), date, or source
 - **Min score**: adjustable live — hides low-relevance articles
 - **Period**: 7d / 14d / 30d / all
-- **Full-text search**: client-side filter on title and feed name, with "mark all results as read" button
+- **Full-text search**: client-side filter on title and feed name
+- **✓ Mark all read**: always-visible button — marks all currently displayed articles as read and removes them from the page; in search mode, scoped to search results
 
 ### Interface
 
@@ -279,7 +284,7 @@ Weights and keywords are editable live from the UI (⚙ **Topics** button) — p
 - **Auto-refresh**: configurable background scheduler — open the UI in the morning and articles are already there (see `REFRESH_INTERVAL_MINUTES`)
 - **Last refresh indicator**: shows time since last fetch; ⚠ warning if stale (>3h)
 - **Rescore**: reapply current weights without re-fetching
-- **Scoring config** (⚙ Topics): edit topic names, weights, and keywords live — saved to DB, triggers automatic rescore
+- **Scoring config** (⚙ Topics): edit topic names, weights, and keywords live; **Feeds** tab for per-feed score multipliers — saved to DB, triggers automatic rescore
 - **Password change** (🔑 Password): change the current user's password directly from the UI — no restart required
 - **i18n**: French, English, German, Spanish, Italian, Portuguese — auto-detected from browser, override persisted in localStorage
 
@@ -326,12 +331,12 @@ uv run pytest
 uv run pytest -v
 ```
 
-114 tests across 5 modules — no network or FreshRSS access required:
+156 tests across 5 modules — no network or FreshRSS access required:
 
 | Module | Coverage |
 |--------|---------|
-| `test_scorer.py` | `_strip_html`, `TopicConfig`, `build_topics`, `score_article`, `score_articles`, `analyze_favorites`, `ScoredArticle.to_dict` |
-| `test_db.py` | Save/load roundtrip, soft-delete, bookmarks, users, pending sync outbox, `load_for_rescore`, `get_scoring_config`, `set_scoring_config` |
+| `test_scorer.py` | `_strip_html`, `TopicConfig`, `build_topics`, `score_article`, `score_articles`, `analyze_favorites`, `ScoredArticle.to_dict`, feed weight multiplier |
+| `test_db.py` | Save/load roundtrip, soft-delete, bookmarks, users, pending sync outbox, `load_for_rescore`, `get_scoring_config`, `set_scoring_config`, feed weights |
 | `test_freshrss_client.py` | `_parse_item`, login, `_fetch_batch`, `fetch_unread`, `mark_as_read`, context manager |
 | `test_app.py` | Password hashing, `load_config`, `Cache.populate` |
 | `test_cli.py` | `load_config`, ANSI helpers |
