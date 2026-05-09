@@ -419,7 +419,7 @@ async def logout(request: Request):
     return RedirectResponse(url="/login", status_code=303)
 
 
-@app.get("/api/status", dependencies=[Depends(require_auth)])
+@app.get("/api/status")
 async def get_status() -> dict[str, Any]:
     return {
         "is_loading": cache.is_loading,
@@ -603,7 +603,7 @@ async def _do_fetch_and_score() -> None:
                 await clear_pending_sync(pending)
                 logger.info("Flushed %d pending read sync(s) to FreshRSS", len(pending))
             except Exception:
-                logger.warning("Pending sync flush failed, will retry on next refresh")
+                logger.exception("Pending sync flush failed, will retry on next refresh")
 
         article_dicts, total_fetched = await asyncio.to_thread(
             _blocking_fetch_and_score, cfg, topics_cfg, feed_weights
@@ -962,7 +962,7 @@ async def _check_snoozes(tg_cfg: dict) -> None:
 
 
 @app.post("/telegram/webhook")
-async def telegram_webhook(request: Request) -> dict:
+async def telegram_webhook(request: Request) -> dict[str, Any]:
     """Receive Telegram updates. Verifies secret header, handles /digest command."""
     tg_cfg: dict = getattr(request.app.state, "tg_cfg", {})
     webhook_secret = tg_cfg.get("webhook_secret", "")

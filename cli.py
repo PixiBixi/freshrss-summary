@@ -113,7 +113,7 @@ async def _bookmark_all(cfg: dict, ids: list[str]) -> None:
 # ── Commands ───────────────────────────────────────────────────────────────
 
 
-def cmd_check(args, cfg: dict) -> int:
+def cmd_check(args: argparse.Namespace, cfg: dict) -> int:
     """Test FreshRSS connection and DB reachability."""
     fr = cfg["freshrss"]
     print(f"\n{BOLD}FreshRSS connection check{RESET}\n")
@@ -147,7 +147,7 @@ def cmd_check(args, cfg: dict) -> int:
     return 0
 
 
-def cmd_stats(args, cfg: dict) -> int:
+def cmd_stats(args: argparse.Namespace, cfg: dict) -> int:
     """Show DB statistics."""
     print(f"\n{BOLD}DB statistics{RESET}\n")
     try:
@@ -176,7 +176,7 @@ def cmd_stats(args, cfg: dict) -> int:
     return 0
 
 
-def cmd_fetch(args, cfg: dict) -> int:
+def cmd_fetch(args: argparse.Namespace, cfg: dict) -> int:
     """Fetch unread articles from FreshRSS, score and save to DB."""
     print(f"\n{BOLD}Fetching unread articles{RESET}\n")
 
@@ -240,7 +240,7 @@ def cmd_fetch(args, cfg: dict) -> int:
     return 0
 
 
-def cmd_rescore(args, cfg: dict) -> int:
+def cmd_rescore(args: argparse.Namespace, cfg: dict) -> int:
     """Rescore DB articles with the current config weights."""
     print(f"\n{BOLD}Rescoring from DB{RESET}\n")
 
@@ -290,7 +290,7 @@ def cmd_rescore(args, cfg: dict) -> int:
     return 0
 
 
-def cmd_import(args, cfg: dict) -> int:
+def cmd_import(args: argparse.Namespace, cfg: dict) -> int:
     """Import articles from a JSON file or from FreshRSS starred."""
     if args.starred:
         return _import_starred(args, cfg)
@@ -413,7 +413,7 @@ def _import_file(args, cfg: dict) -> int:
     return 0
 
 
-def cmd_tune(args, cfg: dict) -> int:
+def cmd_tune(args: argparse.Namespace, cfg: dict) -> int:
     """
     Analyze FreshRSS starred articles and suggest weight adjustments.
 
@@ -519,7 +519,7 @@ async def _load_articles_for_digest(cfg: dict) -> list[dict]:
     return articles
 
 
-def cmd_digest(args, cfg: dict) -> int:
+def cmd_digest(args: argparse.Namespace, cfg: dict) -> int:
     """Build and print the Telegram digest from DB articles. Optionally send it."""
     from telegram_digest import build_digest, send_message
 

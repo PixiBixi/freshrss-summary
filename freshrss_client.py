@@ -184,14 +184,14 @@ class FreshRSSClient:
     @staticmethod
     def _parse_item(item: dict) -> Article:
         title = item.get("title", "(no title)")
+        alternates = item.get("alternate", [])
         url = ""
-        for alt in item.get("alternate", []):
+        for alt in alternates:
             if alt.get("type") == "text/html":
                 url = alt.get("href", "")
                 break
         if not url:
-            urls = item.get("alternate", [])
-            url = urls[0].get("href", "") if urls else ""
+            url = alternates[0].get("href", "") if alternates else ""
 
         content = ""
         summary = item.get("summary", {})
