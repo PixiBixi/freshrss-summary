@@ -304,6 +304,14 @@ class TestLoadForRescore:
         for key in ("id", "title", "url", "feed_title", "published", "content"):
             assert key in row, f"Missing field: {key}"
 
+    async def test_excludes_read_articles(self, db):
+        await save_articles([_article(id="unread"), _article(id="read")], total_fetched=2)
+        await set_articles_read(["read"])
+        rows = await load_for_rescore()
+        ids = [r["id"] for r in rows]
+        assert "unread" in ids
+        assert "read" not in ids
+
 
 # ── snooze ────────────────────────────────────────────────────────────────────
 

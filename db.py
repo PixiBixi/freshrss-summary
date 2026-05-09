@@ -279,7 +279,7 @@ async def load_articles() -> tuple[list[dict], float | None, int]:
 
 
 async def load_for_rescore() -> list[dict]:
-    """Load articles with full content for re-scoring."""
+    """Load unread articles with full content for re-scoring."""
     async with get_engine().connect() as conn:
         rows = (
             (
@@ -291,7 +291,7 @@ async def load_for_rescore() -> list[dict]:
                         articles_table.c.feed_title,
                         articles_table.c.published,
                         articles_table.c.content,
-                    )
+                    ).where(articles_table.c.read_at.is_(None))
                 )
             )
             .mappings()
