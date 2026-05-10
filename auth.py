@@ -7,10 +7,9 @@ import os
 import secrets
 import time
 
-import yaml
 from fastapi import HTTPException, Request
 
-from config import CONFIG_PATH
+from config import CONFIG_PATH, load_raw_config
 from db import has_users, upsert_user
 
 logger = logging.getLogger(__name__)
@@ -63,11 +62,8 @@ def get_secret_key() -> str:
     """Return secret key for session signing. Precedence: env > config > random (warns)."""
     if v := os.environ.get("SECRET_KEY"):
         return v
-    if CONFIG_PATH.exists():
-        with CONFIG_PATH.open() as f:
-            cfg = yaml.safe_load(f) or {}
-        if sk := cfg.get("auth", {}).get("secret_key"):
-            return sk
+    if sk := load_raw_config().get("auth", {}).get("secret_key"):
+        return sk
     # No key configured: derive a stable key from the config path so sessions
     # survive restarts, but document that this is not cryptographically ideal.
     logger.warning(
