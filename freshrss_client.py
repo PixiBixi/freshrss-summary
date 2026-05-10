@@ -139,7 +139,7 @@ class FreshRSSClient:
             chunk = article_ids[i : i + chunk_size]
             pairs = [("T", csrf), ("a", "user/-/state/com.google/read")]
             pairs += [("i", article_id) for article_id in chunk]
-            body = urllib.parse.urlencode(pairs, doseq=False).encode()
+            body = urllib.parse.urlencode(pairs).encode()
 
             resp = self._client.post(
                 f"{self.base_url}/api/greader.php/reader/api/0/edit-tag",

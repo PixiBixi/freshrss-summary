@@ -287,7 +287,7 @@ def cmd_import(args: argparse.Namespace, cfg: dict) -> int:
     return _import_file(args, cfg)
 
 
-def _import_starred(args, cfg: dict) -> int:
+def _import_starred(args: argparse.Namespace, cfg: dict) -> int:
     """Fetch starred items from FreshRSS, score and import into DB + bookmarks."""
     print(f"\n{BOLD}Importing FreshRSS starred articles{RESET}\n")
 
@@ -334,7 +334,7 @@ def _import_starred(args, cfg: dict) -> int:
     return 0
 
 
-def _import_file(args, cfg: dict) -> int:
+def _import_file(args: argparse.Namespace, cfg: dict) -> int:
     """Import articles from a JSON file (list of article objects)."""
     path = Path(args.file)
     print(f"\n{BOLD}Importing from {path.name}{RESET}\n")

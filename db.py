@@ -10,6 +10,7 @@ import json
 import logging
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Column,
@@ -26,6 +27,9 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncConnection
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +114,7 @@ def get_engine() -> AsyncEngine:
     return _engine
 
 
-async def _run_migrations(conn) -> None:  # type: ignore[no-untyped-def]
+async def _run_migrations(conn: "AsyncConnection") -> None:
     """Apply additive DDL migrations. Each ALTER is idempotent — duplicate-column errors are expected and swallowed."""
     _MIGRATIONS = [
         ("articles", "content", "ALTER TABLE articles ADD COLUMN content TEXT DEFAULT ''"),
@@ -583,7 +587,7 @@ async def delete_snooze(article_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def _set_meta(conn, key: str, value: str) -> None:
+async def _set_meta(conn: "AsyncConnection", key: str, value: str) -> None:
     """Portable upsert for the meta table (works on SQLite, MySQL, PostgreSQL)."""
     existing = (await conn.execute(select(meta_table.c.key).where(meta_table.c.key == key))).first()
     if existing:

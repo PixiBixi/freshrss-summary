@@ -279,7 +279,7 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+async def index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -291,7 +291,7 @@ async def index(request: Request):
 
 
 @app.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
+async def login_page(request: Request) -> Response:
     if request.session.get("authenticated"):
         return RedirectResponse(url="/", status_code=302)
     return templates.TemplateResponse(request, "login.html")
@@ -326,7 +326,7 @@ async def login(
 
 
 @app.post("/logout")
-async def logout(request: Request):
+async def logout(request: Request) -> RedirectResponse:
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
 
@@ -864,7 +864,11 @@ async def _check_snoozes(tg_cfg: TelegramConfig) -> None:
 
 @app.post("/telegram/webhook")
 async def telegram_webhook(request: Request) -> dict[str, Any]:
-    """Receive Telegram updates. Verifies secret header, handles /digest command."""
+    """Receive Telegram updates. Verifies secret header, handles /digest command.
+
+    Returns 404 if Telegram is not configured (webhook_secret absent).
+    Returns 403 on invalid secret token.
+    """
     tg_cfg: TelegramConfig = getattr(request.app.state, "tg_cfg", TelegramConfig("", ""))
     if not tg_cfg.webhook_secret:
         raise HTTPException(status_code=404)
