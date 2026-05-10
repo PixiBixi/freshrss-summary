@@ -36,7 +36,7 @@ from auth import (
     require_auth,
     verify_password,
 )
-from config import load_config
+from config import ConfigDict, load_config
 from db import (
     DEFAULT_DB_URL,
     add_pending_sync,
@@ -123,7 +123,7 @@ cache = Cache()
 
 
 async def _setup_telegram_tasks(
-    bg_tasks: list[asyncio.Task], tg_cfg: TelegramConfig, cfg: dict[str, Any]
+    bg_tasks: list[asyncio.Task], tg_cfg: TelegramConfig, cfg: ConfigDict
 ) -> None:
     """Spawn asyncio background tasks for all Telegram-related periodic jobs."""
     hour = int(cfg.get("telegram", {}).get("digest_hour", 21))
@@ -168,7 +168,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         bg_tasks.append(asyncio.create_task(run_every(_auto_refresh, interval * 60)))
         logger.info("Auto-refresh scheduler started: every %d min", interval)
 
-    tg_cfg = TelegramConfig.from_dict(cfg.get("telegram", {}))
+    tg_cfg = TelegramConfig.from_dict(dict(cfg.get("telegram", {})))
     if tg_cfg.is_configured():
         await _setup_telegram_tasks(bg_tasks, tg_cfg, cfg)
 
@@ -200,9 +200,9 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 # ---------------------------------------------------------------------------
 
 
-def _make_freshrss_client(cfg: dict[str, Any]) -> FreshRSSClient:
+def _make_freshrss_client(cfg: ConfigDict) -> FreshRSSClient:
     """Build a FreshRSSClient from the freshrss section of the config."""
-    fr = cfg["freshrss"]
+    fr = cfg["freshrss"]  # type: ignore[typeddict-item]
     return FreshRSSClient(fr["url"], fr["username"], fr["api_password"])
 
 
@@ -355,7 +355,7 @@ async def mark_read(req: MarkReadRequest) -> dict[str, Any]:
 
 
 def _blocking_fetch_and_score(
-    cfg: dict[str, Any],
+    cfg: ConfigDict,
     topics_cfg: dict[str, Any],
     feed_weights: dict[str, float] | None = None,
     on_progress: Callable[[str], None] | None = None,
@@ -592,7 +592,7 @@ async def refresh_stream() -> StreamingResponse:
 
 def _blocking_rescore_compute(
     raw: list[dict[str, Any]],
-    cfg: dict[str, Any],
+    cfg: ConfigDict,
     topics_cfg: dict[str, Any],
     feed_weights: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:

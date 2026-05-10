@@ -33,6 +33,16 @@ class ArticleDict(TypedDict, total=False):
     _read: bool
 
 
+class SnoozeReminderDict(TypedDict):
+    """Shape of snooze reminder records returned by db.get_due_snoozes()."""
+
+    article_id: str
+    chat_id: str
+    snooze_until: int
+    title: str
+    url: str
+
+
 class DbArticleRow(TypedDict):
     """Shape of rows returned by db.load_for_rescore()."""
 

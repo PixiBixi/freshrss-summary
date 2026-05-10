@@ -1,9 +1,11 @@
 """Unit tests for cli.py — config loading and helper functions."""
 
+from typing import cast
+
 import pytest
 
 import config as config_module
-from config import load_config
+from config import ConfigDict, load_config
 
 # ── ANSI helpers ──────────────────────────────────────────────────────────────
 
@@ -54,9 +56,9 @@ class TestLoadConfig:
         finally:
             config_module.CONFIG_PATH = orig
 
-        assert cfg["freshrss"]["url"] == "https://rss.example.com"
-        assert cfg["freshrss"]["username"] == "myuser"
-        assert cfg["freshrss"]["api_password"] == "mypass"
+        assert cfg["freshrss"]["url"] == "https://rss.example.com"  # type: ignore[typeddict-item]
+        assert cfg["freshrss"]["username"] == "myuser"  # type: ignore[typeddict-item]
+        assert cfg["freshrss"]["api_password"] == "mypass"  # type: ignore[typeddict-item]
 
     def test_missing_url_raises(self, monkeypatch, tmp_path):
         monkeypatch.delenv("FRESHRSS_URL", raising=False)
@@ -97,7 +99,7 @@ class TestLoadConfig:
         finally:
             config_module.CONFIG_PATH = orig
 
-        assert cfg["database"]["url"] == "sqlite+aiosqlite:///test.db"
+        assert cfg["database"]["url"] == "sqlite+aiosqlite:///test.db"  # type: ignore[typeddict-item]
 
     def test_loads_from_yaml_file(self, tmp_path):
         config_file = tmp_path / "config.yaml"
@@ -115,18 +117,21 @@ class TestLoadConfig:
         finally:
             config_module.CONFIG_PATH = orig
 
-        assert cfg["freshrss"]["url"] == "https://from-yaml.com"
-        assert cfg["freshrss"]["username"] == "yamluser"
+        assert cfg["freshrss"]["url"] == "https://from-yaml.com"  # type: ignore[typeddict-item]
+        assert cfg["freshrss"]["username"] == "yamluser"  # type: ignore[typeddict-item]
 
 
 # ── CLI command handlers ───────────────────────────────────────────────────────
 
-_MINIMAL_CFG = {
-    "freshrss": {"url": "http://x", "username": "u", "api_password": "p"},
-    "database": {},
-    "scoring": {"title_weight": 3, "min_score": 1.0},
-    "topics": {},
-}
+_MINIMAL_CFG: ConfigDict = cast(
+    ConfigDict,
+    {
+        "freshrss": {"url": "http://x", "username": "u", "api_password": "p"},
+        "database": {},
+        "scoring": {"title_weight": 3, "min_score": 1.0},
+        "topics": {},
+    },
+)
 
 _DB_STATS = {
     "articles": 5,
@@ -419,7 +424,7 @@ class TestCmdTune:
 
         from cli import cmd_tune
 
-        cfg_no_topics = {**_MINIMAL_CFG, "topics": {}}
+        cfg_no_topics = cast(ConfigDict, {**_MINIMAL_CFG, "topics": {}})
         args = argparse.Namespace(apply=False, limit=None)
         rc = cmd_tune(args, cfg_no_topics)
         assert rc == 1
@@ -433,7 +438,9 @@ class TestCmdTune:
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client.fetch_starred.return_value = []
 
-        cfg_with_topics = {**_MINIMAL_CFG, "topics": {"SRE": {"weight": 1.5, "keywords": ["sre"]}}}
+        cfg_with_topics = cast(
+            ConfigDict, {**_MINIMAL_CFG, "topics": {"SRE": {"weight": 1.5, "keywords": ["sre"]}}}
+        )
         args = argparse.Namespace(apply=False, limit=None)
         from cli import cmd_tune
 
@@ -450,7 +457,9 @@ class TestCmdTune:
         mock_client.__enter__ = MagicMock(side_effect=RuntimeError("oops"))
         mock_client.__exit__ = MagicMock(return_value=False)
 
-        cfg_with_topics = {**_MINIMAL_CFG, "topics": {"SRE": {"weight": 1.5, "keywords": ["sre"]}}}
+        cfg_with_topics = cast(
+            ConfigDict, {**_MINIMAL_CFG, "topics": {"SRE": {"weight": 1.5, "keywords": ["sre"]}}}
+        )
         args = argparse.Namespace(apply=False, limit=None)
         from cli import cmd_tune
 
@@ -502,10 +511,13 @@ class TestCmdDigest:
         from unittest.mock import patch
 
         args = argparse.Namespace(send=True)
-        cfg_with_tg = {
-            **_MINIMAL_CFG,
-            "telegram": {"bot_token": "TOK", "chat_id": "123"},
-        }
+        cfg_with_tg = cast(
+            ConfigDict,
+            {
+                **_MINIMAL_CFG,
+                "telegram": {"bot_token": "TOK", "chat_id": "123"},
+            },
+        )
         from cli import cmd_digest
 
         with patch("cli.asyncio.run", return_value=[]):

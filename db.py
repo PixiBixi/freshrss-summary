@@ -6,6 +6,8 @@ Supported backends (set DATABASE_URL env var or database.url in config.yaml):
   PostgreSQL       : postgresql+asyncpg://user:pass@host/dbname
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import time
@@ -30,6 +32,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection
+
+    from config import ConfigDict
+    from models import ArticleDict, DbArticleRow
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +107,7 @@ users_table = Table(
 _engine: AsyncEngine | None = None
 
 
-def set_engine_for_testing(engine: "AsyncEngine") -> None:
+def set_engine_for_testing(engine: AsyncEngine) -> None:
     """Expose engine injection for tests instead of direct module mutation."""
     global _engine
     _engine = engine
@@ -114,7 +119,7 @@ def get_engine() -> AsyncEngine:
     return _engine
 
 
-async def _run_migrations(conn: "AsyncConnection") -> None:
+async def _run_migrations(conn: AsyncConnection) -> None:
     """Apply additive DDL migrations. Each ALTER is idempotent — duplicate-column errors are expected and swallowed."""
     _MIGRATIONS = [
         ("articles", "content", "ALTER TABLE articles ADD COLUMN content TEXT DEFAULT ''"),
@@ -172,7 +177,7 @@ def _article_to_row(a: dict[str, Any], now: int) -> dict[str, Any]:
     }
 
 
-async def save_articles(articles: list[dict[str, Any]], total_fetched: int) -> None:
+async def save_articles(articles: list[ArticleDict], total_fetched: int) -> None:
     """Replace unread articles with a fresh scored set; purge read articles older than 7 days."""
     now = int(time.time())
     cutoff_read = now - 7 * 86400
@@ -196,7 +201,7 @@ async def save_articles(articles: list[dict[str, Any]], total_fetched: int) -> N
     logger.info("Saved %d articles to DB", len(articles))
 
 
-async def upsert_articles(articles: list[dict[str, Any]]) -> None:
+async def upsert_articles(articles: list[ArticleDict]) -> None:
     """Insert or replace articles by id without wiping the full table."""
     now = int(time.time())
     rows = [_article_to_row(a, now) for a in articles]
@@ -227,7 +232,7 @@ async def bookmark_articles(ids: list[str]) -> None:
             )
 
 
-async def load_articles() -> tuple[list[dict[str, Any]], float | None, int]:
+async def load_articles() -> tuple[list[ArticleDict], float | None, int]:
     """Load scored articles from DB for cache warm-up. Excludes raw content."""
     async with get_engine().connect() as conn:
         rows = (
@@ -278,7 +283,7 @@ async def load_articles() -> tuple[list[dict[str, Any]], float | None, int]:
     return articles, last_refresh, total_fetched
 
 
-async def load_for_rescore() -> list[dict[str, Any]]:
+async def load_for_rescore() -> list[DbArticleRow]:
     """Load unread articles with full content for re-scoring."""
     async with get_engine().connect() as conn:
         rows = (
@@ -322,7 +327,7 @@ async def get_scoring_config() -> dict[str, Any] | None:
 
 
 async def get_or_seed_scoring_config(
-    cfg: dict[str, Any], default_topics: dict[str, Any] | None = None
+    cfg: ConfigDict, default_topics: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """Return scoring topics from DB if present; otherwise seed from cfg and return it.
 
@@ -389,7 +394,7 @@ async def set_articles_read(ids: list[str]) -> None:
     logger.info("Marked %d articles as read in DB", len(ids))
 
 
-async def load_read_articles(days: int = 7) -> list[dict[str, Any]]:
+async def load_read_articles(days: int = 7) -> list[ArticleDict]:
     """Load articles marked as read (for 'show read' toggle)."""
     async with get_engine().connect() as conn:
         q = select(articles_table).where(articles_table.c.read_at.is_not(None))
@@ -588,7 +593,7 @@ async def delete_snooze(article_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def _set_meta(conn: "AsyncConnection", key: str, value: str) -> None:
+async def _set_meta(conn: AsyncConnection, key: str, value: str) -> None:
     """Portable upsert for the meta table (works on SQLite, MySQL, PostgreSQL)."""
     existing = (await conn.execute(select(meta_table.c.key).where(meta_table.c.key == key))).first()
     if existing:

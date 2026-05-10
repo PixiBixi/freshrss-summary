@@ -3,7 +3,7 @@
 import logging
 import os
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 import yaml
 
@@ -18,15 +18,58 @@ class FreshRSSConfig(TypedDict):
     api_password: str
 
 
-def load_raw_config() -> dict[str, Any]:
+class _ServerConfig(TypedDict, total=False):
+    host: str
+    port: int
+    public_url: str
+
+
+class _SchedulerConfig(TypedDict, total=False):
+    interval_minutes: int
+    digest_hour: int
+    timezone: str
+
+
+class _DatabaseConfig(TypedDict, total=False):
+    url: str
+
+
+class _TelegramSection(TypedDict, total=False):
+    bot_token: str
+    chat_id: str
+    webhook_secret: str
+
+
+class _AuthConfig(TypedDict, total=False):
+    secret_key: str
+    admin_password: str
+
+
+class _ScoringSection(TypedDict, total=False):
+    feed_weights: dict[str, float]
+
+
+class ConfigDict(TypedDict, total=False):
+    """Typed shape of the application config (config.yaml + env var overrides)."""
+
+    freshrss: FreshRSSConfig
+    server: _ServerConfig
+    scheduler: _SchedulerConfig
+    database: _DatabaseConfig
+    telegram: _TelegramSection
+    auth: _AuthConfig
+    scoring: _ScoringSection
+
+
+def load_raw_config() -> ConfigDict:
     """Load config.yaml as-is, without env-var overrides or validation. Used during early startup."""
     if not CONFIG_PATH.exists():
-        return {}
+        return cast(ConfigDict, {})
     with CONFIG_PATH.open() as f:
-        return yaml.safe_load(f) or {}
+        return cast(ConfigDict, yaml.safe_load(f) or {})
 
 
-def load_config() -> dict[str, Any]:
+def load_config() -> ConfigDict:
     """
     Load config from config.yaml (if present), then apply env var overrides.
 
@@ -47,7 +90,7 @@ def load_config() -> dict[str, Any]:
         RuntimeError: if FRESHRSS_URL, FRESHRSS_USERNAME, or FRESHRSS_API_PASSWORD
             are missing from both config.yaml and environment variables.
     """
-    cfg: dict = {}
+    cfg: dict[str, Any] = {}
     if CONFIG_PATH.exists():
         with CONFIG_PATH.open() as f:
             cfg = yaml.safe_load(f) or {}
@@ -94,7 +137,7 @@ def load_config() -> dict[str, Any]:
             "Set them in config.yaml or via FRESHRSS_URL / FRESHRSS_USERNAME / FRESHRSS_API_PASSWORD."
         )
 
-    return cfg
+    return cast(ConfigDict, cfg)
 
 
 def get_secret_key_from_config() -> str | None:

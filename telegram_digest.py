@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from models import ArticleDict
+from models import ArticleDict, SnoozeReminderDict
 
 logger = logging.getLogger(__name__)
 
@@ -195,7 +195,7 @@ async def check_trending(
     return new_alerted
 
 
-async def send_snooze_reminders(tg_cfg: TelegramConfig, due: list[dict[str, Any]]) -> list[str]:
+async def send_snooze_reminders(tg_cfg: TelegramConfig, due: list[SnoozeReminderDict]) -> list[str]:
     """Send Telegram reminders for due snooze entries. Returns article_ids sent successfully."""
     if not tg_cfg.is_configured() or not due:
         return []
