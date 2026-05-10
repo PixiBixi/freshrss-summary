@@ -302,7 +302,7 @@ class TestRefreshStream:
                     "freshrss": {"url": "http://x", "username": "u", "api_password": "p"}
                 },
             ),
-            patch("app._get_or_seed_scoring_config", new_callable=AsyncMock, return_value={}),
+            patch("app.get_or_seed_scoring_config", new_callable=AsyncMock, return_value={}),
             patch("app.get_feed_weights", new_callable=AsyncMock, return_value={}),
             patch("app._persist_and_populate", new_callable=AsyncMock),
         ):
@@ -337,7 +337,7 @@ class TestRefreshStream:
                     "freshrss": {"url": "http://x", "username": "u", "api_password": "p"}
                 },
             ),
-            patch("app._get_or_seed_scoring_config", new_callable=AsyncMock, return_value={}),
+            patch("app.get_or_seed_scoring_config", new_callable=AsyncMock, return_value={}),
             patch("app.get_feed_weights", new_callable=AsyncMock, return_value={}),
         ):
             events = []

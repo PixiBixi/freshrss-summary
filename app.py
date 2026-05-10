@@ -52,6 +52,7 @@ from db import (
     get_engine,
     get_feed_weights,
     get_meta,
+    get_or_seed_scoring_config,
     get_pending_sync,
     get_user_hash,
     init_db,
@@ -68,7 +69,7 @@ from db import (
 from freshrss_client import FreshRSSClient
 from models import ArticleDict
 from pipeline import fetch_and_score_iter, rescore_articles
-from scorer import build_topics
+from scorer import DEFAULT_TOPICS, build_topics
 from telegram_digest import (
     TelegramConfig,
     check_trending,
@@ -448,13 +449,6 @@ class MarkReadRequest(BaseModel):
     article_ids: list[str]
 
 
-async def _get_or_seed_scoring_config() -> dict[str, Any]:
-    from db import get_or_seed_scoring_config
-    from scorer import DEFAULT_TOPICS
-
-    return await get_or_seed_scoring_config(load_config(), DEFAULT_TOPICS)
-
-
 @app.post("/api/mark-read", dependencies=[Depends(require_auth)])
 async def mark_read(req: MarkReadRequest) -> dict[str, Any]:
     if not req.article_ids:
@@ -546,7 +540,7 @@ async def _do_fetch_and_score() -> None:
 
     try:
         cfg = load_config()
-        topics_cfg = await _get_or_seed_scoring_config()
+        topics_cfg = await get_or_seed_scoring_config(load_config(), DEFAULT_TOPICS)
         feed_weights = await get_feed_weights()
 
         # Drain outbox: replay mark-as-read calls that failed when FreshRSS was offline
@@ -671,7 +665,7 @@ async def refresh_stream() -> StreamingResponse:
         cache.load_progress = "Démarrage..."
 
         try:
-            topics_cfg = await _get_or_seed_scoring_config()
+            topics_cfg = await get_or_seed_scoring_config(load_config(), DEFAULT_TOPICS)
             feed_weights = await get_feed_weights()
         except Exception as e:
             logger.exception("refresh-stream init failed")
@@ -721,7 +715,7 @@ async def _do_rescore_from_db() -> None:
     try:
         raw = await load_for_rescore()
         cfg = load_config()
-        topics_cfg = await _get_or_seed_scoring_config()
+        topics_cfg = await get_or_seed_scoring_config(load_config(), DEFAULT_TOPICS)
         feed_weights = await get_feed_weights()
         article_dicts = await asyncio.to_thread(
             _blocking_rescore_compute, raw, cfg, topics_cfg, feed_weights
@@ -825,7 +819,7 @@ async def list_feeds() -> dict[str, Any]:
 async def get_scoring() -> dict[str, Any]:
     """Return the active scoring topics config and feed weights (from DB, or seeded from config.yaml)."""
     return {
-        "topics": await _get_or_seed_scoring_config(),
+        "topics": await get_or_seed_scoring_config(load_config(), DEFAULT_TOPICS),
         "feed_weights": await get_feed_weights(),
     }
 
