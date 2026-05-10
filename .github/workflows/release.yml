@@ -58,3 +58,28 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  push-helm:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Set chart version
+        run: |
+          VERSION="${{ needs.release-please.outputs.tag_name }}"
+          sed -i "s/^version: .*/version: ${VERSION#v}/" helm/freshrss-summary/Chart.yaml
+
+      - uses: bsord/helm-push@v4.2.0
+        with:
+          useOCIRegistry: true
+          registry-url: oci://ghcr.io/${{ github.repository_owner }}
+          username: ${{ github.actor }}
+          access-token: ${{ secrets.GITHUB_TOKEN }}
+          chart-folder: helm/freshrss-summary
