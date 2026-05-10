@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/PixiBixi/freshrss-summary/compare/v1.6.0...v1.6.1) (2026-05-10)
+
+
+### Performance Improvements
+
+* **ci:** add GitHub Actions layer cache to Docker build ([9ecc1cc](https://github.com/PixiBixi/freshrss-summary/commit/9ecc1cc7e5767eafded748531faad309194fde76))
+
 ## [1.6.0](https://github.com/PixiBixi/freshrss-summary/compare/v1.5.0...v1.6.0) (2026-05-10)
 
 
