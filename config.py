@@ -3,13 +3,19 @@
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 import yaml
 
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
+
+
+class FreshRSSConfig(TypedDict):
+    url: str
+    username: str
+    api_password: str
 
 
 def load_raw_config() -> dict[str, Any]:

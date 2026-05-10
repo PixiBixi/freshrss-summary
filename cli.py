@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 import yaml
 
-from config import CONFIG_PATH, load_config
+from config import CONFIG_PATH, FreshRSSConfig, load_config
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ def info(msg: str) -> str:
 def make_client(cfg: dict[str, Any]) -> "FreshRSSClient":
     from freshrss_client import FreshRSSClient
 
-    fr = cfg["freshrss"]
+    fr: FreshRSSConfig = cfg["freshrss"]
     return FreshRSSClient(fr["url"], fr["username"], fr["api_password"])
 
 
