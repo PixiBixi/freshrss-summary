@@ -8,10 +8,8 @@ import logging.config
 import os
 import secrets
 import time
-import zoneinfo
-from collections.abc import AsyncGenerator, Callable, Coroutine
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +23,6 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel
 from sqlalchemy import text as sa_text
 from starlette.middleware.gzip import GZipMiddleware
@@ -67,8 +64,11 @@ from db import (
     toggle_bookmark,
 )
 from freshrss_client import FreshRSSClient
+from logging_config import LOGGING_CONFIG
+from metrics import CONTENT_TYPE_LATEST, _get_metrics, _update_prom_cache, generate_latest
 from models import ArticleDict
 from pipeline import fetch_and_score_iter, rescore_articles
+from scheduler import run_daily_at, run_every
 from scorer import DEFAULT_TOPICS, build_topics
 from telegram_digest import (
     TelegramConfig,
@@ -77,107 +77,6 @@ from telegram_digest import (
     send_digest,
     send_snooze_reminders,
 )
-
-# ---------------------------------------------------------------------------
-# Prometheus metrics
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class _Metrics:
-    articles: Gauge
-    last_refresh: Gauge
-    refreshes: Counter
-    refresh_dur: Histogram
-    topic_articles: Gauge
-
-
-_metrics: _Metrics | None = None
-
-
-def _get_metrics() -> _Metrics:
-    """Return the shared Prometheus metrics singleton, creating it lazily on first call."""
-    global _metrics
-    if _metrics is not None:
-        return _metrics
-
-    def _get_or_register_metric(name, factory):  # type: ignore[no-untyped-def]
-        try:
-            return factory()
-        except ValueError:
-            from prometheus_client import REGISTRY
-
-            return REGISTRY._names_to_collectors[name]  # type: ignore[attr-defined]
-
-    _metrics = _Metrics(
-        articles=_get_or_register_metric(
-            "freshrss_articles_total",
-            lambda: Gauge("freshrss_articles_total", "Articles currently in cache"),
-        ),
-        last_refresh=_get_or_register_metric(
-            "freshrss_last_refresh_timestamp_seconds",
-            lambda: Gauge(
-                "freshrss_last_refresh_timestamp_seconds",
-                "Unix timestamp of last successful refresh",
-            ),
-        ),
-        refreshes=_get_or_register_metric(
-            "freshrss_refreshes_total",
-            lambda: Counter("freshrss_refreshes_total", "Successful refreshes since startup"),
-        ),
-        refresh_dur=_get_or_register_metric(
-            "freshrss_refresh_duration_seconds",
-            lambda: Histogram(
-                "freshrss_refresh_duration_seconds",
-                "Refresh duration in seconds",
-                buckets=[2, 5, 15, 30, 60, 120, 300],
-            ),
-        ),
-        topic_articles=_get_or_register_metric(
-            "freshrss_articles_by_topic",
-            lambda: Gauge("freshrss_articles_by_topic", "Articles per topic in cache", ["topic"]),
-        ),
-    )
-    return _metrics
-
-
-def _update_prom_cache() -> None:
-    """Sync Prometheus gauges from current cache state."""
-    m = _get_metrics()
-    m.articles.set(len(cache.articles))
-    if cache.last_refresh:
-        m.last_refresh.set(cache.last_refresh)
-    topic_counts: dict[str, int] = {}
-    for a in cache.articles:
-        for t in a.get("matched_topics", {}):
-            topic_counts[t] = topic_counts.get(t, 0) + 1
-    for topic, count in topic_counts.items():
-        m.topic_articles.labels(topic=topic).set(count)
-
-
-LOG_FMT = "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s"
-LOG_DATE = "%Y-%m-%d %H:%M:%S"
-
-LOGGING_CONFIG = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "default": {"format": LOG_FMT, "datefmt": LOG_DATE},
-    },
-    "handlers": {
-        "default": {
-            "class": "logging.StreamHandler",
-            "formatter": "default",
-            "stream": "ext://sys.stdout",
-        },
-    },
-    "root": {"level": "INFO", "handlers": ["default"]},
-    "loggers": {
-        "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
-        "uvicorn.error": {"handlers": ["default"], "level": "INFO", "propagate": False},
-        "uvicorn.access": {"handlers": ["default"], "level": "INFO", "propagate": False},
-    },
-}
 
 logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
@@ -223,51 +122,18 @@ cache = Cache()
 # ---------------------------------------------------------------------------
 
 
-async def _run_every(
-    coro_fn: Callable[..., Coroutine], interval_seconds: float, *args: Any
-) -> None:
-    """Run coro_fn(*args) at fixed intervals, swallowing non-cancellation exceptions."""
-    while True:
-        await asyncio.sleep(interval_seconds)
-        try:
-            await coro_fn(*args)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("Scheduled task %s failed", coro_fn.__name__)
-
-
-async def _run_daily_at(
-    coro_fn: Callable[..., Coroutine], hour: int, tz_name: str, *args: Any
-) -> None:
-    """Run coro_fn(*args) once per day at the given hour in tz_name timezone."""
-    tz = zoneinfo.ZoneInfo(tz_name)
-    while True:
-        now = datetime.datetime.now(tz)
-        next_run = now.replace(hour=hour, minute=0, second=0, microsecond=0)
-        if next_run <= now:
-            next_run += datetime.timedelta(days=1)
-        await asyncio.sleep((next_run - now).total_seconds())
-        try:
-            await coro_fn(*args)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("Daily task %s failed", coro_fn.__name__)
-
-
 async def _setup_telegram_tasks(
     bg_tasks: list[asyncio.Task], tg_cfg: TelegramConfig, cfg: dict[str, Any]
 ) -> None:
     """Spawn asyncio background tasks for all Telegram-related periodic jobs."""
     hour = int(cfg.get("telegram", {}).get("digest_hour", 21))
     bg_tasks.append(
-        asyncio.create_task(_run_daily_at(_dispatch_daily_digest, hour, "Europe/Paris", tg_cfg))
+        asyncio.create_task(run_daily_at(_dispatch_daily_digest, hour, "Europe/Paris", tg_cfg))
     )
     logger.info("Telegram digest scheduled at %02dh00 Europe/Paris", hour)
-    bg_tasks.append(asyncio.create_task(_run_every(_check_trending, 3600, tg_cfg)))
+    bg_tasks.append(asyncio.create_task(run_every(_check_trending, 3600, tg_cfg)))
     logger.info("Trending topic checker scheduled: every 1h")
-    bg_tasks.append(asyncio.create_task(_run_every(_check_snoozes, 900, tg_cfg)))
+    bg_tasks.append(asyncio.create_task(run_every(_check_snoozes, 900, tg_cfg)))
     logger.info("Snooze checker scheduled: every 15min")
     public_url = cfg.get("server", {}).get("public_url", "")
     if public_url:
@@ -294,12 +160,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             if last_refresh
             else "never",
         )
-    _update_prom_cache()
+    _update_prom_cache(cache.articles, cache.last_refresh)
 
     bg_tasks: list[asyncio.Task] = []
     interval = int(cfg.get("scheduler", {}).get("interval_minutes", 0))
     if interval > 0:
-        bg_tasks.append(asyncio.create_task(_run_every(_auto_refresh, interval * 60)))
+        bg_tasks.append(asyncio.create_task(run_every(_auto_refresh, interval * 60)))
         logger.info("Auto-refresh scheduler started: every %d min", interval)
 
     tg_cfg = TelegramConfig.from_dict(cfg.get("telegram", {}))
@@ -538,7 +404,7 @@ async def _persist_and_populate(
         m = _get_metrics()
         m.refreshes.inc()
         m.refresh_dur.observe(elapsed)
-    _update_prom_cache()
+    _update_prom_cache(cache.articles, cache.last_refresh)
 
 
 async def _do_fetch_and_score() -> None:
@@ -989,7 +855,7 @@ async def health() -> JSONResponse:
 @app.get("/metrics", dependencies=[Depends(require_auth)])
 async def metrics() -> Response:
     """Prometheus metrics scrape endpoint. Requires authentication."""
-    _update_prom_cache()
+    _update_prom_cache(cache.articles, cache.last_refresh)
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
