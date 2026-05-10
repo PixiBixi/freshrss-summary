@@ -100,7 +100,7 @@ def _get_metrics() -> _Metrics:
     if _metrics is not None:
         return _metrics
 
-    def _reg(name, factory):  # type: ignore[no-untyped-def]
+    def _get_or_register_metric(name, factory):  # type: ignore[no-untyped-def]
         try:
             return factory()
         except ValueError:
@@ -109,22 +109,22 @@ def _get_metrics() -> _Metrics:
             return REGISTRY._names_to_collectors[name]  # type: ignore[attr-defined]
 
     _metrics = _Metrics(
-        articles=_reg(
+        articles=_get_or_register_metric(
             "freshrss_articles_total",
             lambda: Gauge("freshrss_articles_total", "Articles currently in cache"),
         ),
-        last_refresh=_reg(
+        last_refresh=_get_or_register_metric(
             "freshrss_last_refresh_timestamp_seconds",
             lambda: Gauge(
                 "freshrss_last_refresh_timestamp_seconds",
                 "Unix timestamp of last successful refresh",
             ),
         ),
-        refreshes=_reg(
+        refreshes=_get_or_register_metric(
             "freshrss_refreshes_total",
             lambda: Counter("freshrss_refreshes_total", "Successful refreshes since startup"),
         ),
-        refresh_dur=_reg(
+        refresh_dur=_get_or_register_metric(
             "freshrss_refresh_duration_seconds",
             lambda: Histogram(
                 "freshrss_refresh_duration_seconds",
@@ -132,7 +132,7 @@ def _get_metrics() -> _Metrics:
                 buckets=[2, 5, 15, 30, 60, 120, 300],
             ),
         ),
-        topic_articles=_reg(
+        topic_articles=_get_or_register_metric(
             "freshrss_articles_by_topic",
             lambda: Gauge("freshrss_articles_by_topic", "Articles per topic in cache", ["topic"]),
         ),
@@ -634,8 +634,8 @@ async def refresh_stream() -> StreamingResponse:
     def _put(event: dict[str, Any]) -> None:
         loop.call_soon_threadsafe(q.put_nowait, event)
 
-    def _worker(topics_cfg: dict[str, Any], feed_weights: dict[str, float]) -> None:
-        # _worker owns is_loading lifecycle from here through finally cleanup.
+    def _sse_refresh_worker(topics_cfg: dict[str, Any], feed_weights: dict[str, float]) -> None:
+        # _sse_refresh_worker owns is_loading lifecycle from here through finally cleanup.
         # Runs in a thread pool — survives SSE client disconnections.
         # Responsible for DB save, cache populate, and clearing is_loading.
         cache.is_loading = True
@@ -691,7 +691,7 @@ async def refresh_stream() -> StreamingResponse:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
             return
 
-        asyncio.create_task(asyncio.to_thread(_worker, topics_cfg, feed_weights))
+        asyncio.create_task(asyncio.to_thread(_sse_refresh_worker, topics_cfg, feed_weights))
         try:
             while True:
                 event = await q.get()
@@ -774,15 +774,12 @@ class BookmarkRequest(BaseModel):
 @app.post("/api/bookmark", dependencies=[Depends(require_auth)])
 async def bookmark(req: BookmarkRequest) -> dict[str, Any]:
     """Toggle bookmark for an article. Returns new bookmark state."""
-    if not any(a["id"] == req.article_id for a in cache.articles):
+    article = next((a for a in cache.articles if a["id"] == req.article_id), None)
+    if article is None:
         raise HTTPException(status_code=404, detail="Article not found")
 
     is_bookmarked = await toggle_bookmark(req.article_id)
-
-    for a in cache.articles:
-        if a["id"] == req.article_id:
-            a["bookmarked"] = is_bookmarked
-            break
+    article["bookmarked"] = is_bookmarked
 
     return {"bookmarked": is_bookmarked}
 

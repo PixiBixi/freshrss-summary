@@ -116,13 +116,17 @@ async def _run_fetch(
 
 
 async def _run_rescore(
-    cfg: dict[str, Any], title_weight: int, min_score: float, save: bool
+    cfg: dict[str, Any], save: bool
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Init DB, fetch topics (DB-first), rescore DB articles, optionally save. Returns (raw, rescored)."""
     from config import DEFAULT_TOPICS
     from db import get_or_seed_scoring_config, load_for_rescore, save_articles
     from pipeline import rescore_articles
     from scorer import build_topics
+
+    scoring_cfg = cfg.get("scoring", {})
+    title_weight = int(scoring_cfg.get("title_weight", 3))
+    min_score = float(scoring_cfg.get("min_score", 1.0))
 
     await _init_db(cfg)
     raw = await load_for_rescore()
@@ -170,7 +174,7 @@ def cmd_check(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
 
     try:
         with make_client(cfg) as client:
-            count = client.ping()
+            count = client.sample_one()
             print(ok(f"Auth OK — reading-list API reachable ({count} article sampled)"))
 
             starred = client.fetch_starred(max_items=10)
@@ -265,14 +269,10 @@ def cmd_rescore(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     """Rescore DB articles with the current config weights."""
     print(f"\n{BOLD}Rescoring from DB{RESET}\n")
 
-    scoring_cfg = cfg.get("scoring", {})
-    title_weight = int(scoring_cfg.get("title_weight", 3))
-    min_score = float(scoring_cfg.get("min_score", 1.0))
+    min_score = float(cfg.get("scoring", {}).get("min_score", 1.0))
 
     try:
-        raw, rescored = asyncio.run(
-            _run_rescore(cfg, title_weight, min_score, save=not args.dry_run)
-        )
+        raw, rescored = asyncio.run(_run_rescore(cfg, save=not args.dry_run))
     except Exception as e:
         logger.exception("rescore: failed")
         print(err(f"Rescore failed: {e}"))
@@ -304,17 +304,26 @@ def cmd_import(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     return _import_file(args, cfg)
 
 
+async def _score_and_import_starred(cfg: dict[str, Any], starred: list, title_weight: int) -> list:
+    """Score starred articles against active topics and upsert+bookmark them in DB. Returns scored list."""
+    from scorer import build_topics, score_articles
+
+    topics = build_topics(await _get_active_topics(cfg))
+    scored = score_articles(starred, topics, title_weight, min_score=0)
+    await _run_import(
+        cfg,
+        [a.to_dict() for a in scored],
+        bookmark_ids=[a.article.id for a in scored],
+    )
+    return scored
+
+
 def _import_starred(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     """Fetch starred items from FreshRSS, score and import into DB + bookmarks."""
     print(f"\n{BOLD}Importing FreshRSS starred articles{RESET}\n")
 
-    scoring_cfg = cfg.get("scoring", {})
-    title_weight = scoring_cfg.get("title_weight", 3)
+    title_weight = cfg.get("scoring", {}).get("title_weight", 3)
     max_items = args.limit or 500
-
-    from scorer import build_topics, score_articles
-
-    topics = build_topics(asyncio.run(_get_active_topics(cfg)))
 
     try:
         with make_client(cfg) as client:
@@ -330,21 +339,18 @@ def _import_starred(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
         return 0
 
     print(ok(f"Fetched {len(starred)} starred articles"))
-    scored = score_articles(starred, topics, title_weight, min_score=0)
 
     if args.dry_run:
+        from scorer import build_topics, score_articles
+
+        topics = build_topics(asyncio.run(_get_active_topics(cfg)))
+        scored = score_articles(starred, topics, title_weight, min_score=0)
         print(warn("--dry-run: not saving to DB"))
         for a in scored[:5]:
             print(f"    [{a.score:.0f}]  {a.article.title[:72]}")
     else:
         try:
-            asyncio.run(
-                _run_import(
-                    cfg,
-                    [a.to_dict() for a in scored],
-                    bookmark_ids=[a.article.id for a in scored],
-                )
-            )
+            scored = asyncio.run(_score_and_import_starred(cfg, starred, title_weight))
             print(ok(f"Imported {len(scored)} articles — all bookmarked"))
         except Exception as e:
             logger.exception("import-starred: DB upsert/bookmark failed")

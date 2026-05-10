@@ -66,7 +66,6 @@ class FreshRSSClient:
             if not token:
                 raise RuntimeError("FreshRSS returned empty CSRF token")
             self._csrf_token = token
-            return token
         return self._csrf_token
 
     # ------------------------------------------------------------------
@@ -197,7 +196,7 @@ class FreshRSSClient:
             categories=categories,
         )
 
-    def ping(self) -> int:
+    def sample_one(self) -> int:
         """Authenticate and fetch one article to verify connectivity. Returns article count sampled (0 or 1)."""
         self._ensure_auth()
         articles, _ = self._fetch_batch(None, 1)
