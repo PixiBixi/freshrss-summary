@@ -3,6 +3,7 @@
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
 
 
-def load_raw_config() -> dict:
+def load_raw_config() -> dict[str, Any]:
     """Load config.yaml as-is, without env-var overrides or validation. Used during early startup."""
     if not CONFIG_PATH.exists():
         return {}
@@ -19,7 +20,7 @@ def load_raw_config() -> dict:
         return yaml.safe_load(f) or {}
 
 
-def load_config() -> dict:
+def load_config() -> dict[str, Any]:
     """
     Load config from config.yaml (if present), then apply env var overrides.
 

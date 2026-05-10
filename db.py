@@ -10,7 +10,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     Column,
@@ -154,7 +154,7 @@ async def init_db(url: str = DEFAULT_DB_URL) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def save_articles(articles: list[dict], total_fetched: int) -> None:
+async def save_articles(articles: list[dict[str, Any]], total_fetched: int) -> None:
     """Replace unread articles with a fresh scored set; purge read articles older than 7 days."""
     now = int(time.time())
     cutoff_read = now - 7 * 86400
@@ -194,7 +194,7 @@ async def save_articles(articles: list[dict], total_fetched: int) -> None:
     logger.info("Saved %d articles to DB", len(articles))
 
 
-async def upsert_articles(articles: list[dict]) -> None:
+async def upsert_articles(articles: list[dict[str, Any]]) -> None:
     """Insert or replace articles by id without wiping the full table."""
     now = int(time.time())
     rows = [
@@ -241,7 +241,7 @@ async def bookmark_articles(ids: list[str]) -> None:
             )
 
 
-async def load_articles() -> tuple[list[dict], float | None, int]:
+async def load_articles() -> tuple[list[dict[str, Any]], float | None, int]:
     """Load scored articles from DB for cache warm-up. Excludes raw content."""
     async with get_engine().connect() as conn:
         rows = (
@@ -292,7 +292,7 @@ async def load_articles() -> tuple[list[dict], float | None, int]:
     return articles, last_refresh, total_fetched
 
 
-async def load_for_rescore() -> list[dict]:
+async def load_for_rescore() -> list[dict[str, Any]]:
     """Load unread articles with full content for re-scoring."""
     async with get_engine().connect() as conn:
         rows = (
@@ -324,7 +324,7 @@ async def load_for_rescore() -> list[dict]:
     ]
 
 
-async def get_scoring_config() -> dict | None:
+async def get_scoring_config() -> dict[str, Any] | None:
     """Return scoring topics config from DB, or None if not yet persisted."""
     async with get_engine().connect() as conn:
         row = (
@@ -335,7 +335,7 @@ async def get_scoring_config() -> dict | None:
     return json.loads(row[0]) if row else None
 
 
-async def get_or_seed_scoring_config(cfg: dict) -> dict:
+async def get_or_seed_scoring_config(cfg: dict[str, Any]) -> dict[str, Any]:
     """Return scoring topics from DB if present; otherwise seed from cfg and return it.
 
     Provides DB-first precedence so both app.py and cli.py agree on active topics.
@@ -350,7 +350,7 @@ async def get_or_seed_scoring_config(cfg: dict) -> dict:
     return topics
 
 
-async def set_scoring_config(topics: dict) -> None:
+async def set_scoring_config(topics: dict[str, Any]) -> None:
     """Persist scoring topics config to DB."""
     async with get_engine().begin() as conn:
         await _set_meta(conn, "scoring_config", json.dumps(topics, ensure_ascii=False))
@@ -403,7 +403,7 @@ async def set_articles_read(ids: list[str]) -> None:
     logger.info("Marked %d articles as read in DB", len(ids))
 
 
-async def load_read_articles(days: int = 7) -> list[dict]:
+async def load_read_articles(days: int = 7) -> list[dict[str, Any]]:
     """Load articles marked as read (for 'show read' toggle)."""
     async with get_engine().connect() as conn:
         q = select(articles_table).where(articles_table.c.read_at.is_not(None))
@@ -579,7 +579,7 @@ async def add_snooze(
         )
 
 
-async def get_due_snoozes(now: int | None = None) -> list[dict]:
+async def get_due_snoozes(now: int | None = None) -> list[dict[str, Any]]:
     """Return snooze entries whose reminder time has passed."""
     if now is None:
         now = int(time.time())

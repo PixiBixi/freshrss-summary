@@ -192,7 +192,7 @@ logger = logging.getLogger(__name__)
 
 class Cache:
     def __init__(self):
-        self.articles: list[dict] = []
+        self.articles: list[dict[str, Any]] = []
         self.all_topics: list[str] = []
         self.total_fetched: int = 0
         self.last_refresh: float | None = None
@@ -204,7 +204,7 @@ class Cache:
         self.trending_alerted: set[tuple[str, int]] = set()
 
     def populate(
-        self, articles: list[dict], last_refresh: float | None, total_fetched: int
+        self, articles: list[dict[str, Any]], last_refresh: float | None, total_fetched: int
     ) -> None:
         self.articles = articles
         self.last_refresh = last_refresh
@@ -255,7 +255,7 @@ async def _run_daily_at(
 
 
 async def _setup_telegram_tasks(
-    bg_tasks: list[asyncio.Task], tg_cfg: TelegramConfig, cfg: dict
+    bg_tasks: list[asyncio.Task], tg_cfg: TelegramConfig, cfg: dict[str, Any]
 ) -> None:
     """Spawn asyncio background tasks for all Telegram-related periodic jobs."""
     hour = int(cfg.get("telegram", {}).get("digest_hour", 21))
@@ -447,7 +447,7 @@ class MarkReadRequest(BaseModel):
     article_ids: list[str]
 
 
-async def _get_or_seed_scoring_config() -> dict:
+async def _get_or_seed_scoring_config() -> dict[str, Any]:
     from db import get_or_seed_scoring_config
 
     return await get_or_seed_scoring_config(load_config())
@@ -483,8 +483,10 @@ async def mark_read(req: MarkReadRequest) -> dict[str, str]:
 
 
 def _fetch_and_score_iter(
-    cfg: dict, topics_cfg: dict, feed_weights: dict[str, float] | None = None
-) -> Iterator[tuple[list[dict], int]]:
+    cfg: dict[str, Any],
+    topics_cfg: dict[str, Any],
+    feed_weights: dict[str, float] | None = None,
+) -> Iterator[tuple[list[dict[str, Any]], int]]:
     """
     Generator: fetch unread articles in batches, score each, yield (scored_batch, cumulative_count).
     Runs in a thread pool (blocking I/O). Callers decide whether to stream or accumulate.
@@ -494,13 +496,13 @@ def _fetch_and_score_iter(
 
 
 def _blocking_fetch_and_score(
-    cfg: dict,
-    topics_cfg: dict,
+    cfg: dict[str, Any],
+    topics_cfg: dict[str, Any],
     feed_weights: dict[str, float] | None = None,
     on_progress: Callable[[str], None] | None = None,
-) -> tuple[list[dict], int]:
+) -> tuple[list[dict[str, Any]], int]:
     """Blocking fetch + score — runs in a thread pool via asyncio.to_thread."""
-    all_articles: list[dict] = []
+    all_articles: list[dict[str, Any]] = []
     total_fetched = 0
 
     for scored_batch, total_fetched in _fetch_and_score_iter(cfg, topics_cfg, feed_weights):
@@ -525,7 +527,7 @@ async def _auto_refresh() -> None:
 
 
 async def _persist_and_populate(
-    article_dicts: list[dict],
+    article_dicts: list[dict[str, Any]],
     total_fetched: int,
     elapsed: float | None = None,
     refresh_time: float | None = None,
@@ -627,14 +629,14 @@ async def refresh_stream() -> StreamingResponse:
     loop = asyncio.get_running_loop()
     q: asyncio.Queue = asyncio.Queue()
 
-    def _put(event: dict) -> None:
+    def _put(event: dict[str, Any]) -> None:
         loop.call_soon_threadsafe(q.put_nowait, event)
 
-    def _worker(topics_cfg: dict, feed_weights: dict[str, float]) -> None:
+    def _worker(topics_cfg: dict[str, Any], feed_weights: dict[str, float]) -> None:
         # Runs in a thread pool — survives SSE client disconnections.
         # Responsible for DB save, cache populate, and clearing is_loading.
         cfg = load_config()
-        all_articles: list[dict] = []
+        all_articles: list[dict[str, Any]] = []
         total_fetched = 0
         _t0 = time.perf_counter()
 
@@ -706,11 +708,11 @@ async def refresh_stream() -> StreamingResponse:
 
 
 def _blocking_rescore_compute(
-    raw: list[dict],
-    cfg: dict,
-    topics_cfg: dict,
+    raw: list[dict[str, Any]],
+    cfg: dict[str, Any],
+    topics_cfg: dict[str, Any],
     feed_weights: dict[str, float] | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """CPU re-scoring of cached articles. Runs in a thread pool via asyncio.to_thread."""
     scoring_cfg = cfg.get("scoring", {})
     title_weight = int(scoring_cfg.get("title_weight", 3))
@@ -894,7 +896,7 @@ async def change_password(req: ChangePasswordRequest, request: Request) -> dict[
 # ---------------------------------------------------------------------------
 
 
-async def _all_articles_for_digest() -> list[dict]:
+async def _all_articles_for_digest() -> list[dict[str, Any]]:
     """Return unread cache articles + articles read in the last 24h (deduplicated)."""
     read_today = await load_read_articles(days=1)
     unread_ids = {a["id"] for a in cache.articles}

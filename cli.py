@@ -8,7 +8,7 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from freshrss_client import FreshRSSClient
@@ -54,7 +54,7 @@ def info(msg: str) -> str:
 # ── Config ─────────────────────────────────────────────────────────────────
 
 
-def make_client(cfg: dict) -> "FreshRSSClient":
+def make_client(cfg: dict[str, Any]) -> "FreshRSSClient":
     from freshrss_client import FreshRSSClient
 
     fr = cfg["freshrss"]
@@ -64,14 +64,14 @@ def make_client(cfg: dict) -> "FreshRSSClient":
 # ── DB helpers (async) ─────────────────────────────────────────────────────
 
 
-async def _init_db(cfg: dict) -> None:
+async def _init_db(cfg: dict[str, Any]) -> None:
     from db import DEFAULT_DB_URL, init_db
 
     db_url = cfg.get("database", {}).get("url", DEFAULT_DB_URL)
     await init_db(db_url)
 
 
-async def _db_stats(cfg: dict) -> dict:
+async def _db_stats(cfg: dict[str, Any]) -> dict[str, Any]:
     from db import get_bookmarked_ids, load_articles
 
     await _init_db(cfg)
@@ -86,7 +86,9 @@ async def _db_stats(cfg: dict) -> dict:
     }
 
 
-async def _run_fetch(cfg: dict, save: bool) -> tuple[list[dict], int, list[tuple[int, int]]]:
+async def _run_fetch(
+    cfg: dict[str, Any], save: bool
+) -> tuple[list[dict[str, Any]], int, list[tuple[int, int]]]:
     """Init DB, fetch topics (DB-first), fetch+score, optionally save. Returns (articles, total_fetched, batch_info)."""
     from db import get_or_seed_scoring_config, save_articles
     from pipeline import fetch_and_score_iter
@@ -96,7 +98,7 @@ async def _run_fetch(cfg: dict, save: bool) -> tuple[list[dict], int, list[tuple
     topics_cfg = await get_or_seed_scoring_config(cfg)
     topics = build_topics(topics_cfg)
 
-    all_articles: list[dict] = []
+    all_articles: list[dict[str, Any]] = []
     batch_info: list[tuple[int, int]] = []
     total_fetched, prev_fetched = 0, 0
 
@@ -113,8 +115,8 @@ async def _run_fetch(cfg: dict, save: bool) -> tuple[list[dict], int, list[tuple
 
 
 async def _run_rescore(
-    cfg: dict, title_weight: int, min_score: float, save: bool
-) -> tuple[list[dict], list[dict]]:
+    cfg: dict[str, Any], title_weight: int, min_score: float, save: bool
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Init DB, fetch topics (DB-first), rescore DB articles, optionally save. Returns (raw, rescored)."""
     from db import get_or_seed_scoring_config, load_for_rescore, save_articles
     from pipeline import rescore_articles
@@ -133,7 +135,7 @@ async def _run_rescore(
 
 
 async def _run_import(
-    cfg: dict, articles: list[dict], bookmark_ids: list[str] | None = None
+    cfg: dict[str, Any], articles: list[dict[str, Any]], bookmark_ids: list[str] | None = None
 ) -> None:
     """Init DB, upsert articles, optionally bookmark them (single DB session)."""
     from db import bookmark_articles, upsert_articles
@@ -144,7 +146,7 @@ async def _run_import(
         await bookmark_articles(bookmark_ids)
 
 
-async def _get_active_topics(cfg: dict) -> dict:
+async def _get_active_topics(cfg: dict[str, Any]) -> dict[str, Any]:
     """Init DB and return active topics (DB-first, YAML fallback)."""
     from db import get_or_seed_scoring_config
 
@@ -155,7 +157,7 @@ async def _get_active_topics(cfg: dict) -> dict:
 # ── Commands ───────────────────────────────────────────────────────────────
 
 
-def cmd_check(args: argparse.Namespace, cfg: dict) -> int:
+def cmd_check(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     """Test FreshRSS connection and DB reachability."""
     fr = cfg["freshrss"]
     print(f"\n{BOLD}FreshRSS connection check{RESET}\n")
@@ -189,7 +191,7 @@ def cmd_check(args: argparse.Namespace, cfg: dict) -> int:
     return 0
 
 
-def cmd_stats(args: argparse.Namespace, cfg: dict) -> int:
+def cmd_stats(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     """Show DB statistics."""
     print(f"\n{BOLD}DB statistics{RESET}\n")
     try:
@@ -218,7 +220,7 @@ def cmd_stats(args: argparse.Namespace, cfg: dict) -> int:
     return 0
 
 
-def cmd_fetch(args: argparse.Namespace, cfg: dict) -> int:
+def cmd_fetch(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     """Fetch unread articles from FreshRSS, score and save to DB."""
     print(f"\n{BOLD}Fetching unread articles{RESET}\n")
 
@@ -256,7 +258,7 @@ def cmd_fetch(args: argparse.Namespace, cfg: dict) -> int:
     return 0
 
 
-def cmd_rescore(args: argparse.Namespace, cfg: dict) -> int:
+def cmd_rescore(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     """Rescore DB articles with the current config weights."""
     print(f"\n{BOLD}Rescoring from DB{RESET}\n")
 
@@ -289,7 +291,7 @@ def cmd_rescore(args: argparse.Namespace, cfg: dict) -> int:
     return 0
 
 
-def cmd_import(args: argparse.Namespace, cfg: dict) -> int:
+def cmd_import(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     """Import articles from a JSON file or from FreshRSS starred."""
     if args.starred:
         return _import_starred(args, cfg)
@@ -299,7 +301,7 @@ def cmd_import(args: argparse.Namespace, cfg: dict) -> int:
     return _import_file(args, cfg)
 
 
-def _import_starred(args: argparse.Namespace, cfg: dict) -> int:
+def _import_starred(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     """Fetch starred items from FreshRSS, score and import into DB + bookmarks."""
     print(f"\n{BOLD}Importing FreshRSS starred articles{RESET}\n")
 
@@ -350,7 +352,7 @@ def _import_starred(args: argparse.Namespace, cfg: dict) -> int:
     return 0
 
 
-def _import_file(args: argparse.Namespace, cfg: dict) -> int:
+def _import_file(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     """Import articles from a JSON file (list of article objects)."""
     path = Path(args.file)
     print(f"\n{BOLD}Importing from {path.name}{RESET}\n")
@@ -416,7 +418,7 @@ def _import_file(args: argparse.Namespace, cfg: dict) -> int:
     return 0
 
 
-def cmd_tune(args: argparse.Namespace, cfg: dict) -> int:
+def cmd_tune(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     """
     Analyze FreshRSS starred articles and suggest weight adjustments.
 
@@ -515,7 +517,7 @@ def cmd_tune(args: argparse.Namespace, cfg: dict) -> int:
     return 0
 
 
-async def _load_articles_for_digest(cfg: dict) -> list[dict]:
+async def _load_articles_for_digest(cfg: dict[str, Any]) -> list[dict[str, Any]]:
     from db import load_articles
 
     await _init_db(cfg)
@@ -523,7 +525,7 @@ async def _load_articles_for_digest(cfg: dict) -> list[dict]:
     return articles
 
 
-def cmd_digest(args: argparse.Namespace, cfg: dict) -> int:
+def cmd_digest(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     """Build and print the Telegram digest from DB articles. Optionally send it."""
     from telegram_digest import build_digest, send_message
 
@@ -556,7 +558,7 @@ def cmd_digest(args: argparse.Namespace, cfg: dict) -> int:
     return 0
 
 
-def _apply_weights(cfg: dict, suggestions: dict) -> None:
+def _apply_weights(cfg: dict[str, Any], suggestions: dict[str, Any]) -> None:
     if not CONFIG_PATH.exists():
         raise FileNotFoundError("config.yaml not found")
     with CONFIG_PATH.open() as f:
