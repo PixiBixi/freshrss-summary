@@ -1,5 +1,6 @@
 """Route handler tests using httpx AsyncClient + ASGITransport."""
 
+import json
 import time
 
 import pytest_asyncio
@@ -264,3 +265,89 @@ class TestApiArticlesFilter:
         resp = await client.get("/api/articles?q=K8s")
         assert resp.status_code == 200
         cache.articles = []
+
+
+# ── /api/refresh/stream ────────────────────────────────────────────────────────
+
+
+class TestRefreshStream:
+    async def test_busy_returns_single_busy_event(self, authed_client):
+        """When is_loading=True, SSE returns a single 'busy' event then closes."""
+        cache.is_loading = True
+        try:
+            events = []
+            async with authed_client.stream("GET", "/api/refresh/stream") as resp:
+                async for line in resp.aiter_lines():
+                    if line.startswith("data: "):
+                        events.append(json.loads(line[6:]))
+            assert len(events) == 1
+            assert events[0]["type"] == "busy"
+        finally:
+            cache.is_loading = False
+
+    async def test_happy_path_streams_progress_article_done(self, authed_client):
+        """Full fetch→score→stream→persist path via mocked dependencies."""
+        from unittest.mock import AsyncMock, patch
+
+        article = dict(_ARTICLE)
+
+        with (
+            patch(
+                "app._fetch_and_score_iter",
+                return_value=iter([([article], 1)]),
+            ),
+            patch(
+                "app.load_config",
+                return_value={
+                    "freshrss": {"url": "http://x", "username": "u", "api_password": "p"}
+                },
+            ),
+            patch("app._get_or_seed_scoring_config", new_callable=AsyncMock, return_value={}),
+            patch("app.get_feed_weights", new_callable=AsyncMock, return_value={}),
+            patch("app._persist_and_populate", new_callable=AsyncMock),
+        ):
+            events = []
+            async with authed_client.stream("GET", "/api/refresh/stream") as resp:
+                async for line in resp.aiter_lines():
+                    if line.startswith("data: "):
+                        evt = json.loads(line[6:])
+                        events.append(evt)
+                        if evt["type"] in ("done", "error"):
+                            break
+
+        types = [e["type"] for e in events]
+        assert "progress" in types
+        assert "article" in types
+        assert "done" in types
+        assert not cache.is_loading
+
+    async def test_worker_exception_sends_error_event(self, authed_client):
+        """When the fetch worker raises, SSE sends an 'error' event and clears is_loading."""
+        from unittest.mock import AsyncMock, patch
+
+        with (
+            patch(
+                "app._fetch_and_score_iter",
+                side_effect=RuntimeError("fetch failed"),
+            ),
+            patch(
+                "app.load_config",
+                return_value={
+                    "freshrss": {"url": "http://x", "username": "u", "api_password": "p"}
+                },
+            ),
+            patch("app._get_or_seed_scoring_config", new_callable=AsyncMock, return_value={}),
+            patch("app.get_feed_weights", new_callable=AsyncMock, return_value={}),
+        ):
+            events = []
+            async with authed_client.stream("GET", "/api/refresh/stream") as resp:
+                async for line in resp.aiter_lines():
+                    if line.startswith("data: "):
+                        evt = json.loads(line[6:])
+                        events.append(evt)
+                        if evt["type"] in ("done", "error"):
+                            break
+
+        types = [e["type"] for e in events]
+        assert "error" in types
+        assert not cache.is_loading
