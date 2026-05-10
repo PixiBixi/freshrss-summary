@@ -10,14 +10,13 @@ import logging.config
 import os
 import secrets
 import time
-from collections.abc import AsyncGenerator, Iterator
+import zoneinfo
+from collections.abc import AsyncGenerator, Callable, Coroutine, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 import yaml
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import (
     HTMLResponse,
@@ -63,7 +62,8 @@ from db import (
     toggle_bookmark,
     upsert_user,
 )
-from freshrss_client import FreshRSSClient, article_from_row
+from freshrss_client import FreshRSSClient
+from models import article_from_row
 from scorer import build_topics, score_articles
 from telegram_digest import check_trending, register_webhook, send_digest, send_snooze_reminders
 
@@ -265,37 +265,49 @@ def _login_rate_limit(ip: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-async def _setup_telegram_scheduler(scheduler: AsyncIOScheduler, tg_cfg: dict, cfg: dict) -> None:
-    """Register all Telegram-related scheduler jobs and webhook."""
+async def _run_every(
+    coro_fn: Callable[..., Coroutine], interval_seconds: float, *args: Any
+) -> None:
+    """Run coro_fn(*args) at fixed intervals, swallowing non-cancellation exceptions."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            await coro_fn(*args)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Scheduled task %s failed", coro_fn.__name__)
+
+
+async def _run_daily_at(
+    coro_fn: Callable[..., Coroutine], hour: int, tz_name: str, *args: Any
+) -> None:
+    """Run coro_fn(*args) once per day at the given hour in tz_name timezone."""
+    tz = zoneinfo.ZoneInfo(tz_name)
+    while True:
+        now = datetime.datetime.now(tz)
+        next_run = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+        if next_run <= now:
+            next_run += datetime.timedelta(days=1)
+        await asyncio.sleep((next_run - now).total_seconds())
+        try:
+            await coro_fn(*args)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Daily task %s failed", coro_fn.__name__)
+
+
+async def _setup_telegram_tasks(bg_tasks: list[asyncio.Task], tg_cfg: dict, cfg: dict) -> None:
+    """Spawn asyncio background tasks for all Telegram-related periodic jobs."""
     hour = int(tg_cfg.get("digest_hour", 21))
-    scheduler.add_job(
-        _dispatch_daily_digest,
-        CronTrigger(hour=hour, minute=0, timezone="Europe/Paris"),
-        args=[tg_cfg],
-        id="daily_digest",
-        max_instances=1,
-        coalesce=True,
+    bg_tasks.append(
+        asyncio.create_task(_run_daily_at(_dispatch_daily_digest, hour, "Europe/Paris", tg_cfg))
     )
     logger.info("Telegram digest scheduled at %02dh00 Europe/Paris", hour)
-    scheduler.add_job(
-        _check_trending,
-        "interval",
-        hours=1,
-        args=[tg_cfg],
-        id="trending_check",
-        max_instances=1,
-        coalesce=True,
-    )
+    bg_tasks.append(asyncio.create_task(_run_every(_check_trending, 3600, tg_cfg)))
     logger.info("Trending topic checker scheduled: every 1h")
-    scheduler.add_job(
-        _check_snoozes,
-        "interval",
-        minutes=15,
-        args=[tg_cfg],
-        id="snooze_check",
-        max_instances=1,
-        coalesce=True,
-    )
+    bg_tasks.append(asyncio.create_task(_run_every(_check_snoozes, 900, tg_cfg)))
     logger.info("Snooze checker scheduled: every 15min")
     public_url = cfg.get("server", {}).get("public_url", "")
     if public_url:
@@ -324,34 +336,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         )
     _update_prom_cache()
 
-    scheduler: AsyncIOScheduler | None = None
+    bg_tasks: list[asyncio.Task] = []
     interval = int(cfg.get("scheduler", {}).get("interval_minutes", 0))
     if interval > 0:
-        scheduler = AsyncIOScheduler(timezone="UTC")
-        scheduler.add_job(
-            _auto_refresh,
-            "interval",
-            minutes=interval,
-            id="auto_refresh",
-            max_instances=1,
-            coalesce=True,
-        )
-        scheduler.start()
+        bg_tasks.append(asyncio.create_task(_run_every(_auto_refresh, interval * 60)))
         logger.info("Auto-refresh scheduler started: every %d min", interval)
 
     tg_cfg = cfg.get("telegram", {})
     if tg_cfg.get("bot_token") and tg_cfg.get("chat_id"):
-        if scheduler is None:
-            scheduler = AsyncIOScheduler(timezone="UTC")
-            scheduler.start()
-        await _setup_telegram_scheduler(scheduler, tg_cfg, cfg)
+        await _setup_telegram_tasks(bg_tasks, tg_cfg, cfg)
 
     app.state.tg_cfg = tg_cfg
 
     yield
 
-    if scheduler and scheduler.running:
-        scheduler.shutdown(wait=False)
+    for task in bg_tasks:
+        task.cancel()
+    await asyncio.gather(*bg_tasks, return_exceptions=True)
 
 
 app = FastAPI(title="FreshRSS Summary", lifespan=lifespan)
