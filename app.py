@@ -11,6 +11,7 @@ import time
 import zoneinfo
 from collections.abc import AsyncGenerator, Callable, Coroutine, Iterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +39,7 @@ from auth import (
     require_auth,
     verify_password,
 )
-from config import DEFAULT_TOPICS, load_config
+from config import load_config
 from db import (
     DEFAULT_DB_URL,
     add_pending_sync,
@@ -52,7 +53,6 @@ from db import (
     get_feed_weights,
     get_meta,
     get_pending_sync,
-    get_scoring_config,
     get_user_hash,
     init_db,
     load_articles,
@@ -81,74 +81,76 @@ from telegram_digest import (
 # ---------------------------------------------------------------------------
 
 
-def _make_prom_metrics() -> tuple:
-    """Create Prometheus metric objects, guarded against duplicate-registration on test re-import."""
-    try:
-        articles = Gauge("freshrss_articles_total", "Articles currently in cache")
-    except ValueError:
-        from prometheus_client import REGISTRY
+@dataclass
+class _Metrics:
+    articles: Gauge
+    last_refresh: Gauge
+    refreshes: Counter
+    refresh_dur: Histogram
+    topic_articles: Gauge
 
-        articles = REGISTRY._names_to_collectors.get("freshrss_articles_total")  # type: ignore[attr-defined]
 
-    try:
-        last_refresh = Gauge(
-            "freshrss_last_refresh_timestamp_seconds", "Unix timestamp of last successful refresh"
-        )
-    except ValueError:
-        from prometheus_client import REGISTRY
+_metrics: _Metrics | None = None
 
-        last_refresh = REGISTRY._names_to_collectors.get("freshrss_last_refresh_timestamp_seconds")  # type: ignore[attr-defined]
 
-    try:
-        refreshes = Counter("freshrss_refreshes_total", "Successful refreshes since startup")
-    except ValueError:
-        from prometheus_client import REGISTRY
+def _get_metrics() -> _Metrics:
+    """Return the shared Prometheus metrics singleton, creating it lazily on first call."""
+    global _metrics
+    if _metrics is not None:
+        return _metrics
 
-        refreshes = REGISTRY._names_to_collectors.get("freshrss_refreshes_total")  # type: ignore[attr-defined]
+    def _reg(name, factory):  # type: ignore[no-untyped-def]
+        try:
+            return factory()
+        except ValueError:
+            from prometheus_client import REGISTRY
 
-    try:
-        refresh_dur = Histogram(
+            return REGISTRY._names_to_collectors[name]  # type: ignore[attr-defined]
+
+    _metrics = _Metrics(
+        articles=_reg(
+            "freshrss_articles_total",
+            lambda: Gauge("freshrss_articles_total", "Articles currently in cache"),
+        ),
+        last_refresh=_reg(
+            "freshrss_last_refresh_timestamp_seconds",
+            lambda: Gauge(
+                "freshrss_last_refresh_timestamp_seconds",
+                "Unix timestamp of last successful refresh",
+            ),
+        ),
+        refreshes=_reg(
+            "freshrss_refreshes_total",
+            lambda: Counter("freshrss_refreshes_total", "Successful refreshes since startup"),
+        ),
+        refresh_dur=_reg(
             "freshrss_refresh_duration_seconds",
-            "Refresh duration in seconds",
-            buckets=[2, 5, 15, 30, 60, 120, 300],
-        )
-    except ValueError:
-        from prometheus_client import REGISTRY
-
-        refresh_dur = REGISTRY._names_to_collectors.get("freshrss_refresh_duration_seconds")  # type: ignore[attr-defined]
-
-    try:
-        topic_articles = Gauge(
-            "freshrss_articles_by_topic", "Articles per topic in cache", ["topic"]
-        )
-    except ValueError:
-        from prometheus_client import REGISTRY
-
-        topic_articles = REGISTRY._names_to_collectors.get("freshrss_articles_by_topic")  # type: ignore[attr-defined]
-
-    return articles, last_refresh, refreshes, refresh_dur, topic_articles
-
-
-(
-    _prom_articles,
-    _prom_last_refresh,
-    _prom_refreshes,
-    _prom_refresh_dur,
-    _prom_topic_articles,
-) = _make_prom_metrics()
+            lambda: Histogram(
+                "freshrss_refresh_duration_seconds",
+                "Refresh duration in seconds",
+                buckets=[2, 5, 15, 30, 60, 120, 300],
+            ),
+        ),
+        topic_articles=_reg(
+            "freshrss_articles_by_topic",
+            lambda: Gauge("freshrss_articles_by_topic", "Articles per topic in cache", ["topic"]),
+        ),
+    )
+    return _metrics
 
 
 def _update_prom_cache() -> None:
     """Sync Prometheus gauges from current cache state."""
-    _prom_articles.set(len(cache.articles))
+    m = _get_metrics()
+    m.articles.set(len(cache.articles))
     if cache.last_refresh:
-        _prom_last_refresh.set(cache.last_refresh)
+        m.last_refresh.set(cache.last_refresh)
     topic_counts: dict[str, int] = {}
     for a in cache.articles:
         for t in a.get("matched_topics", {}):
             topic_counts[t] = topic_counts.get(t, 0) + 1
     for topic, count in topic_counts.items():
-        _prom_topic_articles.labels(topic=topic).set(count)
+        m.topic_articles.labels(topic=topic).set(count)
 
 
 LOG_FMT = "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s"
@@ -311,11 +313,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await asyncio.gather(*bg_tasks, return_exceptions=True)
 
 
-_SESSION_SECRET = get_secret_key()
+class _LazySessionMiddleware(SessionMiddleware):
+    """Read the session secret lazily when the middleware stack is first built, not at import time."""
+
+    def __init__(self, app: Any) -> None:
+        super().__init__(app, secret_key=get_secret_key())
+
 
 app = FastAPI(title="FreshRSS Summary", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
-app.add_middleware(SessionMiddleware, secret_key=_SESSION_SECRET)
+app.add_middleware(_LazySessionMiddleware)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
@@ -441,13 +448,9 @@ class MarkReadRequest(BaseModel):
 
 
 async def _get_or_seed_scoring_config() -> dict:
-    stored = await get_scoring_config()
-    if stored is not None:
-        return stored
-    cfg = load_config()
-    topics = cfg.get("topics") or DEFAULT_TOPICS
-    await set_scoring_config(topics)
-    return topics
+    from db import get_or_seed_scoring_config
+
+    return await get_or_seed_scoring_config(load_config())
 
 
 @app.post("/api/mark-read", dependencies=[Depends(require_auth)])
@@ -536,8 +539,9 @@ async def _persist_and_populate(
         article_dicts, refresh_time if refresh_time is not None else time.time(), total_fetched
     )
     if elapsed is not None:
-        _prom_refreshes.inc()
-        _prom_refresh_dur.observe(elapsed)
+        m = _get_metrics()
+        m.refreshes.inc()
+        m.refresh_dur.observe(elapsed)
     _update_prom_cache()
 
 
