@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.6.0](https://github.com/PixiBixi/freshrss-summary/compare/v1.5.0...v1.6.0) (2026-05-10)
+
+
+### Features
+
+* **deps:** pin all transitive dependencies in uv.lock ([4e7df71](https://github.com/PixiBixi/freshrss-summary/commit/4e7df710c7bd18acb4bd7074bade43bb76f067b8))
+* **tests:** add CLI handler and route tests for coverage gaps ([03f4ecd](https://github.com/PixiBixi/freshrss-summary/commit/03f4ecd6bf8bfebfd6027a1ef1971bf55054c0d2))
+* **types:** add ArticleDict TypedDict and update ScoredArticle.to_dict return type ([3330b6c](https://github.com/PixiBixi/freshrss-summary/commit/3330b6cf34981bc295c7bfd524ae23e59bf84aad))
+* **types:** propagate ConfigDict across app, cli, db and telegram_digest ([38eba67](https://github.com/PixiBixi/freshrss-summary/commit/38eba671752c1465d49a18ecf13084dec1642dc6))
+
+
+### Bug Fixes
+
+* **app:** lazy-evaluate load_config() in get_scoring to avoid crash without credentials ([a956680](https://github.com/PixiBixi/freshrss-summary/commit/a956680f20b98220867caea53ddd688d9afb28ae))
+* apply quick-win review findings from holistic review ([dd009aa](https://github.com/PixiBixi/freshrss-summary/commit/dd009aa35b3ac5873e9ee1a4dbd7e916cfd83e39))
+* **app:** remove require_auth from /api/status (public cache endpoint) ([70aa690](https://github.com/PixiBixi/freshrss-summary/commit/70aa690306915cce1dadb6e9bb075383d84dc2f6))
+* **auth:** protect /api/status; drop unused dep pins; rename _run_ helpers ([61c0fdc](https://github.com/PixiBixi/freshrss-summary/commit/61c0fdc465023d0032a1392bcd5851461507873e))
+* **db:** raise on unexpected migration errors; remove DEFAULT_TOPICS import; extract _article_to_row helper ([2dce77b](https://github.com/PixiBixi/freshrss-summary/commit/2dce77be474b168c8d020e4ec0b23b394601f38a))
+* **deps:** add missing itsdangerous dependency for SessionMiddleware ([7f95783](https://github.com/PixiBixi/freshrss-summary/commit/7f95783edee78acb17044509baaf706208809b39))
+* **deps:** add missing python-multipart for Form data support ([b3f6559](https://github.com/PixiBixi/freshrss-summary/commit/b3f6559b473b703fc9bdad3cb14646303d88359f))
+* **error-boundaries:** add logger.exception() at async boundaries and improve exception specificity ([f255d91](https://github.com/PixiBixi/freshrss-summary/commit/f255d91155285333982f3a8ea539790d96a2cf5e))
+* **tests:** close unawaited coroutines in asyncio.run mocks to silence RuntimeWarnings ([c9e10ef](https://github.com/PixiBixi/freshrss-summary/commit/c9e10ef7e0dc842ca4687d2341de4a30942f903f))
+* type annotations, docstrings, and logic clarity ([4624d4b](https://github.com/PixiBixi/freshrss-summary/commit/4624d4b45c2b6b5297f40bba4e5baf7db07618aa))
+* **types,tests:** fix bare dict annotations and add pipeline/endpoint tests ([da7fa50](https://github.com/PixiBixi/freshrss-summary/commit/da7fa503ef45324be265734e875cdf50279be902))
+* **types:** add typed annotations to remaining bare dict sites ([2d41b7f](https://github.com/PixiBixi/freshrss-summary/commit/2d41b7f1a445183f80afaafcb52d2d9950d659f1))
+* **types:** annotate bare dict → dict[str, Any] throughout codebase ([e6084b7](https://github.com/PixiBixi/freshrss-summary/commit/e6084b7983e81c63e9e6cf1d1a265664d6910a4e))
+* **types:** parametrize bare dict annotations in scorer, freshrss_client, telegram_digest ([4ccc605](https://github.com/PixiBixi/freshrss-summary/commit/4ccc605fee8de3e249116d0120a18090c7928fe1))
+
 ## [1.5.0](https://github.com/PixiBixi/freshrss-summary/compare/v1.4.1...v1.5.0) (2026-05-10)
 
 
