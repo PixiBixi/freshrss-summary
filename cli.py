@@ -86,32 +86,70 @@ async def _db_stats(cfg: dict) -> dict:
     }
 
 
-async def _save_to_db(cfg: dict, articles: list[dict], total_fetched: int) -> None:
-    from db import save_articles
+async def _run_fetch(cfg: dict, save: bool) -> tuple[list[dict], int, list[tuple[int, int]]]:
+    """Init DB, fetch topics (DB-first), fetch+score, optionally save. Returns (articles, total_fetched, batch_info)."""
+    from db import get_or_seed_scoring_config, save_articles
+    from pipeline import fetch_and_score_iter
+    from scorer import build_topics
 
     await _init_db(cfg)
-    await save_articles(articles, total_fetched)
+    topics_cfg = await get_or_seed_scoring_config(cfg)
+    topics = build_topics(topics_cfg)
+
+    all_articles: list[dict] = []
+    batch_info: list[tuple[int, int]] = []
+    total_fetched, prev_fetched = 0, 0
+
+    for scored_batch, total_fetched in fetch_and_score_iter(cfg, topics):
+        batch_count = total_fetched - prev_fetched
+        prev_fetched = total_fetched
+        batch_info.append((batch_count, len(scored_batch)))
+        all_articles.extend(scored_batch)
+
+    if save and all_articles:
+        await save_articles(all_articles, total_fetched)
+
+    return all_articles, total_fetched, batch_info
 
 
-async def _load_for_rescore(cfg: dict) -> list[dict]:
-    from db import load_for_rescore
+async def _run_rescore(
+    cfg: dict, title_weight: int, min_score: float, save: bool
+) -> tuple[list[dict], list[dict]]:
+    """Init DB, fetch topics (DB-first), rescore DB articles, optionally save. Returns (raw, rescored)."""
+    from db import get_or_seed_scoring_config, load_for_rescore, save_articles
+    from pipeline import rescore_articles
+    from scorer import build_topics
 
     await _init_db(cfg)
-    return await load_for_rescore()
+    raw = await load_for_rescore()
+    if not raw:
+        return [], []
+    topics_cfg = await get_or_seed_scoring_config(cfg)
+    topics = build_topics(topics_cfg)
+    rescored = rescore_articles(raw, topics, title_weight, min_score)
+    if save:
+        await save_articles(rescored, len(raw))
+    return raw, rescored
 
 
-async def _upsert_articles(cfg: dict, articles: list[dict]) -> None:
-    from db import upsert_articles
+async def _run_import(
+    cfg: dict, articles: list[dict], bookmark_ids: list[str] | None = None
+) -> None:
+    """Init DB, upsert articles, optionally bookmark them (single DB session)."""
+    from db import bookmark_articles, upsert_articles
 
     await _init_db(cfg)
     await upsert_articles(articles)
+    if bookmark_ids:
+        await bookmark_articles(bookmark_ids)
 
 
-async def _bookmark_all(cfg: dict, ids: list[str]) -> None:
-    from db import bookmark_articles
+async def _get_active_topics(cfg: dict) -> dict:
+    """Init DB and return active topics (DB-first, YAML fallback)."""
+    from db import get_or_seed_scoring_config
 
     await _init_db(cfg)
-    await bookmark_articles(ids)
+    return await get_or_seed_scoring_config(cfg)
 
 
 # ── Commands ───────────────────────────────────────────────────────────────
@@ -186,27 +224,17 @@ def cmd_fetch(args: argparse.Namespace, cfg: dict) -> int:
 
     min_score = float(cfg.get("scoring", {}).get("min_score", 1.0))
 
-    from pipeline import fetch_and_score_iter
-    from scorer import build_topics
-
-    topics = build_topics(cfg.get("topics", {}))
-    if not topics:
-        print(warn("No topics configured — articles will score 0"))
-
-    all_articles: list[dict] = []
-    total_fetched = 0
-    prev_fetched = 0
-
     try:
-        for scored_batch, total_fetched in fetch_and_score_iter(cfg, topics):
-            batch_count = total_fetched - prev_fetched
-            prev_fetched = total_fetched
-            print(info(f"Batch: {batch_count} fetched, {len(scored_batch)} relevant"))
-            all_articles.extend(scored_batch)
+        all_articles, total_fetched, batch_info = asyncio.run(
+            _run_fetch(cfg, save=not args.dry_run)
+        )
     except Exception as e:
-        logger.exception("fetch: FreshRSS fetch failed")
+        logger.exception("fetch: failed")
         print(err(f"Fetch error: {e}"))
         return 1
+
+    for batch_count, relevant in batch_info:
+        print(info(f"Batch: {batch_count} fetched, {relevant} relevant"))
 
     if total_fetched == 0:
         print(warn("No unread articles"))
@@ -222,13 +250,7 @@ def cmd_fetch(args: argparse.Namespace, cfg: dict) -> int:
             for a in all_articles[:5]:
                 print(f"    [{a['score']:.0f}]  {a['title'][:72]}")
     else:
-        try:
-            asyncio.run(_save_to_db(cfg, all_articles, total_fetched))
-            print(ok("Saved to DB"))
-        except Exception as e:
-            logger.exception("fetch: DB save failed")
-            print(err(f"DB save failed: {e}"))
-            return 1
+        print(ok("Saved to DB"))
 
     print()
     return 0
@@ -242,16 +264,13 @@ def cmd_rescore(args: argparse.Namespace, cfg: dict) -> int:
     title_weight = int(scoring_cfg.get("title_weight", 3))
     min_score = float(scoring_cfg.get("min_score", 1.0))
 
-    from pipeline import rescore_articles
-    from scorer import build_topics
-
-    topics = build_topics(cfg.get("topics", {}))
-
     try:
-        raw = asyncio.run(_load_for_rescore(cfg))
+        raw, rescored = asyncio.run(
+            _run_rescore(cfg, title_weight, min_score, save=not args.dry_run)
+        )
     except Exception as e:
-        logger.exception("rescore: DB load failed")
-        print(err(f"DB load failed: {e}"))
+        logger.exception("rescore: failed")
+        print(err(f"Rescore failed: {e}"))
         return 1
 
     if not raw:
@@ -259,19 +278,12 @@ def cmd_rescore(args: argparse.Namespace, cfg: dict) -> int:
         return 0
 
     print(info(f"Rescoring {len(raw)} articles..."))
-    rescored = rescore_articles(raw, topics, title_weight, min_score)
     print(ok(f"{len(rescored)} articles above min_score={min_score}"))
 
     if args.dry_run:
         print(warn("--dry-run: not saving to DB"))
     else:
-        try:
-            asyncio.run(_save_to_db(cfg, rescored, len(raw)))
-            print(ok("Saved to DB"))
-        except Exception as e:
-            logger.exception("rescore: DB save failed")
-            print(err(f"DB save failed: {e}"))
-            return 1
+        print(ok("Saved to DB"))
 
     print()
     return 0
@@ -297,7 +309,7 @@ def _import_starred(args: argparse.Namespace, cfg: dict) -> int:
 
     from scorer import build_topics, score_articles
 
-    topics = build_topics(cfg.get("topics", {}))
+    topics = build_topics(asyncio.run(_get_active_topics(cfg)))
 
     try:
         with make_client(cfg) as client:
@@ -321,9 +333,13 @@ def _import_starred(args: argparse.Namespace, cfg: dict) -> int:
             print(f"    [{a.score:.0f}]  {a.article.title[:72]}")
     else:
         try:
-            dicts = [a.to_dict() for a in scored]
-            asyncio.run(_upsert_articles(cfg, dicts))
-            asyncio.run(_bookmark_all(cfg, [a.article.id for a in scored]))
+            asyncio.run(
+                _run_import(
+                    cfg,
+                    [a.to_dict() for a in scored],
+                    bookmark_ids=[a.article.id for a in scored],
+                )
+            )
             print(ok(f"Imported {len(scored)} articles — all bookmarked"))
         except Exception as e:
             logger.exception("import-starred: DB upsert/bookmark failed")
@@ -380,7 +396,7 @@ def _import_file(args: argparse.Namespace, cfg: dict) -> int:
 
     scoring_cfg = cfg.get("scoring", {})
     title_weight = scoring_cfg.get("title_weight", 3)
-    topics = build_topics(cfg.get("topics", {}))
+    topics = build_topics(asyncio.run(_get_active_topics(cfg)))
     scored = score_articles(articles, topics, title_weight, min_score=0)
 
     if args.dry_run:
@@ -389,7 +405,7 @@ def _import_file(args: argparse.Namespace, cfg: dict) -> int:
             print(f"    [{a.score:.0f}]  {a.article.title[:72]}")
     else:
         try:
-            asyncio.run(_upsert_articles(cfg, [a.to_dict() for a in scored]))
+            asyncio.run(_run_import(cfg, [a.to_dict() for a in scored]))
             print(ok(f"Imported {len(scored)} articles"))
         except Exception as e:
             logger.exception("import-file: DB upsert failed")
@@ -412,7 +428,7 @@ def cmd_tune(args: argparse.Namespace, cfg: dict) -> int:
 
     from scorer import analyze_favorites, build_topics
 
-    topics = build_topics(cfg.get("topics", {}))
+    topics = build_topics(asyncio.run(_get_active_topics(cfg)))
     max_items = args.limit or 200
 
     if not topics:

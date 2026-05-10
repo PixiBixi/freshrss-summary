@@ -335,6 +335,21 @@ async def get_scoring_config() -> dict | None:
     return json.loads(row[0]) if row else None
 
 
+async def get_or_seed_scoring_config(cfg: dict) -> dict:
+    """Return scoring topics from DB if present; otherwise seed from cfg and return it.
+
+    Provides DB-first precedence so both app.py and cli.py agree on active topics.
+    """
+    from config import DEFAULT_TOPICS
+
+    stored = await get_scoring_config()
+    if stored is not None:
+        return stored
+    topics = cfg.get("topics") or DEFAULT_TOPICS
+    await set_scoring_config(topics)
+    return topics
+
+
 async def set_scoring_config(topics: dict) -> None:
     """Persist scoring topics config to DB."""
     async with get_engine().begin() as conn:
