@@ -3,7 +3,7 @@
 import pytest
 
 import config as config_module
-from app import hash_password, verify_password
+from auth import hash_password, verify_password
 from config import load_config
 
 # ── Password hashing ──────────────────────────────────────────────────────────

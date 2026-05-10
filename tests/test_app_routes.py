@@ -49,7 +49,7 @@ async def authed_client(db_engine):
     """Client with an authenticated session via login."""
     import os
 
-    from app import hash_password
+    from auth import hash_password
     from db import upsert_user
 
     await upsert_user("admin", hash_password("testpass"))
@@ -184,7 +184,7 @@ class TestLogin:
     async def test_login_success_redirects(self, db_engine):
         import os
 
-        from app import hash_password
+        from auth import hash_password
         from db import upsert_user
 
         await upsert_user("admin", hash_password("testpass"))
@@ -197,7 +197,7 @@ class TestLogin:
     async def test_login_wrong_password(self, db_engine):
         import os
 
-        from app import hash_password
+        from auth import hash_password
         from db import upsert_user
 
         await upsert_user("admin", hash_password("testpass"))
