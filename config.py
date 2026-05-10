@@ -90,6 +90,11 @@ def load_config() -> dict:
     return cfg
 
 
+def get_secret_key_from_config() -> str | None:
+    """Return the auth.secret_key value from config.yaml, or None if absent."""
+    return load_raw_config().get("auth", {}).get("secret_key") or None
+
+
 DEFAULT_TOPICS: dict = {
     "SRE": {
         "weight": 1.5,

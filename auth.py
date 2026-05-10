@@ -9,7 +9,7 @@ import time
 
 from fastapi import HTTPException, Request
 
-from config import CONFIG_PATH, load_raw_config
+from config import CONFIG_PATH, get_secret_key_from_config
 from db import has_users, upsert_user
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ def get_secret_key() -> str:
     """Return secret key for session signing. Precedence: env > config > random (warns)."""
     if v := os.environ.get("SECRET_KEY"):
         return v
-    if sk := load_raw_config().get("auth", {}).get("secret_key"):
+    if sk := get_secret_key_from_config():
         return sk
     # No key configured: derive a stable key from the config path so sessions
     # survive restarts, but document that this is not cryptographically ideal.

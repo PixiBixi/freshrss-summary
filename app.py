@@ -80,17 +80,62 @@ from telegram_digest import (
 # Prometheus metrics
 # ---------------------------------------------------------------------------
 
-_prom_articles = Gauge("freshrss_articles_total", "Articles currently in cache")
-_prom_last_refresh = Gauge(
-    "freshrss_last_refresh_timestamp_seconds", "Unix timestamp of last successful refresh"
-)
-_prom_refreshes = Counter("freshrss_refreshes_total", "Successful refreshes since startup")
-_prom_refresh_dur = Histogram(
-    "freshrss_refresh_duration_seconds",
-    "Refresh duration in seconds",
-    buckets=[2, 5, 15, 30, 60, 120, 300],
-)
-_prom_topic_articles = Gauge("freshrss_articles_by_topic", "Articles per topic in cache", ["topic"])
+
+def _make_prom_metrics() -> tuple:
+    """Create Prometheus metric objects, guarded against duplicate-registration on test re-import."""
+    try:
+        articles = Gauge("freshrss_articles_total", "Articles currently in cache")
+    except ValueError:
+        from prometheus_client import REGISTRY
+
+        articles = REGISTRY._names_to_collectors.get("freshrss_articles_total")  # type: ignore[attr-defined]
+
+    try:
+        last_refresh = Gauge(
+            "freshrss_last_refresh_timestamp_seconds", "Unix timestamp of last successful refresh"
+        )
+    except ValueError:
+        from prometheus_client import REGISTRY
+
+        last_refresh = REGISTRY._names_to_collectors.get("freshrss_last_refresh_timestamp_seconds")  # type: ignore[attr-defined]
+
+    try:
+        refreshes = Counter("freshrss_refreshes_total", "Successful refreshes since startup")
+    except ValueError:
+        from prometheus_client import REGISTRY
+
+        refreshes = REGISTRY._names_to_collectors.get("freshrss_refreshes_total")  # type: ignore[attr-defined]
+
+    try:
+        refresh_dur = Histogram(
+            "freshrss_refresh_duration_seconds",
+            "Refresh duration in seconds",
+            buckets=[2, 5, 15, 30, 60, 120, 300],
+        )
+    except ValueError:
+        from prometheus_client import REGISTRY
+
+        refresh_dur = REGISTRY._names_to_collectors.get("freshrss_refresh_duration_seconds")  # type: ignore[attr-defined]
+
+    try:
+        topic_articles = Gauge(
+            "freshrss_articles_by_topic", "Articles per topic in cache", ["topic"]
+        )
+    except ValueError:
+        from prometheus_client import REGISTRY
+
+        topic_articles = REGISTRY._names_to_collectors.get("freshrss_articles_by_topic")  # type: ignore[attr-defined]
+
+    return articles, last_refresh, refreshes, refresh_dur, topic_articles
+
+
+(
+    _prom_articles,
+    _prom_last_refresh,
+    _prom_refreshes,
+    _prom_refresh_dur,
+    _prom_topic_articles,
+) = _make_prom_metrics()
 
 
 def _update_prom_cache() -> None:
@@ -266,9 +311,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await asyncio.gather(*bg_tasks, return_exceptions=True)
 
 
+_SESSION_SECRET = get_secret_key()
+
 app = FastAPI(title="FreshRSS Summary", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
-app.add_middleware(SessionMiddleware, secret_key=get_secret_key())
+app.add_middleware(SessionMiddleware, secret_key=_SESSION_SECRET)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
@@ -444,14 +491,18 @@ def _fetch_and_score_iter(
 
 
 def _blocking_fetch_and_score(
-    cfg: dict, topics_cfg: dict, feed_weights: dict[str, float] | None = None
+    cfg: dict,
+    topics_cfg: dict,
+    feed_weights: dict[str, float] | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> tuple[list[dict], int]:
     """Blocking fetch + score — runs in a thread pool via asyncio.to_thread."""
     all_articles: list[dict] = []
     total_fetched = 0
 
     for scored_batch, total_fetched in _fetch_and_score_iter(cfg, topics_cfg, feed_weights):
-        cache.load_progress = f"Récupération : {total_fetched} articles..."
+        if on_progress:
+            on_progress(f"Récupération : {total_fetched} articles...")
         all_articles.extend(scored_batch)
 
     if total_fetched == 0:
@@ -519,7 +570,11 @@ async def _do_fetch_and_score() -> None:
                 logger.exception("Pending sync flush failed, will retry on next refresh")
 
         article_dicts, total_fetched = await asyncio.to_thread(
-            _blocking_fetch_and_score, cfg, topics_cfg, feed_weights
+            _blocking_fetch_and_score,
+            cfg,
+            topics_cfg,
+            feed_weights,
+            lambda msg: setattr(cache, "load_progress", msg),
         )
         if total_fetched == 0:
             cache.load_progress = "Aucun article non lu récupéré — DB inchangée"
@@ -581,8 +636,9 @@ async def refresh_stream() -> StreamingResponse:
 
         try:
             for scored_batch, total_fetched in _fetch_and_score_iter(cfg, topics_cfg, feed_weights):
-                cache.load_progress = f"Récupération : {total_fetched} articles..."
-                _put({"type": "progress", "message": cache.load_progress})
+                msg = f"Récupération : {total_fetched} articles..."
+                cache.load_progress = msg
+                _put({"type": "progress", "message": msg})
                 for d in scored_batch:
                     all_articles.append(d)
                     _put({"type": "article", "article": d})
