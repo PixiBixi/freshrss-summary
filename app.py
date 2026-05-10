@@ -479,6 +479,26 @@ async def _auto_refresh() -> None:
     await _do_fetch_and_score()
 
 
+async def _persist_and_populate(
+    article_dicts: list[dict],
+    total_fetched: int,
+    elapsed: float | None = None,
+    refresh_time: float | None = None,
+) -> None:
+    """Save articles to DB, reconcile bookmarks, populate cache, update Prometheus."""
+    await save_articles(article_dicts, total_fetched)
+    bookmarked = await get_bookmarked_ids()
+    for a in article_dicts:
+        a["bookmarked"] = a["id"] in bookmarked
+    cache.populate(
+        article_dicts, refresh_time if refresh_time is not None else time.time(), total_fetched
+    )
+    if elapsed is not None:
+        _prom_refreshes.inc()
+        _prom_refresh_dur.observe(elapsed)
+    _update_prom_cache()
+
+
 async def _do_fetch_and_score() -> None:
     """Background task: fetch → score → persist → populate cache."""
     cache.is_loading = True
@@ -515,12 +535,10 @@ async def _do_fetch_and_score() -> None:
             logger.info("Refresh complete: 0 articles fetched, cache unchanged")
         else:
             cache.load_progress = "Sauvegarde..."
-            await save_articles(article_dicts, total_fetched)
-            cache.populate(article_dicts, time.time(), total_fetched)
+            await _persist_and_populate(
+                article_dicts, total_fetched, elapsed=time.perf_counter() - _t0
+            )
             cache.load_progress = "Terminé"
-            _prom_refreshes.inc()
-            _prom_refresh_dur.observe(time.perf_counter() - _t0)
-            _update_prom_cache()
             logger.info(
                 "Refresh complete: %d fetched, %d relevant", total_fetched, len(article_dicts)
             )
@@ -582,16 +600,10 @@ async def refresh_stream() -> StreamingResponse:
                 logger.warning("Stream refresh: 0 articles fetched — DB not modified")
             else:
                 cache.load_progress = "Sauvegarde..."
+                elapsed = time.perf_counter() - _t0
                 asyncio.run_coroutine_threadsafe(
-                    save_articles(all_articles, total_fetched), loop
+                    _persist_and_populate(all_articles, total_fetched, elapsed=elapsed), loop
                 ).result()
-                bookmarked = asyncio.run_coroutine_threadsafe(get_bookmarked_ids(), loop).result()
-                for a in all_articles:
-                    a["bookmarked"] = a["id"] in bookmarked
-                cache.populate(all_articles, time.time(), total_fetched)
-                _prom_refreshes.inc()
-                _prom_refresh_dur.observe(time.perf_counter() - _t0)
-                _update_prom_cache()
                 logger.info(
                     "Stream refresh done: %d fetched, %d relevant",
                     total_fetched,
@@ -684,12 +696,9 @@ async def _do_rescore_from_db() -> None:
         )
         total_fetched = int(await get_meta("total_fetched", "0"))
         cache.load_progress = "Sauvegarde..."
-        await save_articles(article_dicts, total_fetched)
-        bookmarked = await get_bookmarked_ids()
-        for a in article_dicts:
-            a["bookmarked"] = a["id"] in bookmarked
-        cache.populate(article_dicts, cache.last_refresh, total_fetched)
-        _update_prom_cache()
+        await _persist_and_populate(
+            article_dicts, total_fetched, elapsed=None, refresh_time=cache.last_refresh
+        )
         cache.load_progress = "Terminé"
         logger.info("Rescore complete: %d relevant articles", len(article_dicts))
     except Exception as e:
