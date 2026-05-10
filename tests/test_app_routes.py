@@ -173,3 +173,90 @@ class TestHealth:
         resp = await client.get("/health")
         assert resp.json()["articles"] == 1
         cache.articles = []
+
+
+class TestLogin:
+    async def test_get_login_page(self, client, db_engine):
+        resp = await client.get("/login")
+        assert resp.status_code == 200
+        assert b"login" in resp.content.lower()
+
+    async def test_login_success_redirects(self, db_engine):
+        import os
+
+        from app import hash_password
+        from db import upsert_user
+
+        await upsert_user("admin", hash_password("testpass"))
+        os.environ.setdefault("SECRET_KEY", "test-secret-key")
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.post("/login", data={"username": "admin", "password": "testpass"})
+        assert resp.status_code in (200, 303)
+
+    async def test_login_wrong_password(self, db_engine):
+        import os
+
+        from app import hash_password
+        from db import upsert_user
+
+        await upsert_user("admin", hash_password("testpass"))
+        os.environ.setdefault("SECRET_KEY", "test-secret-key")
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.post("/login", data={"username": "admin", "password": "wrong"})
+        assert resp.status_code == 401
+
+
+class TestLogout:
+    async def test_logout_redirects_to_login(self, client, db_engine):
+        resp = await client.post("/logout")
+        assert resp.status_code in (200, 303)
+
+
+class TestApiStatus:
+    async def test_status_public(self, client, db_engine):
+        resp = await client.get("/api/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "article_count" in data
+        assert "is_loading" in data
+
+    async def test_status_includes_cache_size(self, client, db_engine):
+        cache.articles = [dict(_ARTICLE)]
+        resp = await client.get("/api/status")
+        assert resp.json()["article_count"] == 1
+        cache.articles = []
+
+
+class TestMarkReadAuthGuard:
+    async def test_mark_read_requires_auth(self, client, db_engine):
+        resp = await client.post("/api/mark-read", json={"article_ids": ["tag:a"]})
+        assert resp.status_code in (401, 403)
+
+    async def test_mark_read_authed(self, authed_client, db_engine):
+        resp = await authed_client.post("/api/mark-read", json={"article_ids": ["tag:nonexistent"]})
+        assert resp.status_code == 200
+
+
+class TestApiArticlesFilter:
+    async def test_filter_by_topic(self, client, db_engine):
+        cache.articles = [dict(_ARTICLE)]
+        resp = await client.get("/api/articles?topic=Kubernetes")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert all("Kubernetes" in a["matched_topics"] for a in data["articles"])
+        cache.articles = []
+
+    async def test_filter_by_min_score(self, client, db_engine):
+        cache.articles = [dict(_ARTICLE)]
+        resp = await client.get("/api/articles?min_score=100")
+        assert resp.status_code == 200
+        assert resp.json()["articles"] == []
+        cache.articles = []
+
+    async def test_search_query(self, client, db_engine):
+        cache.articles = [dict(_ARTICLE)]
+        resp = await client.get("/api/articles?q=K8s")
+        assert resp.status_code == 200
+        cache.articles = []

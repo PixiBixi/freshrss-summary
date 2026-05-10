@@ -8,6 +8,10 @@ import json
 import logging
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from freshrss_client import FreshRSSClient
 
 import yaml
 
@@ -50,7 +54,7 @@ def info(msg: str) -> str:
 # ── Config ─────────────────────────────────────────────────────────────────
 
 
-def make_client(cfg: dict):
+def make_client(cfg: dict) -> "FreshRSSClient":
     from freshrss_client import FreshRSSClient
 
     fr = cfg["freshrss"]

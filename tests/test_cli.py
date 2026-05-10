@@ -272,3 +272,269 @@ class TestCmdCheck:
             rc = cmd_check(args, _MINIMAL_CFG)
 
         assert rc == 1
+
+
+class TestCmdFetch:
+    def test_dry_run_returns_0(self, capsys):
+        import argparse
+        from unittest.mock import MagicMock, patch
+
+        from freshrss_client import Article
+
+        mock_article = Article(
+            id="a1",
+            title="K8s tip",
+            url="http://x.com",
+            content="c",
+            summary="",
+            feed_title="Feed",
+            published=0,
+        )
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.fetch_unread.return_value = [[mock_article]]
+
+        args = argparse.Namespace(dry_run=True)
+        from cli import cmd_fetch
+
+        with patch("cli.make_client", return_value=mock_client):
+            rc = cmd_fetch(args, _MINIMAL_CFG)
+
+        assert rc == 0
+
+    def test_no_articles_returns_0(self, capsys):
+        import argparse
+        from unittest.mock import MagicMock, patch
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.fetch_unread.return_value = []
+
+        args = argparse.Namespace(dry_run=False)
+        from cli import cmd_fetch
+
+        with patch("cli.make_client", return_value=mock_client):
+            rc = cmd_fetch(args, _MINIMAL_CFG)
+
+        assert rc == 0
+
+    def test_fetch_error_returns_1(self, capsys):
+        import argparse
+        from unittest.mock import MagicMock, patch
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(side_effect=RuntimeError("connection refused"))
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        args = argparse.Namespace(dry_run=False)
+        from cli import cmd_fetch
+
+        with patch("cli.make_client", return_value=mock_client):
+            rc = cmd_fetch(args, _MINIMAL_CFG)
+
+        assert rc == 1
+
+    def test_save_to_db_called_when_not_dry_run(self, capsys):
+        import argparse
+        from unittest.mock import MagicMock, patch
+
+        from freshrss_client import Article
+
+        mock_article = Article(
+            id="a2",
+            title="ArgoCD",
+            url="http://x.com",
+            content="c",
+            summary="",
+            feed_title="Feed",
+            published=0,
+        )
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.fetch_unread.return_value = [[mock_article]]
+
+        args = argparse.Namespace(dry_run=False)
+        from cli import cmd_fetch
+
+        with patch("cli.make_client", return_value=mock_client):
+            with patch("cli.asyncio.run", return_value=None) as mock_run:
+                rc = cmd_fetch(args, _MINIMAL_CFG)
+
+        assert rc == 0
+        mock_run.assert_called_once()
+
+
+class TestCmdImport:
+    def test_missing_file_and_no_starred_returns_1(self, capsys):
+        import argparse
+
+        from cli import cmd_import
+
+        args = argparse.Namespace(starred=False, file=None, dry_run=False, limit=None)
+        rc = cmd_import(args, _MINIMAL_CFG)
+        assert rc == 1
+
+    def test_file_not_found_returns_1(self, capsys, tmp_path):
+        import argparse
+
+        from cli import cmd_import
+
+        args = argparse.Namespace(
+            starred=False, file=str(tmp_path / "missing.json"), dry_run=False, limit=None
+        )
+        rc = cmd_import(args, _MINIMAL_CFG)
+        assert rc == 1
+
+    def test_invalid_json_returns_1(self, capsys, tmp_path):
+        import argparse
+
+        from cli import cmd_import
+
+        bad = tmp_path / "bad.json"
+        bad.write_text("{not valid json}")
+        args = argparse.Namespace(starred=False, file=str(bad), dry_run=False, limit=None)
+        rc = cmd_import(args, _MINIMAL_CFG)
+        assert rc == 1
+
+    def test_json_not_list_returns_1(self, capsys, tmp_path):
+        import argparse
+
+        from cli import cmd_import
+
+        f = tmp_path / "obj.json"
+        f.write_text('{"key": "val"}')
+        args = argparse.Namespace(starred=False, file=str(f), dry_run=False, limit=None)
+        rc = cmd_import(args, _MINIMAL_CFG)
+        assert rc == 1
+
+    def test_starred_dry_run_returns_0(self, capsys):
+        import argparse
+        from unittest.mock import MagicMock, patch
+
+        from freshrss_client import Article
+
+        mock_article = Article(
+            id="s1",
+            title="Starred",
+            url="http://x.com",
+            content="c",
+            summary="",
+            feed_title="Feed",
+            published=0,
+        )
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.fetch_starred.return_value = [mock_article]
+
+        args = argparse.Namespace(starred=True, file=None, dry_run=True, limit=None)
+        from cli import cmd_import
+
+        with patch("cli.make_client", return_value=mock_client):
+            rc = cmd_import(args, _MINIMAL_CFG)
+
+        assert rc == 0
+
+
+class TestCmdTune:
+    def test_no_topics_returns_1(self, capsys):
+        import argparse
+
+        from cli import cmd_tune
+
+        cfg_no_topics = {**_MINIMAL_CFG, "topics": {}}
+        args = argparse.Namespace(apply=False, limit=None)
+        rc = cmd_tune(args, cfg_no_topics)
+        assert rc == 1
+
+    def test_no_starred_returns_0(self, capsys):
+        import argparse
+        from unittest.mock import MagicMock, patch
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.fetch_starred.return_value = []
+
+        cfg_with_topics = {**_MINIMAL_CFG, "topics": {"SRE": {"weight": 1.5, "keywords": ["sre"]}}}
+        args = argparse.Namespace(apply=False, limit=None)
+        from cli import cmd_tune
+
+        with patch("cli.make_client", return_value=mock_client):
+            rc = cmd_tune(args, cfg_with_topics)
+
+        assert rc == 0
+
+    def test_fetch_error_returns_1(self, capsys):
+        import argparse
+        from unittest.mock import MagicMock, patch
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(side_effect=RuntimeError("oops"))
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        cfg_with_topics = {**_MINIMAL_CFG, "topics": {"SRE": {"weight": 1.5, "keywords": ["sre"]}}}
+        args = argparse.Namespace(apply=False, limit=None)
+        from cli import cmd_tune
+
+        with patch("cli.make_client", return_value=mock_client):
+            rc = cmd_tune(args, cfg_with_topics)
+
+        assert rc == 1
+
+
+class TestCmdDigest:
+    def test_prints_digest_returns_0(self, capsys):
+        import argparse
+        from unittest.mock import patch
+
+        args = argparse.Namespace(send=False)
+        from cli import cmd_digest
+
+        with patch("cli.asyncio.run", return_value=[]):
+            rc = cmd_digest(args, _MINIMAL_CFG)
+
+        assert rc == 0
+
+    def test_db_error_returns_1(self, capsys):
+        import argparse
+        from unittest.mock import patch
+
+        args = argparse.Namespace(send=False)
+        from cli import cmd_digest
+
+        with patch("cli.asyncio.run", side_effect=RuntimeError("db down")):
+            rc = cmd_digest(args, _MINIMAL_CFG)
+
+        assert rc == 1
+
+    def test_send_missing_token_returns_1(self, capsys):
+        import argparse
+        from unittest.mock import patch
+
+        args = argparse.Namespace(send=True)
+        from cli import cmd_digest
+
+        with patch("cli.asyncio.run", return_value=[]):
+            rc = cmd_digest(args, _MINIMAL_CFG)  # _MINIMAL_CFG has no telegram key
+
+        assert rc == 1
+
+    def test_send_success_returns_0(self, capsys):
+        import argparse
+        from unittest.mock import patch
+
+        args = argparse.Namespace(send=True)
+        cfg_with_tg = {
+            **_MINIMAL_CFG,
+            "telegram": {"bot_token": "TOK", "chat_id": "123"},
+        }
+        from cli import cmd_digest
+
+        with patch("cli.asyncio.run", return_value=[]):
+            rc = cmd_digest(args, cfg_with_tg)
+
+        assert rc == 0
