@@ -29,6 +29,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 logger = logging.getLogger(__name__)
 
+# SQLite caps IN-clause variables at 999 — chunk to stay safe on all backends
+DB_CHUNK_SIZE = 500
+
 DEFAULT_DB_PATH = Path(__file__).parent / "data" / "articles.db"
 DEFAULT_DB_URL = f"sqlite+aiosqlite:///{DEFAULT_DB_PATH}"
 
@@ -120,7 +123,7 @@ async def _run_migrations(conn) -> None:  # type: ignore[no-untyped-def]
         except Exception as exc:
             msg = str(exc).lower()
             if "duplicate" not in msg and "already exists" not in msg:
-                logger.warning("Migration ALTER failed unexpectedly for %s: %s", column, exc)
+                logger.exception("Migration ALTER failed unexpectedly for %s", column)
             # else: column already exists — expected on every run after first
 
 
@@ -371,11 +374,9 @@ async def set_articles_read(ids: list[str]) -> None:
     if not ids:
         return
     now = int(time.time())
-    # SQLite caps IN-clause variables at 999 — chunk to stay safe on all backends.
-    chunk_size = 500
     async with get_engine().begin() as conn:
-        for i in range(0, len(ids), chunk_size):
-            chunk = ids[i : i + chunk_size]
+        for i in range(0, len(ids), DB_CHUNK_SIZE):
+            chunk = ids[i : i + DB_CHUNK_SIZE]
             await conn.execute(
                 update(articles_table).where(articles_table.c.id.in_(chunk)).values(read_at=now)
             )
@@ -531,10 +532,9 @@ async def clear_pending_sync(ids: list[str]) -> None:
     """Remove successfully synced article IDs from the outbox."""
     if not ids:
         return
-    chunk_size = 500
     async with get_engine().begin() as conn:
-        for i in range(0, len(ids), chunk_size):
-            chunk = ids[i : i + chunk_size]
+        for i in range(0, len(ids), DB_CHUNK_SIZE):
+            chunk = ids[i : i + DB_CHUNK_SIZE]
             await conn.execute(delete(pending_sync_table).where(pending_sync_table.c.id.in_(chunk)))
 
 

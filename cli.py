@@ -454,7 +454,8 @@ def cmd_tune(args: argparse.Namespace, cfg: dict) -> int:
 
     scoring_cfg = cfg.get("scoring", {})
     title_weight = scoring_cfg.get("title_weight", 3)
-    analysis = analyze_favorites(starred, topics, title_weight)
+    feed_weights = cfg.get("feed_weights", {})
+    analysis = analyze_favorites(starred, topics, title_weight, feed_weights=feed_weights or None)
 
     # ── Top keywords ──────────────────────────────────────────────────────
     print(f"{BOLD}Top keywords in your favorites:{RESET}")

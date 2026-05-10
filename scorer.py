@@ -91,15 +91,15 @@ def score_article(
             all_keywords.update(title_matches)
             all_keywords.update(content_matches)
 
-    feed_mult = (feed_weights or {}).get(article.feed_title, 1.0)
-    total_score = sum(matched_topics.values()) * feed_mult
+    feed_weight = (feed_weights or {}).get(article.feed_title, 1.0)
+    total_score = sum(matched_topics.values()) * feed_weight
 
     return ScoredArticle(
         article=article,
         score=total_score,
         matched_topics=matched_topics,
         matched_keywords=sorted(all_keywords),
-        feed_weight=feed_mult,
+        feed_weight=feed_weight,
         _stripped_content=stripped_content,
     )
 
@@ -125,6 +125,7 @@ def analyze_favorites(
     starred: list[Article],
     topics: list[TopicConfig],
     title_weight: int = 3,
+    feed_weights: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """
     Analyze starred articles to suggest weight adjustments.
@@ -146,7 +147,7 @@ def analyze_favorites(
     keyword_freq: dict[str, int] = {}
 
     for article in starred:
-        scored = score_article(article, topics, title_weight)
+        scored = score_article(article, topics, title_weight, feed_weights=feed_weights)
         for topic_name in scored.matched_topics:
             topic_hits[topic_name] = topic_hits.get(topic_name, 0) + 1
         for kw in scored.matched_keywords:

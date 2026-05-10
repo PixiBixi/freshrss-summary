@@ -410,7 +410,7 @@ async def mark_read(req: MarkReadRequest) -> dict[str, str]:
 
         await asyncio.to_thread(_sync_mark_read)
     except Exception:
-        logger.warning(
+        logger.exception(
             "FreshRSS unreachable — queuing %d article(s) for deferred sync", len(req.article_ids)
         )
         await add_pending_sync(req.article_ids)
@@ -543,7 +543,7 @@ async def _do_fetch_and_score() -> None:
                 "Refresh complete: %d fetched, %d relevant", total_fetched, len(article_dicts)
             )
     except Exception as e:
-        cache.error = str(e)
+        cache.error = f"{type(e).__name__}: {e}"
         cache.load_progress = "Erreur"
         logger.exception("Refresh failed")
     finally:
@@ -614,7 +614,7 @@ async def refresh_stream() -> StreamingResponse:
             _put({"type": "done", "total_fetched": total_fetched, "count": len(all_articles)})
         except Exception as e:
             logger.exception("refresh-stream worker failed")
-            cache.error = str(e)
+            cache.error = f"{type(e).__name__}: {e}"
             cache.load_progress = "Erreur"
             _put({"type": "error", "message": str(e)})
         finally:
@@ -630,7 +630,7 @@ async def refresh_stream() -> StreamingResponse:
             feed_weights = await get_feed_weights()
         except Exception as e:
             logger.exception("refresh-stream init failed")
-            cache.error = str(e)
+            cache.error = f"{type(e).__name__}: {e}"
             cache.load_progress = "Erreur"
             cache.is_loading = False
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
@@ -702,7 +702,7 @@ async def _do_rescore_from_db() -> None:
         cache.load_progress = "Terminé"
         logger.info("Rescore complete: %d relevant articles", len(article_dicts))
     except Exception as e:
-        cache.error = str(e)
+        cache.error = f"{type(e).__name__}: {e}"
         cache.load_progress = "Erreur"
         logger.exception("Rescore failed")
     finally:
@@ -808,7 +808,10 @@ class ScoringConfigRequest(BaseModel):
 
 @app.put("/api/config/scoring", dependencies=[Depends(require_auth)])
 async def update_scoring(req: ScoringConfigRequest) -> dict[str, str]:
-    """Persist a new scoring config to DB. Takes effect on next refresh or rescore."""
+    """Persist a new scoring config to DB. Takes effect on next refresh or rescore.
+
+    Raises HTTP 422 if any feed_weight value is outside [0.1, 5.0].
+    """
     for feed, mult in req.feed_weights.items():
         if not (0.1 <= mult <= 10.0):
             raise HTTPException(
