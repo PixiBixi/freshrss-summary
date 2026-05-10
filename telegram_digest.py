@@ -5,10 +5,31 @@ from __future__ import annotations
 import logging
 import math
 import time
+from dataclasses import dataclass, field
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class TelegramConfig:
+    bot_token: str
+    chat_id: str
+    webhook_secret: str = field(default="")
+
+    @classmethod
+    def from_dict(cls, d: dict) -> TelegramConfig:
+        """Build from a raw config dict. Returns empty-string fields if keys are missing."""
+        return cls(
+            bot_token=d.get("bot_token", ""),
+            chat_id=d.get("chat_id", ""),
+            webhook_secret=d.get("webhook_secret", ""),
+        )
+
+    def is_configured(self) -> bool:
+        return bool(self.bot_token and self.chat_id)
+
 
 # ── French date helpers ────────────────────────────────────────────────────
 _WEEKDAYS_FR = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
@@ -108,31 +129,27 @@ async def send_message(bot_token: str, chat_id: str, text: str) -> None:
             r.raise_for_status()
 
 
-async def send_digest(tg_cfg: dict, articles: list[dict]) -> None:
+async def send_digest(tg_cfg: TelegramConfig, articles: list[dict]) -> None:
     """Build and send the digest. Called by scheduler and webhook handler."""
-    bot_token = tg_cfg.get("bot_token", "")
-    chat_id = tg_cfg.get("chat_id", "")
-    if not bot_token or not chat_id:
+    if not tg_cfg.is_configured():
         logger.warning("Telegram digest: bot_token or chat_id missing, skipping")
         return
     text = build_digest(articles)
     try:
-        await send_message(bot_token, chat_id, text)
+        await send_message(tg_cfg.bot_token, tg_cfg.chat_id, text)
         logger.info("Telegram digest sent (%d chars)", len(text))
     except Exception:
         logger.exception("Telegram digest send failed")
 
 
 async def check_trending(
-    tg_cfg: dict, articles: list[dict], alerted: set[tuple[str, int]]
+    tg_cfg: TelegramConfig, articles: list[dict], alerted: set[tuple[str, int]]
 ) -> set[tuple[str, int]]:
     """
     Alert if a topic has ≥3 articles in the last 2h and ≥2x more than the prior 2h window.
     Returns updated alerted set (keyed on (topic, 2h-bucket) to avoid duplicate alerts).
     """
-    bot_token = tg_cfg.get("bot_token", "")
-    chat_id = tg_cfg.get("chat_id", "")
-    if not bot_token or not chat_id:
+    if not tg_cfg.is_configured():
         return alerted
 
     now = time.time()
@@ -167,7 +184,7 @@ async def check_trending(
             vs = f"vs {prior}" if prior else "sans activité récente"
             lines.append(f"· <b>{_html_escape(topic)}</b>  +{recent} articles ({vs})")
         try:
-            await send_message(bot_token, chat_id, "\n".join(lines))
+            await send_message(tg_cfg.bot_token, tg_cfg.chat_id, "\n".join(lines))
             logger.info("Trending alert sent: %s", [t for t, _, _ in alerts])
         except Exception:
             logger.exception("Trending alert send failed")
@@ -175,11 +192,9 @@ async def check_trending(
     return new_alerted
 
 
-async def send_snooze_reminders(tg_cfg: dict, due: list[dict]) -> list[str]:
+async def send_snooze_reminders(tg_cfg: TelegramConfig, due: list[dict]) -> list[str]:
     """Send Telegram reminders for due snooze entries. Returns article_ids sent successfully."""
-    bot_token = tg_cfg.get("bot_token", "")
-    chat_id = tg_cfg.get("chat_id", "")
-    if not bot_token or not chat_id or not due:
+    if not tg_cfg.is_configured() or not due:
         return []
     sent: list[str] = []
     for s in due:
@@ -187,7 +202,7 @@ async def send_snooze_reminders(tg_cfg: dict, due: list[dict]) -> list[str]:
             title = _html_escape(s["title"])
             url = s["url"]
             text = f'⏰ <b>Rappel</b>\n<a href="{url}">{title}</a>'
-            await send_message(bot_token, s.get("chat_id") or chat_id, text)
+            await send_message(tg_cfg.bot_token, s.get("chat_id") or tg_cfg.chat_id, text)
             sent.append(s["article_id"])
             logger.info("Snooze reminder sent: %s", s["article_id"])
         except Exception:
@@ -195,22 +210,21 @@ async def send_snooze_reminders(tg_cfg: dict, due: list[dict]) -> list[str]:
     return sent
 
 
-async def register_webhook(tg_cfg: dict, public_url: str) -> None:
+async def register_webhook(tg_cfg: TelegramConfig, public_url: str) -> None:
     """Call Telegram setWebhook on startup. Logs errors, never raises."""
-    bot_token = tg_cfg.get("bot_token", "")
-    if not bot_token:
+    if not tg_cfg.bot_token:
         return
     webhook_url = f"{public_url.rstrip('/')}/telegram/webhook"
     payload: dict = {
         "url": webhook_url,
         "allowed_updates": ["message"],
     }
-    if secret := tg_cfg.get("webhook_secret", ""):
-        payload["secret_token"] = secret
+    if tg_cfg.webhook_secret:
+        payload["secret_token"] = tg_cfg.webhook_secret
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.post(
-                f"https://api.telegram.org/bot{bot_token}/setWebhook",
+                f"https://api.telegram.org/bot{tg_cfg.bot_token}/setWebhook",
                 json=payload,
             )
             r.raise_for_status()

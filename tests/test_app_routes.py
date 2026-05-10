@@ -39,9 +39,11 @@ async def db_engine():
 
 @pytest_asyncio.fixture
 async def client(db_engine):
+    cache.initialized = True  # simulate post-lifespan state
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+    cache.initialized = False
 
 
 @pytest_asyncio.fixture
@@ -55,11 +57,13 @@ async def authed_client(db_engine):
     await upsert_user("admin", hash_password("testpass"))
     os.environ.setdefault("SECRET_KEY", "test-secret-key-for-tests")
 
+    cache.initialized = True  # simulate post-lifespan state
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         resp = await ac.post("/login", data={"username": "admin", "password": "testpass"})
         assert resp.status_code in (200, 303)
         yield ac
+    cache.initialized = False
 
 
 # ── /api/articles ──────────────────────────────────────────────────────────────

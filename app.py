@@ -68,7 +68,13 @@ from db import (
 from freshrss_client import FreshRSSClient
 from models import article_from_row
 from scorer import build_topics, score_articles
-from telegram_digest import check_trending, register_webhook, send_digest, send_snooze_reminders
+from telegram_digest import (
+    TelegramConfig,
+    check_trending,
+    register_webhook,
+    send_digest,
+    send_snooze_reminders,
+)
 
 # ---------------------------------------------------------------------------
 # Prometheus metrics
@@ -144,6 +150,7 @@ class Cache:
         self.total_fetched: int = 0
         self.last_refresh: float | None = None
         self.is_loading: bool = False
+        self.initialized: bool = False  # True after first populate() completes post-lifespan
         self.load_progress: str = ""
         self.error: str | None = None
         self.refresh_task: asyncio.Task | None = None
@@ -156,6 +163,7 @@ class Cache:
         self.last_refresh = last_refresh
         self.total_fetched = total_fetched
         self.all_topics = sorted({t for a in articles for t in a["matched_topics"]})
+        self.initialized = True
 
 
 cache = Cache()
@@ -199,9 +207,11 @@ async def _run_daily_at(
             logger.exception("Daily task %s failed", coro_fn.__name__)
 
 
-async def _setup_telegram_tasks(bg_tasks: list[asyncio.Task], tg_cfg: dict, cfg: dict) -> None:
+async def _setup_telegram_tasks(
+    bg_tasks: list[asyncio.Task], tg_cfg: TelegramConfig, cfg: dict
+) -> None:
     """Spawn asyncio background tasks for all Telegram-related periodic jobs."""
-    hour = int(tg_cfg.get("digest_hour", 21))
+    hour = int(cfg.get("telegram", {}).get("digest_hour", 21))
     bg_tasks.append(
         asyncio.create_task(_run_daily_at(_dispatch_daily_digest, hour, "Europe/Paris", tg_cfg))
     )
@@ -243,8 +253,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         bg_tasks.append(asyncio.create_task(_run_every(_auto_refresh, interval * 60)))
         logger.info("Auto-refresh scheduler started: every %d min", interval)
 
-    tg_cfg = cfg.get("telegram", {})
-    if tg_cfg.get("bot_token") and tg_cfg.get("chat_id"):
+    tg_cfg = TelegramConfig.from_dict(cfg.get("telegram", {}))
+    if tg_cfg.is_configured():
         await _setup_telegram_tasks(bg_tasks, tg_cfg, cfg)
 
     app.state.tg_cfg = tg_cfg
@@ -325,6 +335,7 @@ async def logout(request: Request):
 async def get_status() -> dict[str, Any]:
     return {
         "is_loading": cache.is_loading,
+        "initialized": cache.initialized,
         "load_progress": cache.load_progress,
         "error": cache.error,
         "total_fetched": cache.total_fetched,
@@ -345,6 +356,8 @@ async def get_articles(
     days: int = 7,
     show_read: bool = False,
 ) -> dict[str, Any]:
+    if not cache.initialized:
+        raise HTTPException(status_code=503, detail="Cache initializing — try again shortly")
     if show_read and not request.session.get("authenticated"):
         show_read = False
     articles = cache.articles
@@ -761,8 +774,8 @@ async def snooze_article(req: SnoozeRequest, request: Request) -> dict[str, Any]
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
 
-    tg_cfg: dict = getattr(request.app.state, "tg_cfg", {})
-    if not tg_cfg.get("bot_token") or not tg_cfg.get("chat_id"):
+    tg_cfg: TelegramConfig = getattr(request.app.state, "tg_cfg", TelegramConfig("", ""))
+    if not tg_cfg.is_configured():
         raise HTTPException(status_code=400, detail="Telegram not configured")
 
     if req.snooze_until is not None:
@@ -773,7 +786,7 @@ async def snooze_article(req: SnoozeRequest, request: Request) -> dict[str, Any]
 
     await add_snooze(
         req.article_id,
-        tg_cfg["chat_id"],
+        tg_cfg.chat_id,
         snooze_until,
         article["title"],
         article["url"],
@@ -863,17 +876,17 @@ async def _all_articles_for_digest() -> list[dict]:
     return cache.articles + extra
 
 
-async def _dispatch_daily_digest(tg_cfg: dict) -> None:
+async def _dispatch_daily_digest(tg_cfg: TelegramConfig) -> None:
     """Scheduler job: build and send digest from current cache + articles read today."""
     await send_digest(tg_cfg, await _all_articles_for_digest())
 
 
-async def _check_trending(tg_cfg: dict) -> None:
+async def _check_trending(tg_cfg: TelegramConfig) -> None:
     """Scheduler job: alert if a topic is surging in the last 2h."""
     cache.trending_alerted = await check_trending(tg_cfg, cache.articles, cache.trending_alerted)
 
 
-async def _check_snoozes(tg_cfg: dict) -> None:
+async def _check_snoozes(tg_cfg: TelegramConfig) -> None:
     """Scheduler job: deliver due snooze reminders and remove them from DB."""
     due = await get_due_snoozes()
     if not due:
@@ -886,13 +899,12 @@ async def _check_snoozes(tg_cfg: dict) -> None:
 @app.post("/telegram/webhook")
 async def telegram_webhook(request: Request) -> dict[str, Any]:
     """Receive Telegram updates. Verifies secret header, handles /digest command."""
-    tg_cfg: dict = getattr(request.app.state, "tg_cfg", {})
-    webhook_secret = tg_cfg.get("webhook_secret", "")
-    if not webhook_secret:
+    tg_cfg: TelegramConfig = getattr(request.app.state, "tg_cfg", TelegramConfig("", ""))
+    if not tg_cfg.webhook_secret:
         raise HTTPException(status_code=404)
 
     header_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-    if not secrets.compare_digest(header_secret, webhook_secret):
+    if not secrets.compare_digest(header_secret, tg_cfg.webhook_secret):
         raise HTTPException(status_code=403, detail="Invalid secret")
 
     body = await request.json()
