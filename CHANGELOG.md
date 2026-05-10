@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.5.0](https://github.com/PixiBixi/freshrss-summary/compare/v1.4.1...v1.5.0) (2026-05-10)
+
+
+### Features
+
+* **ui:** add SVG favicon to all pages ([fe81f45](https://github.com/PixiBixi/freshrss-summary/commit/fe81f455839f7be0502956b9b9faba1fd5d7d05b))
+
+
+### Bug Fixes
+
+* **scoring:** raise feed_weight limit to 10 and surface API error in toast ([8e5816a](https://github.com/PixiBixi/freshrss-summary/commit/8e5816adf4058b8f6a642dff3ed4b38effbc0456))
+
 ## [1.4.1](https://github.com/PixiBixi/freshrss-summary/compare/v1.4.0...v1.4.1) (2026-05-09)
 
 
