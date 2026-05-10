@@ -18,17 +18,17 @@ logger = logging.getLogger(__name__)
 # ── ANSI ───────────────────────────────────────────────────────────────────
 
 
-def _c(code: str) -> str:
+def _ansi(code: str) -> str:
     return f"\033[{code}m" if sys.stdout.isatty() else ""
 
 
-RESET = _c("0")
-BOLD = _c("1")
-DIM = _c("2")
-GREEN = _c("32")
-YELLOW = _c("33")
-CYAN = _c("36")
-RED = _c("31")
+RESET = _ansi("0")
+BOLD = _ansi("1")
+DIM = _ansi("2")
+GREEN = _ansi("32")
+YELLOW = _ansi("33")
+CYAN = _ansi("36")
+RED = _ansi("31")
 
 
 def ok(msg: str) -> str:
@@ -82,7 +82,7 @@ async def _db_stats(cfg: dict) -> dict:
     }
 
 
-async def _save(cfg: dict, articles: list[dict], total_fetched: int) -> None:
+async def _save_to_db(cfg: dict, articles: list[dict], total_fetched: int) -> None:
     from db import save_articles
 
     await _init_db(cfg)
@@ -229,7 +229,7 @@ def cmd_fetch(args: argparse.Namespace, cfg: dict) -> int:
                 print(f"    [{a.score:.0f}]  {a.article.title[:72]}")
     else:
         try:
-            asyncio.run(_save(cfg, [a.to_dict() for a in relevant], total_fetched))
+            asyncio.run(_save_to_db(cfg, [a.to_dict() for a in relevant], total_fetched))
             print(ok("Saved to DB"))
         except Exception as e:
             logger.exception("fetch: DB save failed")
@@ -279,7 +279,7 @@ def cmd_rescore(args: argparse.Namespace, cfg: dict) -> int:
         print(warn("--dry-run: not saving to DB"))
     else:
         try:
-            asyncio.run(_save(cfg, rescored, len(raw)))
+            asyncio.run(_save_to_db(cfg, rescored, len(raw)))
             print(ok("Saved to DB"))
         except Exception as e:
             logger.exception("rescore: DB save failed")

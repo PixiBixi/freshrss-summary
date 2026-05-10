@@ -27,6 +27,10 @@ def load_config() -> dict:
       TELEGRAM_CHAT_ID       → telegram.chat_id
       TELEGRAM_WEBHOOK_SECRET → telegram.webhook_secret
       PUBLIC_URL             → server.public_url
+
+    Raises:
+        RuntimeError: if FRESHRSS_URL, FRESHRSS_USERNAME, or FRESHRSS_API_PASSWORD
+            are missing from both config.yaml and environment variables.
     """
     cfg: dict = {}
     if CONFIG_PATH.exists():

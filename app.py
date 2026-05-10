@@ -478,7 +478,7 @@ class MarkReadRequest(BaseModel):
     article_ids: list[str]
 
 
-async def _get_or_init_scoring_config() -> dict:
+async def _get_or_seed_scoring_config() -> dict:
     stored = await get_scoring_config()
     if stored is not None:
         return stored
@@ -586,7 +586,7 @@ async def _do_fetch_and_score() -> None:
 
     try:
         cfg = load_config()
-        topics_cfg = await _get_or_init_scoring_config()
+        topics_cfg = await _get_or_seed_scoring_config()
         feed_weights = await get_feed_weights()
 
         # Drain outbox: replay mark-as-read calls that failed when FreshRSS was offline
@@ -712,7 +712,7 @@ async def refresh_stream() -> StreamingResponse:
         cache.load_progress = "Démarrage..."
 
         try:
-            topics_cfg = await _get_or_init_scoring_config()
+            topics_cfg = await _get_or_seed_scoring_config()
             feed_weights = await get_feed_weights()
         except Exception as e:
             logger.exception("refresh-stream init failed")
@@ -775,7 +775,7 @@ async def _do_rescore_from_db() -> None:
     try:
         raw = await load_for_rescore()
         cfg = load_config()
-        topics_cfg = await _get_or_init_scoring_config()
+        topics_cfg = await _get_or_seed_scoring_config()
         feed_weights = await get_feed_weights()
         article_dicts = await asyncio.to_thread(
             _blocking_rescore_compute, raw, cfg, topics_cfg, feed_weights
@@ -885,7 +885,7 @@ async def list_feeds() -> dict[str, Any]:
 async def get_scoring() -> dict[str, Any]:
     """Return the active scoring topics config and feed weights (from DB, or seeded from config.yaml)."""
     return {
-        "topics": await _get_or_init_scoring_config(),
+        "topics": await _get_or_seed_scoring_config(),
         "feed_weights": await get_feed_weights(),
     }
 
@@ -941,9 +941,17 @@ async def change_password(req: ChangePasswordRequest, request: Request) -> dict[
 # ---------------------------------------------------------------------------
 
 
+async def _all_articles_for_digest() -> list[dict]:
+    """Return unread cache articles + articles read in the last 24h (deduplicated)."""
+    read_today = await load_read_articles(days=1)
+    unread_ids = {a["id"] for a in cache.articles}
+    extra = [a for a in read_today if a["id"] not in unread_ids]
+    return cache.articles + extra
+
+
 async def _dispatch_daily_digest(tg_cfg: dict) -> None:
-    """Scheduler job: build and send digest from current cache articles."""
-    await send_digest(tg_cfg, cache.articles)
+    """Scheduler job: build and send digest from current cache + articles read today."""
+    await send_digest(tg_cfg, await _all_articles_for_digest())
 
 
 async def _check_trending(tg_cfg: dict) -> None:
@@ -976,7 +984,7 @@ async def telegram_webhook(request: Request) -> dict[str, Any]:
     body = await request.json()
     text: str = body.get("message", {}).get("text", "")
     if text.startswith("/digest"):
-        asyncio.create_task(send_digest(tg_cfg, cache.articles))
+        asyncio.create_task(send_digest(tg_cfg, await _all_articles_for_digest()))
 
     return {}
 
@@ -1029,7 +1037,7 @@ if __name__ == "__main__":
         # Object form used otherwise to avoid double-import of module-level code
         # (e.g. Prometheus metric registration).
         "app:app" if reload else app,
-        host=str(srv.get("host", "0.0.0.0")),
+        host=str(srv.get("host", "0.0.0.0")),  # nosec B104 — default binds all interfaces; callers override via SERVER_HOST
         port=int(srv.get("port", 8123)),
         reload=reload,
         proxy_headers=True,
