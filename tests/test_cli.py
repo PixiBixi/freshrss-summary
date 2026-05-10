@@ -279,7 +279,7 @@ class TestCmdFetch:
         import argparse
         from unittest.mock import MagicMock, patch
 
-        from freshrss_client import Article
+        from models import Article
 
         mock_article = Article(
             id="a1",
@@ -340,7 +340,7 @@ class TestCmdFetch:
         import argparse
         from unittest.mock import MagicMock, patch
 
-        from freshrss_client import Article
+        from models import Article
 
         mock_article = Article(
             id="a2",
@@ -414,7 +414,7 @@ class TestCmdImport:
         import argparse
         from unittest.mock import MagicMock, patch
 
-        from freshrss_client import Article
+        from models import Article
 
         mock_article = Article(
             id="s1",

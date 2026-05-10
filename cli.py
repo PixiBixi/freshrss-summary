@@ -252,7 +252,7 @@ def cmd_rescore(args: argparse.Namespace, cfg: dict) -> int:
     title_weight = scoring_cfg.get("title_weight", 3)
     min_score = scoring_cfg.get("min_score", 1.0)
 
-    from freshrss_client import article_from_row
+    from models import article_from_row
     from scorer import build_topics, score_article
 
     topics = build_topics(cfg.get("topics", {}))
@@ -371,7 +371,7 @@ def _import_file(args, cfg: dict) -> int:
         print(err("JSON must be a list of article objects"))
         return 1
 
-    from freshrss_client import Article
+    from models import Article
     from scorer import build_topics, score_articles
 
     articles, skipped = [], 0

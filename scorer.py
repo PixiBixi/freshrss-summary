@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from freshrss_client import Article
+from models import Article
 
 
 @dataclass
