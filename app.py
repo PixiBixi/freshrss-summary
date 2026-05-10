@@ -66,8 +66,8 @@ from db import (
     toggle_bookmark,
 )
 from freshrss_client import FreshRSSClient
-from models import article_from_row
-from scorer import build_topics, score_articles
+from pipeline import fetch_and_score_iter, rescore_articles
+from scorer import build_topics
 from telegram_digest import (
     TelegramConfig,
     check_trending,
@@ -439,30 +439,8 @@ def _fetch_and_score_iter(
     Generator: fetch unread articles in batches, score each, yield (scored_batch, cumulative_count).
     Runs in a thread pool (blocking I/O). Callers decide whether to stream or accumulate.
     """
-    fr_cfg = cfg["freshrss"]
-    fetch_cfg = cfg.get("fetch", {})
-    scoring_cfg = cfg.get("scoring", {})
-    batch_size = int(fetch_cfg.get("batch_size", 1000))
-    max_batches = int(fetch_cfg.get("max_batches", 10))
-    title_weight = int(scoring_cfg.get("title_weight", 3))
-    min_score = float(scoring_cfg.get("min_score", 1.0))
     topics = build_topics(topics_cfg)
-    total_fetched = 0
-
-    with FreshRSSClient(fr_cfg["url"], fr_cfg["username"], fr_cfg["api_password"]) as client:
-        for batch in client.fetch_unread(batch_size=batch_size, max_batches=max_batches):
-            total_fetched += len(batch)
-            scored = [
-                sa.to_dict()
-                for sa in score_articles(
-                    batch,
-                    topics,
-                    title_weight=title_weight,
-                    min_score=min_score,
-                    feed_weights=feed_weights,
-                )
-            ]
-            yield scored, total_fetched
+    yield from fetch_and_score_iter(cfg, topics, feed_weights)
 
 
 def _blocking_fetch_and_score(
@@ -673,24 +651,12 @@ def _blocking_rescore_compute(
     topics_cfg: dict,
     feed_weights: dict[str, float] | None = None,
 ) -> list[dict]:
-    """CPU re-scoring of cached articles. Updates cache.load_progress for progress reporting. Runs in a thread pool via asyncio.to_thread."""
+    """CPU re-scoring of cached articles. Runs in a thread pool via asyncio.to_thread."""
     scoring_cfg = cfg.get("scoring", {})
     title_weight = int(scoring_cfg.get("title_weight", 3))
     min_score = float(scoring_cfg.get("min_score", 1.0))
     topics = build_topics(topics_cfg)
-
-    cache.load_progress = f"Re-scoring {len(raw)} articles..."
-    articles = [article_from_row(r) for r in raw]
-    return [
-        a.to_dict()
-        for a in score_articles(
-            articles,
-            topics,
-            title_weight=title_weight,
-            min_score=min_score,
-            feed_weights=feed_weights,
-        )
-    ]
+    return rescore_articles(raw, topics, title_weight, min_score, feed_weights)
 
 
 async def _do_rescore_from_db() -> None:

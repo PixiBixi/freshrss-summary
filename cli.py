@@ -184,30 +184,25 @@ def cmd_fetch(args: argparse.Namespace, cfg: dict) -> int:
     """Fetch unread articles from FreshRSS, score and save to DB."""
     print(f"\n{BOLD}Fetching unread articles{RESET}\n")
 
-    fetch_cfg = cfg.get("fetch", {})
-    scoring_cfg = cfg.get("scoring", {})
-    batch_size = fetch_cfg.get("batch_size", 1000)
-    max_batches = fetch_cfg.get("max_batches", 10)
-    title_weight = scoring_cfg.get("title_weight", 3)
-    min_score = scoring_cfg.get("min_score", 1.0)
+    min_score = float(cfg.get("scoring", {}).get("min_score", 1.0))
 
-    from scorer import build_topics, score_articles
+    from pipeline import fetch_and_score_iter
+    from scorer import build_topics
 
     topics = build_topics(cfg.get("topics", {}))
     if not topics:
         print(warn("No topics configured — articles will score 0"))
 
-    all_scored = []
+    all_articles: list[dict] = []
     total_fetched = 0
+    prev_fetched = 0
 
     try:
-        with make_client(cfg) as client:
-            for batch in client.fetch_unread(batch_size=batch_size, max_batches=max_batches):
-                total_fetched += len(batch)
-                scored = score_articles(batch, topics, title_weight, min_score=0)
-                relevant = sum(1 for a in scored if a.score >= min_score)
-                all_scored.extend(scored)
-                print(info(f"Batch: {len(batch)} fetched, {relevant} relevant"))
+        for scored_batch, total_fetched in fetch_and_score_iter(cfg, topics):
+            batch_count = total_fetched - prev_fetched
+            prev_fetched = total_fetched
+            print(info(f"Batch: {batch_count} fetched, {len(scored_batch)} relevant"))
+            all_articles.extend(scored_batch)
     except Exception as e:
         logger.exception("fetch: FreshRSS fetch failed")
         print(err(f"Fetch error: {e}"))
@@ -217,23 +212,18 @@ def cmd_fetch(args: argparse.Namespace, cfg: dict) -> int:
         print(warn("No unread articles"))
         return 0
 
-    relevant = sorted(
-        (a for a in all_scored if a.score >= min_score),
-        key=lambda a: a.score,
-        reverse=True,
-    )
     print()
-    print(ok(f"{total_fetched} fetched total — {len(relevant)} relevant (score ≥ {min_score})"))
+    print(ok(f"{total_fetched} fetched total — {len(all_articles)} relevant (score ≥ {min_score})"))
 
     if args.dry_run:
         print(warn("--dry-run: not saving to DB"))
-        if relevant:
+        if all_articles:
             print(f"\n{BOLD}Top 5:{RESET}")
-            for a in relevant[:5]:
-                print(f"    [{a.score:.0f}]  {a.article.title[:72]}")
+            for a in all_articles[:5]:
+                print(f"    [{a['score']:.0f}]  {a['title'][:72]}")
     else:
         try:
-            asyncio.run(_save_to_db(cfg, [a.to_dict() for a in relevant], total_fetched))
+            asyncio.run(_save_to_db(cfg, all_articles, total_fetched))
             print(ok("Saved to DB"))
         except Exception as e:
             logger.exception("fetch: DB save failed")
@@ -249,11 +239,11 @@ def cmd_rescore(args: argparse.Namespace, cfg: dict) -> int:
     print(f"\n{BOLD}Rescoring from DB{RESET}\n")
 
     scoring_cfg = cfg.get("scoring", {})
-    title_weight = scoring_cfg.get("title_weight", 3)
-    min_score = scoring_cfg.get("min_score", 1.0)
+    title_weight = int(scoring_cfg.get("title_weight", 3))
+    min_score = float(scoring_cfg.get("min_score", 1.0))
 
-    from models import article_from_row
-    from scorer import build_topics, score_article
+    from pipeline import rescore_articles
+    from scorer import build_topics
 
     topics = build_topics(cfg.get("topics", {}))
 
@@ -269,14 +259,7 @@ def cmd_rescore(args: argparse.Namespace, cfg: dict) -> int:
         return 0
 
     print(info(f"Rescoring {len(raw)} articles..."))
-    rescored = []
-    for r in raw:
-        art = article_from_row(r)
-        scored = score_article(art, topics, title_weight)
-        if scored.score >= min_score:
-            rescored.append(scored.to_dict())
-
-    rescored.sort(key=lambda a: a["score"], reverse=True)
+    rescored = rescore_articles(raw, topics, title_weight, min_score)
     print(ok(f"{len(rescored)} articles above min_score={min_score}"))
 
     if args.dry_run:

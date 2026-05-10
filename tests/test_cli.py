@@ -274,92 +274,71 @@ class TestCmdCheck:
         assert rc == 1
 
 
+_ARTICLE_DICT = {
+    "id": "a1",
+    "title": "K8s tip",
+    "url": "http://x.com",
+    "score": 5.0,
+    "feed_title": "Feed",
+    "published": 0,
+    "matched_topics": {"Kubernetes": 5.0},
+    "matched_keywords": ["kubernetes"],
+    "top_topic": "Kubernetes",
+    "summary": "",
+    "bookmarked": False,
+    "feed_weight": 1.0,
+}
+
+
 class TestCmdFetch:
     def test_dry_run_returns_0(self, capsys):
         import argparse
-        from unittest.mock import MagicMock, patch
-
-        from models import Article
-
-        mock_article = Article(
-            id="a1",
-            title="K8s tip",
-            url="http://x.com",
-            content="c",
-            summary="",
-            feed_title="Feed",
-            published=0,
-        )
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.fetch_unread.return_value = [[mock_article]]
+        from unittest.mock import patch
 
         args = argparse.Namespace(dry_run=True)
         from cli import cmd_fetch
 
-        with patch("cli.make_client", return_value=mock_client):
+        with patch("pipeline.fetch_and_score_iter", return_value=iter([([_ARTICLE_DICT], 1)])):
             rc = cmd_fetch(args, _MINIMAL_CFG)
 
         assert rc == 0
 
     def test_no_articles_returns_0(self, capsys):
         import argparse
-        from unittest.mock import MagicMock, patch
-
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.fetch_unread.return_value = []
+        from unittest.mock import patch
 
         args = argparse.Namespace(dry_run=False)
         from cli import cmd_fetch
 
-        with patch("cli.make_client", return_value=mock_client):
+        with patch("pipeline.fetch_and_score_iter", return_value=iter([])):
             rc = cmd_fetch(args, _MINIMAL_CFG)
 
         assert rc == 0
 
     def test_fetch_error_returns_1(self, capsys):
         import argparse
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
 
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(side_effect=RuntimeError("connection refused"))
-        mock_client.__exit__ = MagicMock(return_value=False)
+        def _raise(*a, **kw):
+            raise RuntimeError("connection refused")
+            yield  # make it a generator
 
         args = argparse.Namespace(dry_run=False)
         from cli import cmd_fetch
 
-        with patch("cli.make_client", return_value=mock_client):
+        with patch("pipeline.fetch_and_score_iter", side_effect=RuntimeError("connection refused")):
             rc = cmd_fetch(args, _MINIMAL_CFG)
 
         assert rc == 1
 
     def test_save_to_db_called_when_not_dry_run(self, capsys):
         import argparse
-        from unittest.mock import MagicMock, patch
-
-        from models import Article
-
-        mock_article = Article(
-            id="a2",
-            title="ArgoCD",
-            url="http://x.com",
-            content="c",
-            summary="",
-            feed_title="Feed",
-            published=0,
-        )
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.fetch_unread.return_value = [[mock_article]]
+        from unittest.mock import patch
 
         args = argparse.Namespace(dry_run=False)
         from cli import cmd_fetch
 
-        with patch("cli.make_client", return_value=mock_client):
+        with patch("pipeline.fetch_and_score_iter", return_value=iter([([_ARTICLE_DICT], 1)])):
             with patch("cli.asyncio.run", return_value=None) as mock_run:
                 rc = cmd_fetch(args, _MINIMAL_CFG)
 
