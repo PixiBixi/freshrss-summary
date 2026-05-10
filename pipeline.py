@@ -11,17 +11,18 @@ side effects. Callers (app.py, cli.py) own progress reporting and persistence.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import Any
 
 from freshrss_client import FreshRSSClient
-from models import article_from_row
+from models import ArticleDict, article_from_row
 from scorer import TopicConfig, score_article, score_articles
 
 
 def fetch_and_score_iter(
-    cfg: dict,
+    cfg: dict[str, Any],
     topics: list[TopicConfig],
     feed_weights: dict[str, float] | None = None,
-) -> Iterator[tuple[list[dict], int]]:
+) -> Iterator[tuple[list[ArticleDict], int]]:
     """
     Generator: fetch unread articles in batches, score each batch.
 
@@ -60,12 +61,12 @@ def fetch_and_score_iter(
 
 
 def rescore_articles(
-    raw: list[dict],
+    raw: list[ArticleDict],
     topics: list[TopicConfig],
     title_weight: int = 3,
     min_score: float = 1.0,
     feed_weights: dict[str, float] | None = None,
-) -> list[dict]:
+) -> list[ArticleDict]:
     """
     Re-score DB rows with updated topic weights.
 

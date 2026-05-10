@@ -3,6 +3,7 @@
 import logging
 import urllib.parse
 from collections.abc import Generator
+from typing import Any
 
 import httpx
 
@@ -158,7 +159,7 @@ class FreshRSSClient:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _parse_item(item: dict) -> Article:
+    def _parse_item(item: dict[str, Any]) -> Article:
         title = item.get("title", "(no title)")
         alternates = item.get("alternate", [])
         url = ""

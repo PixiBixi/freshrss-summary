@@ -351,3 +351,123 @@ class TestRefreshStream:
         types = [e["type"] for e in events]
         assert "error" in types
         assert not cache.is_loading
+
+
+# ── /api/rescore ───────────────────────────────────────────────────────────────
+
+
+@pytest_asyncio.fixture
+async def authed_client_no_ratelimit(db_engine):
+    """Authenticated client with rate limiting disabled — avoids 429 in test suites."""
+    import os
+    from unittest.mock import patch
+
+    from auth import hash_password
+    from db import upsert_user
+
+    await upsert_user("admin", hash_password("testpass"))
+    os.environ.setdefault("SECRET_KEY", "test-secret-key-for-tests")
+
+    cache.initialized = True
+    transport = ASGITransport(app=app)
+    with patch("app.login_rate_limit", return_value=True):
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.post("/login", data={"username": "admin", "password": "testpass"})
+            assert resp.status_code in (200, 303)
+            yield ac
+    cache.initialized = False
+
+
+class TestRescore:
+    async def test_rescore_requires_auth(self, client, db_engine):
+        resp = await client.post("/api/rescore")
+        assert resp.status_code in (401, 403)
+
+    async def test_rescore_returns_started_when_articles_in_cache(
+        self, authed_client_no_ratelimit, db_engine
+    ):
+        from unittest.mock import AsyncMock, patch
+
+        cache.articles = [dict(_ARTICLE)]
+        try:
+            with patch("app._do_rescore_from_db", new_callable=AsyncMock):
+                resp = await authed_client_no_ratelimit.post("/api/rescore")
+            assert resp.status_code == 200
+            assert resp.json()["status"] in ("started", "already_loading")
+        finally:
+            cache.articles = []
+
+    async def test_rescore_returns_busy_when_loading(self, authed_client_no_ratelimit, db_engine):
+        cache.is_loading = True
+        cache.load_progress = "Fetching..."
+        try:
+            resp = await authed_client_no_ratelimit.post("/api/rescore")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["status"] == "already_loading"
+        finally:
+            cache.is_loading = False
+            cache.load_progress = ""
+
+
+# ── /api/bookmark ─────────────────────────────────────────────────────────────
+
+
+class TestBookmark:
+    async def test_bookmark_requires_auth(self, client, db_engine):
+        resp = await client.post("/api/bookmark", json={"article_id": "tag:a"})
+        assert resp.status_code in (401, 403)
+
+    async def test_bookmark_returns_404_when_article_not_in_cache(
+        self, authed_client_no_ratelimit, db_engine
+    ):
+        cache.articles = []
+        resp = await authed_client_no_ratelimit.post(
+            "/api/bookmark", json={"article_id": "tag:missing"}
+        )
+        assert resp.status_code == 404
+
+    async def test_bookmark_toggles_state(self, authed_client_no_ratelimit, db_engine):
+        from db import save_articles
+
+        article = dict(_ARTICLE, bookmarked=False)
+        await save_articles([article], total_fetched=1)
+        cache.articles = [dict(article)]
+
+        resp = await authed_client_no_ratelimit.post("/api/bookmark", json={"article_id": "tag:a"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "bookmarked" in data
+
+        cache.articles = []
+
+
+# ── /api/snooze ────────────────────────────────────────────────────────────────
+
+
+class TestSnooze:
+    async def test_snooze_requires_auth(self, client, db_engine):
+        resp = await client.post("/api/snooze", json={"article_id": "tag:a"})
+        assert resp.status_code in (401, 403)
+
+    async def test_snooze_returns_404_when_article_not_in_cache(
+        self, authed_client_no_ratelimit, db_engine
+    ):
+        cache.articles = []
+        resp = await authed_client_no_ratelimit.post(
+            "/api/snooze", json={"article_id": "tag:missing"}
+        )
+        assert resp.status_code == 404
+
+    async def test_snooze_returns_400_when_telegram_not_configured(
+        self, authed_client_no_ratelimit, db_engine
+    ):
+        cache.articles = [dict(_ARTICLE)]
+        try:
+            resp = await authed_client_no_ratelimit.post(
+                "/api/snooze", json={"article_id": "tag:a"}
+            )
+            # Without Telegram config, returns 400
+            assert resp.status_code == 400
+        finally:
+            cache.articles = []

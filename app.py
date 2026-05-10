@@ -633,8 +633,10 @@ async def refresh_stream() -> StreamingResponse:
         loop.call_soon_threadsafe(q.put_nowait, event)
 
     def _worker(topics_cfg: dict[str, Any], feed_weights: dict[str, float]) -> None:
+        # _worker owns is_loading lifecycle from here through finally cleanup.
         # Runs in a thread pool — survives SSE client disconnections.
         # Responsible for DB save, cache populate, and clearing is_loading.
+        cache.is_loading = True
         cfg = load_config()
         all_articles: list[dict[str, Any]] = []
         total_fetched = 0
@@ -674,7 +676,6 @@ async def refresh_stream() -> StreamingResponse:
             cache.is_loading = False
 
     async def _event_gen():
-        cache.is_loading = True
         cache.error = None
         cache.load_progress = "Démarrage..."
 
@@ -685,7 +686,6 @@ async def refresh_stream() -> StreamingResponse:
             logger.exception("refresh-stream init failed")
             cache.error = f"{type(e).__name__}: {e}"
             cache.load_progress = "Erreur"
-            cache.is_loading = False
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
             return
 
