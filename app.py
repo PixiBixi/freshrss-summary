@@ -315,8 +315,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await asyncio.gather(*bg_tasks, return_exceptions=True)
 
 
-class _LazySessionMiddleware(SessionMiddleware):
-    """Read the session secret lazily when the middleware stack is first built, not at import time."""
+class _SessionMiddleware(SessionMiddleware):
+    """Bind the session secret key when the middleware stack is built."""
 
     def __init__(self, app: Any) -> None:
         super().__init__(app, secret_key=get_secret_key())
@@ -324,9 +324,20 @@ class _LazySessionMiddleware(SessionMiddleware):
 
 app = FastAPI(title="FreshRSS Summary", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
-app.add_middleware(_LazySessionMiddleware)
+app.add_middleware(_SessionMiddleware)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_freshrss_client(cfg: dict[str, Any]) -> FreshRSSClient:
+    """Build a FreshRSSClient from the freshrss section of the config."""
+    fr = cfg["freshrss"]
+    return FreshRSSClient(fr["url"], fr["username"], fr["api_password"])
 
 
 # ---------------------------------------------------------------------------
@@ -463,8 +474,7 @@ async def mark_read(req: MarkReadRequest) -> dict[str, Any]:
     try:
 
         def _sync_mark_read() -> None:
-            fr = load_config()["freshrss"]
-            with FreshRSSClient(fr["url"], fr["username"], fr["api_password"]) as c:
+            with _make_freshrss_client(load_config()) as c:
                 c.mark_as_read(req.article_ids)
 
         await asyncio.to_thread(_sync_mark_read)
@@ -549,8 +559,7 @@ async def _do_fetch_and_score() -> None:
             try:
 
                 def _sync_pending() -> None:
-                    fr = load_config()["freshrss"]
-                    with FreshRSSClient(fr["url"], fr["username"], fr["api_password"]) as c:
+                    with _make_freshrss_client(load_config()) as c:
                         c.mark_as_read(pending)
 
                 await asyncio.to_thread(_sync_pending)
@@ -630,8 +639,7 @@ async def refresh_stream() -> StreamingResponse:
             topics = build_topics(topics_cfg)
             for scored_batch, total_fetched in fetch_and_score_iter(cfg, topics, feed_weights):
                 msg = f"Récupération : {total_fetched} articles..."
-                cache.load_progress = msg
-                _put({"type": "progress", "message": msg})
+                _put({"type": "progress", "message": msg, "_load_progress": msg})
                 for d in scored_batch:
                     all_articles.append(d)
                     _put({"type": "article", "article": d})
@@ -639,7 +647,7 @@ async def refresh_stream() -> StreamingResponse:
             if total_fetched == 0:
                 logger.warning("Stream refresh: 0 articles fetched — DB not modified")
             else:
-                cache.load_progress = "Sauvegarde..."
+                _put({"type": "state", "_load_progress": "Sauvegarde..."})
                 elapsed = time.perf_counter() - _t0
                 asyncio.run_coroutine_threadsafe(
                     _persist_and_populate(all_articles, total_fetched, elapsed=elapsed), loop
@@ -650,14 +658,28 @@ async def refresh_stream() -> StreamingResponse:
                     len(all_articles),
                 )
 
-            cache.load_progress = "Terminé"
-            _put({"type": "done", "total_fetched": total_fetched, "count": len(all_articles)})
+            _put(
+                {
+                    "type": "done",
+                    "total_fetched": total_fetched,
+                    "count": len(all_articles),
+                    "_load_progress": "Terminé",
+                    "_is_loading": False,
+                }
+            )
         except Exception as e:
             logger.exception("refresh-stream worker failed")
-            cache.error = f"{type(e).__name__}: {e}"
-            cache.load_progress = "Erreur"
-            _put({"type": "error", "message": str(e)})
+            _put(
+                {
+                    "type": "error",
+                    "message": str(e),
+                    "_cache_error": f"{type(e).__name__}: {e}",
+                    "_load_progress": "Erreur",
+                    "_is_loading": False,
+                }
+            )
         finally:
+            # Fallback: ensure is_loading is cleared if the worker exits without sending done/error
             cache.is_loading = False
 
     async def _event_gen():
@@ -678,12 +700,22 @@ async def refresh_stream() -> StreamingResponse:
         try:
             while True:
                 event = await q.get()
-                yield f"data: {json.dumps(event)}\n\n"
+                # Apply cache state mutations sent by the worker through the queue
+                if "_load_progress" in event:
+                    cache.load_progress = event["_load_progress"]
+                if "_cache_error" in event:
+                    cache.error = event["_cache_error"]
+                if "_is_loading" in event:
+                    cache.is_loading = event["_is_loading"]
+                if event["type"] == "state":
+                    continue  # pure state update — not forwarded to SSE client
+                # Strip private fields before forwarding to the SSE client
+                public_event = {k: v for k, v in event.items() if not k.startswith("_")}
+                yield f"data: {json.dumps(public_event)}\n\n"
                 if event["type"] in ("done", "error"):
                     break
         except asyncio.CancelledError:
             raise
-        # cache.is_loading is managed by the worker thread
 
     return StreamingResponse(
         _event_gen(),
