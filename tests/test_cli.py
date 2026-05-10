@@ -1,11 +1,26 @@
 """Unit tests for cli.py — config loading and helper functions."""
 
 from typing import cast
+from unittest.mock import MagicMock
 
 import pytest
 
 import config as config_module
 from config import ConfigDict, load_config
+
+
+def _run_mock(return_value=None, raises=None):
+    """asyncio.run replacement that closes the coroutine to silence unawaited warnings."""
+
+    def _impl(coro):
+        if hasattr(coro, "close"):
+            coro.close()
+        if raises is not None:
+            raise raises
+        return return_value
+
+    return MagicMock(side_effect=_impl)
+
 
 # ── ANSI helpers ──────────────────────────────────────────────────────────────
 
@@ -149,7 +164,7 @@ class TestCmdStats:
 
         from cli import cmd_stats
 
-        with patch("cli.asyncio.run", return_value=_DB_STATS):
+        with patch("cli.asyncio.run", new=_run_mock(_DB_STATS)):
             args = argparse.Namespace()
             rc = cmd_stats(args, _MINIMAL_CFG)
         assert rc == 0
@@ -159,7 +174,7 @@ class TestCmdStats:
     def test_db_error_returns_1(self, monkeypatch, capsys):
         from unittest.mock import patch
 
-        with patch("cli.asyncio.run", side_effect=RuntimeError("DB unreachable")):
+        with patch("cli.asyncio.run", new=_run_mock(raises=RuntimeError("DB unreachable"))):
             import argparse
 
             from cli import cmd_stats
@@ -193,7 +208,7 @@ class TestCmdRescore:
         from cli import cmd_rescore
 
         # _run_rescore now returns (raw, rescored) in a single asyncio.run call
-        with patch("cli.asyncio.run", return_value=(raw, raw)) as mock_run:
+        with patch("cli.asyncio.run", new=_run_mock((raw, raw))) as mock_run:
             rc = cmd_rescore(args, _MINIMAL_CFG)
 
         assert rc == 0
@@ -210,7 +225,7 @@ class TestCmdRescore:
         from cli import cmd_rescore
 
         # _run_rescore returns (raw, rescored); empty DB → ([], [])
-        with patch("cli.asyncio.run", return_value=([], [])):
+        with patch("cli.asyncio.run", new=_run_mock(([], []))):
             rc = cmd_rescore(args, _MINIMAL_CFG)
 
         assert rc == 0
@@ -225,7 +240,7 @@ class TestCmdRescore:
 
         from cli import cmd_rescore
 
-        with patch("cli.asyncio.run", side_effect=RuntimeError("load failed")):
+        with patch("cli.asyncio.run", new=_run_mock(raises=RuntimeError("load failed"))):
             rc = cmd_rescore(args, _MINIMAL_CFG)
 
         assert rc == 1
@@ -248,7 +263,7 @@ class TestCmdCheck:
         from cli import cmd_check
 
         with patch("cli.make_client", return_value=mock_client):
-            with patch("cli.asyncio.run", return_value=_DB_STATS):
+            with patch("cli.asyncio.run", new=_run_mock(_DB_STATS)):
                 rc = cmd_check(args, _MINIMAL_CFG)
 
         assert rc == 0
@@ -339,7 +354,7 @@ class TestCmdFetch:
         from cli import cmd_fetch
 
         # _run_fetch returns (all_articles, total_fetched, batch_info) in a single asyncio.run call
-        with patch("cli.asyncio.run", return_value=([_ARTICLE_DICT], 1, [(1, 1)])) as mock_run:
+        with patch("cli.asyncio.run", new=_run_mock(([_ARTICLE_DICT], 1, [(1, 1)]))) as mock_run:
             rc = cmd_fetch(args, _MINIMAL_CFG)
 
         assert rc == 0
@@ -477,7 +492,7 @@ class TestCmdDigest:
         args = argparse.Namespace(send=False)
         from cli import cmd_digest
 
-        with patch("cli.asyncio.run", return_value=[]):
+        with patch("cli.asyncio.run", new=_run_mock([])):
             rc = cmd_digest(args, _MINIMAL_CFG)
 
         assert rc == 0
@@ -489,7 +504,7 @@ class TestCmdDigest:
         args = argparse.Namespace(send=False)
         from cli import cmd_digest
 
-        with patch("cli.asyncio.run", side_effect=RuntimeError("db down")):
+        with patch("cli.asyncio.run", new=_run_mock(raises=RuntimeError("db down"))):
             rc = cmd_digest(args, _MINIMAL_CFG)
 
         assert rc == 1
@@ -501,7 +516,7 @@ class TestCmdDigest:
         args = argparse.Namespace(send=True)
         from cli import cmd_digest
 
-        with patch("cli.asyncio.run", return_value=[]):
+        with patch("cli.asyncio.run", new=_run_mock([])):
             rc = cmd_digest(args, _MINIMAL_CFG)  # _MINIMAL_CFG has no telegram key
 
         assert rc == 1
@@ -520,7 +535,7 @@ class TestCmdDigest:
         )
         from cli import cmd_digest
 
-        with patch("cli.asyncio.run", return_value=[]):
+        with patch("cli.asyncio.run", new=_run_mock([])):
             rc = cmd_digest(args, cfg_with_tg)
 
         assert rc == 0
