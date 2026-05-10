@@ -10,7 +10,7 @@ import logging.config
 import os
 import secrets
 import time
-from collections.abc import Iterator
+from collections.abc import AsyncGenerator, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -307,7 +307,7 @@ async def _setup_telegram_scheduler(scheduler: AsyncIOScheduler, tg_cfg: dict, c
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     cfg = load_config()
     db_url = cfg.get("database", {}).get("url", DEFAULT_DB_URL)
     await init_db(db_url)
@@ -390,7 +390,7 @@ async def login(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
-):
+) -> Response:
     ip = request.client.host if request.client else "unknown"
     if not _login_rate_limit(ip):
         return templates.TemplateResponse(

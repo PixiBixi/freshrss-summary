@@ -275,6 +275,7 @@ async def load_articles() -> tuple[list[dict], float | None, int]:
             "top_topic": r["top_topic"],
             "summary": r["summary"] or "",
             "bookmarked": bool(r["bookmarked"]),
+            "_read": False,
         }
         for r in rows
     ]
