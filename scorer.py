@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from models import Article
+from models import Article, ArticleDict
 
 
 @dataclass
@@ -36,7 +36,7 @@ class ScoredArticle:
             return None
         return max(self.matched_topics, key=lambda t: self.matched_topics[t])
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> ArticleDict:
         stripped = self._stripped_content
         return {
             "id": self.article.id,
