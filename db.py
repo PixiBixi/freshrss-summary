@@ -120,7 +120,7 @@ async def _run_migrations(conn: "AsyncConnection") -> None:
         ("articles", "content", "ALTER TABLE articles ADD COLUMN content TEXT DEFAULT ''"),
         ("articles", "read_at", "ALTER TABLE articles ADD COLUMN read_at INTEGER"),
     ]
-    for _table, column, stmt in _MIGRATIONS:
+    for _, column, stmt in _MIGRATIONS:
         try:
             await conn.execute(text(stmt))
             logger.info("DB migrated: added %s column", column)
@@ -128,6 +128,7 @@ async def _run_migrations(conn: "AsyncConnection") -> None:
             msg = str(exc).lower()
             if "duplicate" not in msg and "already exists" not in msg:
                 logger.exception("Migration ALTER failed unexpectedly for %s", column)
+                raise
             # else: column already exists — expected on every run after first
 
 
@@ -154,6 +155,23 @@ async def init_db(url: str = DEFAULT_DB_URL) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _article_to_row(a: dict[str, Any], now: int) -> dict[str, Any]:
+    return {
+        "id": a["id"],
+        "title": a["title"],
+        "url": a["url"],
+        "feed_title": a["feed_title"],
+        "published": a["published"],
+        "score": a["score"],
+        "matched_topics": json.dumps(a["matched_topics"]),
+        "matched_keywords": json.dumps(a["matched_keywords"]),
+        "top_topic": a.get("top_topic"),
+        "summary": a["summary"],
+        "content": a.get("_content", a["summary"]),
+        "fetched_at": now,
+    }
+
+
 async def save_articles(articles: list[dict[str, Any]], total_fetched: int) -> None:
     """Replace unread articles with a fresh scored set; purge read articles older than 7 days."""
     now = int(time.time())
@@ -171,23 +189,7 @@ async def save_articles(articles: list[dict[str, Any]], total_fetched: int) -> N
         if articles:
             await conn.execute(
                 insert(articles_table),
-                [
-                    {
-                        "id": a["id"],
-                        "title": a["title"],
-                        "url": a["url"],
-                        "feed_title": a["feed_title"],
-                        "published": a["published"],
-                        "score": a["score"],
-                        "matched_topics": json.dumps(a["matched_topics"]),
-                        "matched_keywords": json.dumps(a["matched_keywords"]),
-                        "top_topic": a.get("top_topic"),
-                        "summary": a["summary"],
-                        "content": a.get("_content", a["summary"]),
-                        "fetched_at": now,
-                    }
-                    for a in articles
-                ],
+                [_article_to_row(a, now) for a in articles],
             )
         await _set_meta(conn, "last_refresh", str(now))
         await _set_meta(conn, "total_fetched", str(total_fetched))
@@ -197,23 +199,7 @@ async def save_articles(articles: list[dict[str, Any]], total_fetched: int) -> N
 async def upsert_articles(articles: list[dict[str, Any]]) -> None:
     """Insert or replace articles by id without wiping the full table."""
     now = int(time.time())
-    rows = [
-        {
-            "id": a["id"],
-            "title": a["title"],
-            "url": a["url"],
-            "feed_title": a["feed_title"],
-            "published": a["published"],
-            "score": a["score"],
-            "matched_topics": json.dumps(a["matched_topics"]),
-            "matched_keywords": json.dumps(a["matched_keywords"]),
-            "top_topic": a.get("top_topic"),
-            "summary": a["summary"],
-            "content": a.get("_content", a["summary"]),
-            "fetched_at": now,
-        }
-        for a in articles
-    ]
+    rows = [_article_to_row(a, now) for a in articles]
     ids = [r["id"] for r in rows]
     async with get_engine().begin() as conn:
         await conn.execute(delete(articles_table).where(articles_table.c.id.in_(ids)))
@@ -335,17 +321,17 @@ async def get_scoring_config() -> dict[str, Any] | None:
     return json.loads(row[0]) if row else None
 
 
-async def get_or_seed_scoring_config(cfg: dict[str, Any]) -> dict[str, Any]:
+async def get_or_seed_scoring_config(
+    cfg: dict[str, Any], default_topics: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Return scoring topics from DB if present; otherwise seed from cfg and return it.
 
     Provides DB-first precedence so both app.py and cli.py agree on active topics.
     """
-    from config import DEFAULT_TOPICS
-
     stored = await get_scoring_config()
     if stored is not None:
         return stored
-    topics = cfg.get("topics") or DEFAULT_TOPICS
+    topics = cfg.get("topics") or default_topics or {}
     await set_scoring_config(topics)
     return topics
 
