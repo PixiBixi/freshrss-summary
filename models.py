@@ -1,7 +1,7 @@
 """Domain model for articles."""
 
 from dataclasses import dataclass, field
-from typing import TypedDict
+from typing import Any, TypedDict
 
 
 @dataclass
@@ -33,7 +33,7 @@ class ArticleDict(TypedDict, total=False):
     _read: bool
 
 
-def article_from_row(row: dict) -> Article:
+def article_from_row(row: dict[str, Any]) -> Article:
     """Reconstruct an Article from a DB row dict (for rescore operations)."""
     return Article(
         id=row["id"],

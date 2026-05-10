@@ -96,7 +96,7 @@ def get_secret_key_from_config() -> str | None:
     return load_raw_config().get("auth", {}).get("secret_key") or None
 
 
-DEFAULT_TOPICS: dict = {
+DEFAULT_TOPICS: dict[str, Any] = {
     "SRE": {
         "weight": 1.5,
         "keywords": [

@@ -66,6 +66,7 @@ from db import (
     toggle_bookmark,
 )
 from freshrss_client import FreshRSSClient
+from models import ArticleDict
 from pipeline import fetch_and_score_iter, rescore_articles
 from scorer import build_topics
 from telegram_digest import (
@@ -192,7 +193,7 @@ logger = logging.getLogger(__name__)
 
 class Cache:
     def __init__(self):
-        self.articles: list[dict[str, Any]] = []
+        self.articles: list[ArticleDict] = []
         self.all_topics: list[str] = []
         self.total_fetched: int = 0
         self.last_refresh: float | None = None

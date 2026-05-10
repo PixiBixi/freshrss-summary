@@ -6,8 +6,11 @@ import logging
 import math
 import time
 from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
+
+from models import ArticleDict
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +81,7 @@ def _split_message(text: str, max_len: int = _TELEGRAM_MAX_LEN) -> list[str]:
     return chunks
 
 
-def build_digest(articles: list[dict]) -> str:
+def build_digest(articles: list[ArticleDict]) -> str:
     """
     Build an HTML-formatted Telegram digest from cache articles.
 
@@ -129,7 +132,7 @@ async def send_message(bot_token: str, chat_id: str, text: str) -> None:
             r.raise_for_status()
 
 
-async def send_digest(tg_cfg: TelegramConfig, articles: list[dict]) -> None:
+async def send_digest(tg_cfg: TelegramConfig, articles: list[ArticleDict]) -> None:
     """Build and send the digest. Called by scheduler and webhook handler."""
     if not tg_cfg.is_configured():
         logger.warning("Telegram digest: bot_token or chat_id missing, skipping")
@@ -143,7 +146,7 @@ async def send_digest(tg_cfg: TelegramConfig, articles: list[dict]) -> None:
 
 
 async def check_trending(
-    tg_cfg: TelegramConfig, articles: list[dict], alerted: set[tuple[str, int]]
+    tg_cfg: TelegramConfig, articles: list[ArticleDict], alerted: set[tuple[str, int]]
 ) -> set[tuple[str, int]]:
     """
     Alert if a topic has ≥3 articles in the last 2h and ≥2x more than the prior 2h window.
@@ -192,7 +195,7 @@ async def check_trending(
     return new_alerted
 
 
-async def send_snooze_reminders(tg_cfg: TelegramConfig, due: list[dict]) -> list[str]:
+async def send_snooze_reminders(tg_cfg: TelegramConfig, due: list[dict[str, Any]]) -> list[str]:
     """Send Telegram reminders for due snooze entries. Returns article_ids sent successfully."""
     if not tg_cfg.is_configured() or not due:
         return []
@@ -215,7 +218,7 @@ async def register_webhook(tg_cfg: TelegramConfig, public_url: str) -> None:
     if not tg_cfg.bot_token:
         return
     webhook_url = f"{public_url.rstrip('/')}/telegram/webhook"
-    payload: dict = {
+    payload: dict[str, Any] = {
         "url": webhook_url,
         "allowed_updates": ["message"],
     }
