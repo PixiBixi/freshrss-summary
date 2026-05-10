@@ -114,16 +114,16 @@ def build_digest(articles: list[ArticleDict]) -> str:
     return "\n".join(lines)
 
 
-async def send_message(bot_token: str, chat_id: str, text: str) -> None:
+async def send_message(tg_cfg: TelegramConfig, text: str) -> None:
     """Send one or more Telegram messages (splits at 4096 chars)."""
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    url = f"https://api.telegram.org/bot{tg_cfg.bot_token}/sendMessage"
     chunks = _split_message(text)
     async with httpx.AsyncClient(timeout=10) as client:
         for chunk in chunks:
             r = await client.post(
                 url,
                 json={
-                    "chat_id": chat_id,
+                    "chat_id": tg_cfg.chat_id,
                     "text": chunk,
                     "parse_mode": "HTML",
                     "disable_web_page_preview": True,
@@ -139,7 +139,7 @@ async def send_digest(tg_cfg: TelegramConfig, articles: list[ArticleDict]) -> No
         return
     text = build_digest(articles)
     try:
-        await send_message(tg_cfg.bot_token, tg_cfg.chat_id, text)
+        await send_message(tg_cfg, text)
         logger.info("Telegram digest sent (%d chars)", len(text))
     except Exception:
         logger.exception("Telegram digest send failed")
@@ -187,7 +187,7 @@ async def check_trending(
             vs = f"vs {prior}" if prior else "sans activité récente"
             lines.append(f"· <b>{_html_escape(topic)}</b>  +{recent} articles ({vs})")
         try:
-            await send_message(tg_cfg.bot_token, tg_cfg.chat_id, "\n".join(lines))
+            await send_message(tg_cfg, "\n".join(lines))
             logger.info("Trending alert sent: %s", [t for t, _, _ in alerts])
         except Exception:
             logger.exception("Trending alert send failed")
@@ -205,7 +205,11 @@ async def send_snooze_reminders(tg_cfg: TelegramConfig, due: list[dict[str, Any]
             title = _html_escape(s["title"])
             url = s["url"]
             text = f'⏰ <b>Rappel</b>\n<a href="{url}">{title}</a>'
-            await send_message(tg_cfg.bot_token, s.get("chat_id") or tg_cfg.chat_id, text)
+            snooze_cfg = TelegramConfig(
+                bot_token=tg_cfg.bot_token,
+                chat_id=s.get("chat_id") or tg_cfg.chat_id,
+            )
+            await send_message(snooze_cfg, text)
             sent.append(s["article_id"])
             logger.info("Snooze reminder sent: %s", s["article_id"])
         except Exception:

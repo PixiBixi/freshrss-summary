@@ -292,8 +292,9 @@ class TestRefreshStream:
         article = dict(_ARTICLE)
 
         with (
+            patch("app.build_topics", return_value={}),
             patch(
-                "app._fetch_and_score_iter",
+                "app.fetch_and_score_iter",
                 return_value=iter([([article], 1)]),
             ),
             patch(
@@ -326,8 +327,9 @@ class TestRefreshStream:
         from unittest.mock import AsyncMock, patch
 
         with (
+            patch("app.build_topics", return_value={}),
             patch(
-                "app._fetch_and_score_iter",
+                "app.fetch_and_score_iter",
                 side_effect=RuntimeError("fetch failed"),
             ),
             patch(

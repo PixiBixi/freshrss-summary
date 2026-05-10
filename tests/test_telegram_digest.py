@@ -137,7 +137,7 @@ class TestSendMessage:
     async def test_send_message_posts_to_telegram(self):
         calls: list = []
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
-            await send_message("MY_TOKEN", "CHAT_123", "hello world")
+            await send_message(TelegramConfig("MY_TOKEN", "CHAT_123"), "hello world")
         assert len(calls) == 1
         assert "MY_TOKEN" in calls[0]["url"]
         assert calls[0]["json"]["chat_id"] == "CHAT_123"
@@ -150,7 +150,7 @@ class TestSendMessage:
         calls: list = []
         long_text = "\n".join(["x" * 100] * 50)  # ~5050 chars
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
-            await send_message("TOKEN", "123", long_text)
+            await send_message(TelegramConfig("TOKEN", "123"), long_text)
         assert len(calls) == 2
 
 
@@ -165,8 +165,8 @@ class TestSendDigest:
 
         sent: list = []
 
-        async def fake_send(token, chat_id, text):
-            sent.append({"token": token, "chat_id": chat_id, "text": text})
+        async def fake_send(tg_cfg, text):
+            sent.append({"bot_token": tg_cfg.bot_token, "chat_id": tg_cfg.chat_id, "text": text})
 
         with patch("telegram_digest.send_message", side_effect=fake_send):
             await send_digest(
@@ -174,7 +174,7 @@ class TestSendDigest:
             )
 
         assert len(sent) == 1
-        assert sent[0]["token"] == "TOK"
+        assert sent[0]["bot_token"] == "TOK"
         assert sent[0]["chat_id"] == "42"
         assert "K8s News" in sent[0]["text"]
 

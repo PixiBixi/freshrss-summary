@@ -9,7 +9,7 @@ import os
 import secrets
 import time
 import zoneinfo
-from collections.abc import AsyncGenerator, Callable, Coroutine, Iterator
+from collections.abc import AsyncGenerator, Callable, Coroutine
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -484,19 +484,6 @@ async def mark_read(req: MarkReadRequest) -> dict[str, str]:
     return {"status": "ok", "marked": str(len(req.article_ids))}
 
 
-def _fetch_and_score_iter(
-    cfg: dict[str, Any],
-    topics_cfg: dict[str, Any],
-    feed_weights: dict[str, float] | None = None,
-) -> Iterator[tuple[list[dict[str, Any]], int]]:
-    """
-    Generator: fetch unread articles in batches, score each, yield (scored_batch, cumulative_count).
-    Runs in a thread pool (blocking I/O). Callers decide whether to stream or accumulate.
-    """
-    topics = build_topics(topics_cfg)
-    yield from fetch_and_score_iter(cfg, topics, feed_weights)
-
-
 def _blocking_fetch_and_score(
     cfg: dict[str, Any],
     topics_cfg: dict[str, Any],
@@ -507,7 +494,8 @@ def _blocking_fetch_and_score(
     all_articles: list[dict[str, Any]] = []
     total_fetched = 0
 
-    for scored_batch, total_fetched in _fetch_and_score_iter(cfg, topics_cfg, feed_weights):
+    topics = build_topics(topics_cfg)
+    for scored_batch, total_fetched in fetch_and_score_iter(cfg, topics, feed_weights):
         if on_progress:
             on_progress(f"Récupération : {total_fetched} articles...")
         all_articles.extend(scored_batch)
@@ -645,7 +633,8 @@ async def refresh_stream() -> StreamingResponse:
         _t0 = time.perf_counter()
 
         try:
-            for scored_batch, total_fetched in _fetch_and_score_iter(cfg, topics_cfg, feed_weights):
+            topics = build_topics(topics_cfg)
+            for scored_batch, total_fetched in fetch_and_score_iter(cfg, topics, feed_weights):
                 msg = f"Récupération : {total_fetched} articles..."
                 cache.load_progress = msg
                 _put({"type": "progress", "message": msg})

@@ -536,7 +536,7 @@ async def _load_articles_for_digest(cfg: dict[str, Any]) -> list[dict[str, Any]]
 
 def cmd_digest(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     """Build and print the Telegram digest from DB articles. Optionally send it."""
-    from telegram_digest import build_digest, send_message
+    from telegram_digest import TelegramConfig, build_digest, send_message
 
     try:
         articles = asyncio.run(_load_articles_for_digest(cfg))
@@ -549,14 +549,12 @@ def cmd_digest(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     print(text)
 
     if args.send:
-        tg = cfg.get("telegram", {})
-        bot_token = tg.get("bot_token", "")
-        chat_id = tg.get("chat_id", "")
-        if not bot_token or not chat_id:
+        tg_cfg = TelegramConfig.from_dict(cfg.get("telegram", {}))
+        if not tg_cfg.is_configured():
             print(err("Telegram bot_token or chat_id not configured"))
             return 1
         try:
-            asyncio.run(send_message(bot_token, chat_id, text))
+            asyncio.run(send_message(tg_cfg, text))
             print(ok("Digest sent via Telegram"))
         except Exception as e:
             logger.exception("digest: Telegram send failed")
