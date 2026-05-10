@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.3](https://github.com/PixiBixi/freshrss-summary/compare/v1.6.2...v1.6.3) (2026-05-10)
+
+
+### Bug Fixes
+
+* **ci:** push Helm chart to charts/ subpath to avoid collision with Docker image ([0a4439a](https://github.com/PixiBixi/freshrss-summary/commit/0a4439a5cd1027a09cc587cc965b21ebd32527b0))
+
 ## [1.6.2](https://github.com/PixiBixi/freshrss-summary/compare/v1.6.1...v1.6.2) (2026-05-10)
 
 
