@@ -473,3 +473,94 @@ class TestSnooze:
             assert resp.status_code == 400
         finally:
             cache.articles = []
+
+
+# ── /api/config/scoring ────────────────────────────────────────────────────────
+
+
+class TestScoringConfig:
+    async def test_get_requires_auth(self, client, db_engine):
+        resp = await client.get("/api/config/scoring")
+        assert resp.status_code in (401, 403)
+
+    async def test_put_requires_auth(self, client, db_engine):
+        resp = await client.put("/api/config/scoring", json={"topics": {}, "feed_weights": {}})
+        assert resp.status_code in (401, 403)
+
+    async def test_put_and_get_roundtrip(self, authed_client_no_ratelimit, db_engine):
+        topics = {"SRE": {"weight": 2.0, "keywords": ["sre", "incident"]}}
+        resp = await authed_client_no_ratelimit.put(
+            "/api/config/scoring", json={"topics": topics, "feed_weights": {}}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+        resp = await authed_client_no_ratelimit.get("/api/config/scoring")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "SRE" in data["topics"]
+
+    async def test_put_rejects_out_of_range_feed_weight(
+        self, authed_client_no_ratelimit, db_engine
+    ):
+        resp = await authed_client_no_ratelimit.put(
+            "/api/config/scoring",
+            json={"topics": {}, "feed_weights": {"My Feed": 99.0}},
+        )
+        assert resp.status_code == 422
+
+
+# ── /api/change-password ──────────────────────────────────────────────────────
+
+
+class TestChangePassword:
+    async def test_requires_auth(self, client, db_engine):
+        resp = await client.post(
+            "/api/change-password",
+            json={"current_password": "testpass", "new_password": "newpass123"},
+        )
+        assert resp.status_code in (401, 403)
+
+    async def test_wrong_current_password_returns_400(self, authed_client_no_ratelimit, db_engine):
+        resp = await authed_client_no_ratelimit.post(
+            "/api/change-password",
+            json={"current_password": "wrongpass", "new_password": "newpass123"},
+        )
+        assert resp.status_code == 400
+
+    async def test_too_short_new_password_returns_400(self, authed_client_no_ratelimit, db_engine):
+        resp = await authed_client_no_ratelimit.post(
+            "/api/change-password",
+            json={"current_password": "testpass", "new_password": "short"},
+        )
+        assert resp.status_code == 400
+
+    async def test_success_returns_200(self, authed_client_no_ratelimit, db_engine):
+        resp = await authed_client_no_ratelimit.post(
+            "/api/change-password",
+            json={"current_password": "testpass", "new_password": "newpassword123"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+
+# ── Smoke tests for remaining endpoints ───────────────────────────────────────
+
+
+class TestSmokeEndpoints:
+    async def test_api_feeds_requires_auth(self, client, db_engine):
+        resp = await client.get("/api/feeds")
+        assert resp.status_code in (401, 403)
+
+    async def test_api_feeds_returns_list(self, authed_client_no_ratelimit, db_engine):
+        resp = await authed_client_no_ratelimit.get("/api/feeds")
+        assert resp.status_code == 200
+        assert "feeds" in resp.json()
+
+    async def test_metrics_requires_auth(self, client, db_engine):
+        resp = await client.get("/metrics")
+        assert resp.status_code in (401, 403)
+
+    async def test_metrics_returns_prometheus_text(self, authed_client_no_ratelimit, db_engine):
+        resp = await authed_client_no_ratelimit.get("/metrics")
+        assert resp.status_code == 200
