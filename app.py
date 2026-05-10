@@ -449,8 +449,8 @@ class MarkReadRequest(BaseModel):
 
 
 async def _get_or_seed_scoring_config() -> dict[str, Any]:
-    from config import DEFAULT_TOPICS
     from db import get_or_seed_scoring_config
+    from scorer import DEFAULT_TOPICS
 
     return await get_or_seed_scoring_config(load_config(), DEFAULT_TOPICS)
 

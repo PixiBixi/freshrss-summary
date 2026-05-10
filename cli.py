@@ -90,10 +90,9 @@ async def _run_fetch(
     cfg: dict[str, Any], save: bool
 ) -> tuple[list[dict[str, Any]], int, list[tuple[int, int]]]:
     """Init DB, fetch topics (DB-first), fetch+score, optionally save. Returns (articles, total_fetched, batch_info)."""
-    from config import DEFAULT_TOPICS
     from db import get_or_seed_scoring_config, save_articles
     from pipeline import fetch_and_score_iter
-    from scorer import build_topics
+    from scorer import DEFAULT_TOPICS, build_topics
 
     await _init_db(cfg)
     topics_cfg = await get_or_seed_scoring_config(cfg, DEFAULT_TOPICS)
@@ -119,10 +118,9 @@ async def _run_rescore(
     cfg: dict[str, Any], save: bool
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Init DB, fetch topics (DB-first), rescore DB articles, optionally save. Returns (raw, rescored)."""
-    from config import DEFAULT_TOPICS
     from db import get_or_seed_scoring_config, load_for_rescore, save_articles
     from pipeline import rescore_articles
-    from scorer import build_topics
+    from scorer import DEFAULT_TOPICS, build_topics
 
     scoring_cfg = cfg.get("scoring", {})
     title_weight = int(scoring_cfg.get("title_weight", 3))
@@ -154,8 +152,8 @@ async def _run_import(
 
 async def _get_active_topics(cfg: dict[str, Any]) -> dict[str, Any]:
     """Init DB and return active topics (DB-first, YAML fallback)."""
-    from config import DEFAULT_TOPICS
     from db import get_or_seed_scoring_config
+    from scorer import DEFAULT_TOPICS
 
     await _init_db(cfg)
     return await get_or_seed_scoring_config(cfg, DEFAULT_TOPICS)
