@@ -2,7 +2,7 @@
 
 import pytest
 
-from freshrss_client import Article
+from models import Article
 from scorer import (
     TopicConfig,
     _strip_html,

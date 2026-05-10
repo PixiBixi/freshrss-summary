@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from telegram_digest import (
+    TelegramConfig,
     _split_message,
     build_digest,
     check_trending,
@@ -136,7 +137,7 @@ class TestSendMessage:
     async def test_send_message_posts_to_telegram(self):
         calls: list = []
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
-            await send_message("MY_TOKEN", "CHAT_123", "hello world")
+            await send_message(TelegramConfig("MY_TOKEN", "CHAT_123"), "hello world")
         assert len(calls) == 1
         assert "MY_TOKEN" in calls[0]["url"]
         assert calls[0]["json"]["chat_id"] == "CHAT_123"
@@ -149,7 +150,7 @@ class TestSendMessage:
         calls: list = []
         long_text = "\n".join(["x" * 100] * 50)  # ~5050 chars
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
-            await send_message("TOKEN", "123", long_text)
+            await send_message(TelegramConfig("TOKEN", "123"), long_text)
         assert len(calls) == 2
 
 
@@ -164,16 +165,16 @@ class TestSendDigest:
 
         sent: list = []
 
-        async def fake_send(token, chat_id, text):
-            sent.append({"token": token, "chat_id": chat_id, "text": text})
+        async def fake_send(tg_cfg, text):
+            sent.append({"bot_token": tg_cfg.bot_token, "chat_id": tg_cfg.chat_id, "text": text})
 
         with patch("telegram_digest.send_message", side_effect=fake_send):
             await send_digest(
-                {"bot_token": "TOK", "chat_id": "42"}, [_make_article(title="K8s News", score=50.0)]
+                TelegramConfig("TOK", "42"), [_make_article(title="K8s News", score=50.0)]
             )
 
         assert len(sent) == 1
-        assert sent[0]["token"] == "TOK"
+        assert sent[0]["bot_token"] == "TOK"
         assert sent[0]["chat_id"] == "42"
         assert "K8s News" in sent[0]["text"]
 
@@ -185,7 +186,7 @@ class TestSendDigest:
             sent.append(True)
 
         with patch("telegram_digest.send_message", side_effect=fake_send):
-            await send_digest({"bot_token": "", "chat_id": "42"}, [])
+            await send_digest(TelegramConfig("", "42"), [])
 
         assert sent == []
 
@@ -196,7 +197,7 @@ class TestSendDigest:
 
         with patch("telegram_digest.send_message", side_effect=failing_send):
             with caplog.at_level(logging.ERROR, logger="telegram_digest"):
-                await send_digest({"bot_token": "TOK", "chat_id": "42"}, [_make_article()])
+                await send_digest(TelegramConfig("TOK", "42"), [_make_article()])
 
         assert any("failed" in r.message.lower() for r in caplog.records)
 
@@ -210,7 +211,7 @@ class TestRegisterWebhook:
         calls: list = []
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
             await register_webhook(
-                {"bot_token": "TOK", "webhook_secret": "mysecret"},
+                TelegramConfig("TOK", "", webhook_secret="mysecret"),
                 "https://myapp.example.com",
             )
         assert len(calls) == 1
@@ -221,7 +222,7 @@ class TestRegisterWebhook:
     @pytest.mark.asyncio
     async def testregister_webhook_skips_if_no_token(self):
         with patch("telegram_digest.httpx.AsyncClient") as mock_client:
-            await register_webhook({"bot_token": ""}, "https://example.com")
+            await register_webhook(TelegramConfig("", ""), "https://example.com")
         mock_client.assert_not_called()
 
     @pytest.mark.asyncio
@@ -236,7 +237,7 @@ class TestRegisterWebhook:
 
         with patch("telegram_digest.httpx.AsyncClient", return_value=fake_client):
             with caplog.at_level(logging.ERROR, logger="telegram_digest"):
-                await register_webhook({"bot_token": "TOK"}, "https://example.com")
+                await register_webhook(TelegramConfig("TOK", ""), "https://example.com")
 
         assert any("failed" in r.message.lower() for r in caplog.records)
 
@@ -262,7 +263,7 @@ class TestCheckTrending:
     @pytest.mark.asyncio
     async def test_no_alert_when_no_token(self):
         articles = [_make_trending_article() for _ in range(5)]
-        result = await check_trending({"bot_token": "", "chat_id": "42"}, articles, set())
+        result = await check_trending(TelegramConfig("", "42"), articles, set())
         assert result == set()
 
     @pytest.mark.asyncio
@@ -271,7 +272,7 @@ class TestCheckTrending:
         calls: list = []
         articles = [_make_trending_article(published_offset=-1800) for _ in range(2)]
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
-            result = await check_trending({"bot_token": "TOK", "chat_id": "42"}, articles, set())
+            result = await check_trending(TelegramConfig("TOK", "42"), articles, set())
         assert len(calls) == 0
         assert result == set()
 
@@ -281,7 +282,7 @@ class TestCheckTrending:
         calls: list = []
         articles = [_make_trending_article(published_offset=-1800) for _ in range(3)]
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
-            result = await check_trending({"bot_token": "TOK", "chat_id": "42"}, articles, set())
+            result = await check_trending(TelegramConfig("TOK", "42"), articles, set())
         assert len(calls) == 1
         assert "Trending" in calls[0]["json"]["text"]
         assert len(result) == 1  # (topic, hour_bucket) added
@@ -294,9 +295,7 @@ class TestCheckTrending:
         hour_bucket = int(time.time()) // 7200
         pre_alerted = {("Kubernetes", hour_bucket)}
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
-            result = await check_trending(
-                {"bot_token": "TOK", "chat_id": "42"}, articles, pre_alerted
-            )
+            result = await check_trending(TelegramConfig("TOK", "42"), articles, pre_alerted)
         assert len(calls) == 0
         assert result == pre_alerted
 
@@ -308,7 +307,7 @@ class TestCheckTrending:
         recent = [_make_trending_article(published_offset=-1800) for _ in range(3)]
         prior = [_make_trending_article(published_offset=-9000) for _ in range(2)]
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
-            await check_trending({"bot_token": "TOK", "chat_id": "42"}, recent + prior, set())
+            await check_trending(TelegramConfig("TOK", "42"), recent + prior, set())
         assert len(calls) == 0
 
 
@@ -321,7 +320,7 @@ class TestSendSnoozeReminders:
         calls: list = []
         due = [{"article_id": "art-1", "chat_id": "42", "title": "Test", "url": "https://x.com"}]
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
-            sent = await send_snooze_reminders({"bot_token": "TOK", "chat_id": "42"}, due)
+            sent = await send_snooze_reminders(TelegramConfig("TOK", "42"), due)
         assert len(calls) == 1
         assert "Rappel" in calls[0]["json"]["text"]
         assert sent == ["art-1"]
@@ -331,11 +330,11 @@ class TestSendSnoozeReminders:
         calls: list = []
         due = [{"article_id": "art-1", "chat_id": "42", "title": "Test", "url": "https://x.com"}]
         with patch("telegram_digest.httpx.AsyncClient", return_value=_make_fake_client(calls)):
-            sent = await send_snooze_reminders({"bot_token": "", "chat_id": "42"}, due)
+            sent = await send_snooze_reminders(TelegramConfig("", "42"), due)
         assert sent == []
         assert len(calls) == 0
 
     @pytest.mark.asyncio
     async def test_returns_empty_on_empty_due(self):
-        sent = await send_snooze_reminders({"bot_token": "TOK", "chat_id": "42"}, [])
+        sent = await send_snooze_reminders(TelegramConfig("TOK", "42"), [])
         assert sent == []

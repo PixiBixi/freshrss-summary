@@ -3,6 +3,7 @@
 import logging
 import os
 from pathlib import Path
+from typing import Any, TypedDict, cast
 
 import yaml
 
@@ -11,7 +12,64 @@ logger = logging.getLogger(__name__)
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
 
 
-def load_config() -> dict:
+class FreshRSSConfig(TypedDict):
+    url: str
+    username: str
+    api_password: str
+
+
+class _ServerConfig(TypedDict, total=False):
+    host: str
+    port: int
+    public_url: str
+
+
+class _SchedulerConfig(TypedDict, total=False):
+    interval_minutes: int
+    digest_hour: int
+    timezone: str
+
+
+class _DatabaseConfig(TypedDict, total=False):
+    url: str
+
+
+class _TelegramSection(TypedDict, total=False):
+    bot_token: str
+    chat_id: str
+    webhook_secret: str
+
+
+class _AuthConfig(TypedDict, total=False):
+    secret_key: str
+    admin_password: str
+
+
+class _ScoringSection(TypedDict, total=False):
+    feed_weights: dict[str, float]
+
+
+class ConfigDict(TypedDict, total=False):
+    """Typed shape of the application config (config.yaml + env var overrides)."""
+
+    freshrss: FreshRSSConfig
+    server: _ServerConfig
+    scheduler: _SchedulerConfig
+    database: _DatabaseConfig
+    telegram: _TelegramSection
+    auth: _AuthConfig
+    scoring: _ScoringSection
+
+
+def load_raw_config() -> ConfigDict:
+    """Load config.yaml as-is, without env-var overrides or validation. Used during early startup."""
+    if not CONFIG_PATH.exists():
+        return cast(ConfigDict, {})
+    with CONFIG_PATH.open() as f:
+        return cast(ConfigDict, yaml.safe_load(f) or {})
+
+
+def load_config() -> ConfigDict:
     """
     Load config from config.yaml (if present), then apply env var overrides.
 
@@ -27,8 +85,12 @@ def load_config() -> dict:
       TELEGRAM_CHAT_ID       → telegram.chat_id
       TELEGRAM_WEBHOOK_SECRET → telegram.webhook_secret
       PUBLIC_URL             → server.public_url
+
+    Raises:
+        RuntimeError: if FRESHRSS_URL, FRESHRSS_USERNAME, or FRESHRSS_API_PASSWORD
+            are missing from both config.yaml and environment variables.
     """
-    cfg: dict = {}
+    cfg: dict[str, Any] = {}
     if CONFIG_PATH.exists():
         with CONFIG_PATH.open() as f:
             cfg = yaml.safe_load(f) or {}
@@ -75,245 +137,9 @@ def load_config() -> dict:
             "Set them in config.yaml or via FRESHRSS_URL / FRESHRSS_USERNAME / FRESHRSS_API_PASSWORD."
         )
 
-    return cfg
+    return cast(ConfigDict, cfg)
 
 
-DEFAULT_TOPICS: dict = {
-    "SRE": {
-        "weight": 1.5,
-        "keywords": [
-            "sre",
-            "site reliability",
-            "slo",
-            "sla",
-            "error budget",
-            "toil",
-            "incident",
-            "postmortem",
-            "runbook",
-            "on-call",
-            "oncall",
-            "pagerduty",
-            "chaos engineering",
-            "mttr",
-            "mttd",
-            "capacity planning",
-        ],
-    },
-    "Kubernetes": {
-        "weight": 1.5,
-        "keywords": [
-            "kubernetes",
-            "k8s",
-            "kubectl",
-            "helm",
-            "kustomize",
-            "pod",
-            "deployment",
-            "statefulset",
-            "daemonset",
-            "container runtime",
-            "cri",
-            "cni",
-            "csi",
-            "crd",
-            "operator",
-            "karpenter",
-            "cluster api",
-            "vcluster",
-            "gateway api",
-            "talos",
-            "kairos",
-            "k3s",
-            "rke2",
-            "rancher",
-            "containerd",
-        ],
-    },
-    "GKE": {
-        "weight": 2.0,
-        "keywords": [
-            "gke",
-            "google kubernetes engine",
-            "google cloud",
-            "gcp",
-            "autopilot",
-            "workload identity",
-            "binary authorization",
-            "cloud run",
-            "artifact registry",
-            "cloud armor",
-            "cloud nat",
-            "cloud build",
-            "cloud deploy",
-            "gke enterprise",
-            "anthos",
-        ],
-    },
-    "GitOps": {
-        "weight": 1.5,
-        "keywords": [
-            "argocd",
-            "argo cd",
-            "argo rollouts",
-            "argo workflows",
-            "gitops",
-            "applicationset",
-            "sync wave",
-            "flux",
-            "fluxcd",
-        ],
-    },
-    "Terraform": {
-        "weight": 1.3,
-        "keywords": [
-            "terraform",
-            "opentofu",
-            "tofu",
-            "hcl",
-            "tfstate",
-            "terragrunt",
-            "atlantis",
-            "infrastructure as code",
-            "iac",
-            "pulumi",
-            "crossplane",
-            "spacelift",
-        ],
-    },
-    "Immutable OS": {
-        "weight": 1.4,
-        "keywords": [
-            "immutable",
-            "ostree",
-            "bootc",
-            "rpm-ostree",
-            "flatcar",
-            "coreos",
-            "fedora coreos",
-            "talos",
-            "kairos",
-            "nixos",
-            "butane",
-            "sysext",
-        ],
-    },
-    "Platform Engineering": {
-        "weight": 1.2,
-        "keywords": [
-            "platform engineering",
-            "internal developer platform",
-            "backstage",
-            "developer experience",
-            "devex",
-            "golden path",
-            "crossplane",
-            "self-service",
-            "developer portal",
-        ],
-    },
-    "Observability": {
-        "weight": 1.1,
-        "keywords": [
-            "prometheus",
-            "grafana",
-            "alertmanager",
-            "loki",
-            "tempo",
-            "mimir",
-            "thanos",
-            "opentelemetry",
-            "otel",
-            "tracing",
-            "jaeger",
-            "pyroscope",
-            "monitoring",
-            "observability",
-            "ebpf",
-            "fluent bit",
-            "victoria metrics",
-            "datadog",
-        ],
-    },
-    "Security": {
-        "weight": 1.1,
-        "keywords": [
-            "cve",
-            "vulnerability",
-            "rbac",
-            "iam",
-            "secrets management",
-            "vault",
-            "trivy",
-            "falco",
-            "supply chain",
-            "sbom",
-            "zero trust",
-            "opa",
-            "gatekeeper",
-            "kyverno",
-            "external secrets",
-            "cert-manager",
-            "cosign",
-            "sigstore",
-            "slsa",
-            "kubescape",
-        ],
-    },
-    "CI/CD": {
-        "weight": 1.0,
-        "keywords": [
-            "ci/cd",
-            "github actions",
-            "gitlab ci",
-            "tekton",
-            "pipeline",
-            "continuous integration",
-            "continuous deployment",
-            "dora metrics",
-            "progressive delivery",
-            "canary",
-            "blue-green",
-            "feature flag",
-            "dagger",
-        ],
-    },
-    "Networking": {
-        "weight": 1.0,
-        "keywords": [
-            "service mesh",
-            "istio",
-            "cilium",
-            "calico",
-            "envoy",
-            "linkerd",
-            "ingress",
-            "gateway api",
-            "ebpf",
-            "network policy",
-            "metallb",
-            "external-dns",
-            "coredns",
-            "traefik",
-            "bgp",
-        ],
-    },
-    "FinOps": {
-        "weight": 1.2,
-        "keywords": [
-            "finops",
-            "cost optimization",
-            "rightsizing",
-            "committed use",
-            "spot vm",
-            "preemptible",
-            "reserved instance",
-            "cloud cost",
-            "kubecost",
-            "opencost",
-            "cost allocation",
-            "showback",
-            "chargeback",
-        ],
-    },
-}
+def get_secret_key_from_config() -> str | None:
+    """Return the auth.secret_key value from config.yaml, or None if absent."""
+    return load_raw_config().get("auth", {}).get("secret_key") or None

@@ -2,8 +2,9 @@
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
-from freshrss_client import Article
+from models import Article, ArticleDict
 
 
 @dataclass
@@ -35,7 +36,7 @@ class ScoredArticle:
             return None
         return max(self.matched_topics, key=lambda t: self.matched_topics[t])
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> ArticleDict:
         stripped = self._stripped_content
         return {
             "id": self.article.id,
@@ -53,7 +54,7 @@ class ScoredArticle:
         }
 
 
-def build_topics(topics: dict) -> list[TopicConfig]:
+def build_topics(topics: dict[str, Any]) -> list[TopicConfig]:
     result = []
     for name, cfg in topics.items():
         result.append(
@@ -90,15 +91,15 @@ def score_article(
             all_keywords.update(title_matches)
             all_keywords.update(content_matches)
 
-    feed_mult = (feed_weights or {}).get(article.feed_title, 1.0)
-    total_score = sum(matched_topics.values()) * feed_mult
+    feed_weight = (feed_weights or {}).get(article.feed_title, 1.0)
+    total_score = sum(matched_topics.values()) * feed_weight
 
     return ScoredArticle(
         article=article,
         score=total_score,
         matched_topics=matched_topics,
         matched_keywords=sorted(all_keywords),
-        feed_weight=feed_mult,
+        feed_weight=feed_weight,
         _stripped_content=stripped_content,
     )
 
@@ -124,7 +125,8 @@ def analyze_favorites(
     starred: list[Article],
     topics: list[TopicConfig],
     title_weight: int = 3,
-) -> dict:
+    feed_weights: dict[str, float] | None = None,
+) -> dict[str, Any]:
     """
     Analyze starred articles to suggest weight adjustments.
 
@@ -145,7 +147,7 @@ def analyze_favorites(
     keyword_freq: dict[str, int] = {}
 
     for article in starred:
-        scored = score_article(article, topics, title_weight)
+        scored = score_article(article, topics, title_weight, feed_weights=feed_weights)
         for topic_name in scored.matched_topics:
             topic_hits[topic_name] = topic_hits.get(topic_name, 0) + 1
         for kw in scored.matched_keywords:
@@ -175,3 +177,244 @@ def _strip_html(text: str) -> str:
     if not text:
         return ""
     return re.sub(r"<[^>]+>", " ", text)
+
+
+DEFAULT_TOPICS: dict[str, Any] = {
+    "SRE": {
+        "weight": 1.5,
+        "keywords": [
+            "sre",
+            "site reliability",
+            "slo",
+            "sla",
+            "error budget",
+            "toil",
+            "incident",
+            "postmortem",
+            "runbook",
+            "on-call",
+            "oncall",
+            "pagerduty",
+            "chaos engineering",
+            "mttr",
+            "mttd",
+            "capacity planning",
+        ],
+    },
+    "Kubernetes": {
+        "weight": 1.5,
+        "keywords": [
+            "kubernetes",
+            "k8s",
+            "kubectl",
+            "helm",
+            "kustomize",
+            "pod",
+            "deployment",
+            "statefulset",
+            "daemonset",
+            "container runtime",
+            "cri",
+            "cni",
+            "csi",
+            "crd",
+            "operator",
+            "karpenter",
+            "cluster api",
+            "vcluster",
+            "gateway api",
+            "talos",
+            "kairos",
+            "k3s",
+            "rke2",
+            "rancher",
+            "containerd",
+        ],
+    },
+    "GKE": {
+        "weight": 2.0,
+        "keywords": [
+            "gke",
+            "google kubernetes engine",
+            "google cloud",
+            "gcp",
+            "autopilot",
+            "workload identity",
+            "binary authorization",
+            "cloud run",
+            "artifact registry",
+            "cloud armor",
+            "cloud nat",
+            "cloud build",
+            "cloud deploy",
+            "gke enterprise",
+            "anthos",
+        ],
+    },
+    "GitOps": {
+        "weight": 1.5,
+        "keywords": [
+            "argocd",
+            "argo cd",
+            "argo rollouts",
+            "argo workflows",
+            "gitops",
+            "applicationset",
+            "sync wave",
+            "flux",
+            "fluxcd",
+        ],
+    },
+    "Terraform": {
+        "weight": 1.3,
+        "keywords": [
+            "terraform",
+            "opentofu",
+            "tofu",
+            "hcl",
+            "tfstate",
+            "terragrunt",
+            "atlantis",
+            "infrastructure as code",
+            "iac",
+            "pulumi",
+            "crossplane",
+            "spacelift",
+        ],
+    },
+    "Immutable OS": {
+        "weight": 1.4,
+        "keywords": [
+            "immutable",
+            "ostree",
+            "bootc",
+            "rpm-ostree",
+            "flatcar",
+            "coreos",
+            "fedora coreos",
+            "talos",
+            "kairos",
+            "nixos",
+            "butane",
+            "sysext",
+        ],
+    },
+    "Platform Engineering": {
+        "weight": 1.2,
+        "keywords": [
+            "platform engineering",
+            "internal developer platform",
+            "backstage",
+            "developer experience",
+            "devex",
+            "golden path",
+            "crossplane",
+            "self-service",
+            "developer portal",
+        ],
+    },
+    "Observability": {
+        "weight": 1.1,
+        "keywords": [
+            "prometheus",
+            "grafana",
+            "alertmanager",
+            "loki",
+            "tempo",
+            "mimir",
+            "thanos",
+            "opentelemetry",
+            "otel",
+            "tracing",
+            "jaeger",
+            "pyroscope",
+            "monitoring",
+            "observability",
+            "ebpf",
+            "fluent bit",
+            "victoria metrics",
+            "datadog",
+        ],
+    },
+    "Security": {
+        "weight": 1.1,
+        "keywords": [
+            "cve",
+            "vulnerability",
+            "rbac",
+            "iam",
+            "secrets management",
+            "vault",
+            "trivy",
+            "falco",
+            "supply chain",
+            "sbom",
+            "zero trust",
+            "opa",
+            "gatekeeper",
+            "kyverno",
+            "external secrets",
+            "cert-manager",
+            "cosign",
+            "sigstore",
+            "slsa",
+            "kubescape",
+        ],
+    },
+    "CI/CD": {
+        "weight": 1.0,
+        "keywords": [
+            "ci/cd",
+            "github actions",
+            "gitlab ci",
+            "tekton",
+            "pipeline",
+            "continuous integration",
+            "continuous deployment",
+            "dora metrics",
+            "progressive delivery",
+            "canary",
+            "blue-green",
+            "feature flag",
+            "dagger",
+        ],
+    },
+    "Networking": {
+        "weight": 1.0,
+        "keywords": [
+            "service mesh",
+            "istio",
+            "cilium",
+            "calico",
+            "envoy",
+            "linkerd",
+            "ingress",
+            "gateway api",
+            "ebpf",
+            "network policy",
+            "metallb",
+            "external-dns",
+            "coredns",
+            "traefik",
+            "bgp",
+        ],
+    },
+    "FinOps": {
+        "weight": 1.2,
+        "keywords": [
+            "finops",
+            "cost optimization",
+            "rightsizing",
+            "committed use",
+            "spot vm",
+            "preemptible",
+            "reserved instance",
+            "cloud cost",
+            "kubecost",
+            "opencost",
+            "cost allocation",
+            "showback",
+            "chargeback",
+        ],
+    },
+}

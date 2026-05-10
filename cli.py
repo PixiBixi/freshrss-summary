@@ -5,27 +5,34 @@ import argparse
 import asyncio
 import datetime
 import json
+import logging
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from freshrss_client import FreshRSSClient
 
 import yaml
 
-from config import CONFIG_PATH, load_config
+from config import CONFIG_PATH, ConfigDict, FreshRSSConfig, load_config
+
+logger = logging.getLogger(__name__)
 
 # ── ANSI ───────────────────────────────────────────────────────────────────
 
 
-def _c(code: str) -> str:
+def _ansi(code: str) -> str:
     return f"\033[{code}m" if sys.stdout.isatty() else ""
 
 
-RESET = _c("0")
-BOLD = _c("1")
-DIM = _c("2")
-GREEN = _c("32")
-YELLOW = _c("33")
-CYAN = _c("36")
-RED = _c("31")
+RESET = _ansi("0")
+BOLD = _ansi("1")
+DIM = _ansi("2")
+GREEN = _ansi("32")
+YELLOW = _ansi("33")
+CYAN = _ansi("36")
+RED = _ansi("31")
 
 
 def ok(msg: str) -> str:
@@ -47,24 +54,24 @@ def info(msg: str) -> str:
 # ── Config ─────────────────────────────────────────────────────────────────
 
 
-def make_client(cfg: dict):
+def make_client(cfg: ConfigDict) -> "FreshRSSClient":
     from freshrss_client import FreshRSSClient
 
-    fr = cfg["freshrss"]
+    fr: FreshRSSConfig = cfg["freshrss"]  # type: ignore[typeddict-item]
     return FreshRSSClient(fr["url"], fr["username"], fr["api_password"])
 
 
 # ── DB helpers (async) ─────────────────────────────────────────────────────
 
 
-async def _init_db(cfg: dict) -> None:
+async def _init_db(cfg: ConfigDict) -> None:
     from db import DEFAULT_DB_URL, init_db
 
     db_url = cfg.get("database", {}).get("url", DEFAULT_DB_URL)
     await init_db(db_url)
 
 
-async def _db_stats(cfg: dict) -> dict:
+async def _db_stats(cfg: ConfigDict) -> dict[str, Any]:
     from db import get_bookmarked_ids, load_articles
 
     await _init_db(cfg)
@@ -79,40 +86,85 @@ async def _db_stats(cfg: dict) -> dict:
     }
 
 
-async def _save(cfg: dict, articles: list[dict], total_fetched: int) -> None:
-    from db import save_articles
+async def _run_fetch(
+    cfg: ConfigDict, save: bool
+) -> tuple[list[dict[str, Any]], int, list[tuple[int, int]]]:
+    """Init DB, fetch topics (DB-first), fetch+score, optionally save. Returns (articles, total_fetched, batch_info)."""
+    from db import get_or_seed_scoring_config, save_articles
+    from pipeline import fetch_and_score_iter
+    from scorer import DEFAULT_TOPICS, build_topics
 
     await _init_db(cfg)
-    await save_articles(articles, total_fetched)
+    topics_cfg = await get_or_seed_scoring_config(cfg, DEFAULT_TOPICS)
+    topics = build_topics(topics_cfg)
+
+    all_articles: list[dict[str, Any]] = []
+    batch_info: list[tuple[int, int]] = []
+    total_fetched, prev_fetched = 0, 0
+
+    for scored_batch, total_fetched in fetch_and_score_iter(cfg, topics):
+        batch_count = total_fetched - prev_fetched
+        prev_fetched = total_fetched
+        batch_info.append((batch_count, len(scored_batch)))
+        all_articles.extend(scored_batch)
+
+    if save and all_articles:
+        await save_articles(all_articles, total_fetched)
+
+    return all_articles, total_fetched, batch_info
 
 
-async def _load_for_rescore(cfg: dict) -> list[dict]:
-    from db import load_for_rescore
+async def _run_rescore(
+    cfg: ConfigDict, save: bool
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Init DB, fetch topics (DB-first), rescore DB articles, optionally save. Returns (raw, rescored)."""
+    from db import get_or_seed_scoring_config, load_for_rescore, save_articles
+    from pipeline import rescore_articles
+    from scorer import DEFAULT_TOPICS, build_topics
+
+    scoring_cfg = cfg.get("scoring", {})
+    title_weight = int(scoring_cfg.get("title_weight", 3))
+    min_score = float(scoring_cfg.get("min_score", 1.0))
 
     await _init_db(cfg)
-    return await load_for_rescore()
+    raw = await load_for_rescore()
+    if not raw:
+        return [], []
+    topics_cfg = await get_or_seed_scoring_config(cfg, DEFAULT_TOPICS)
+    topics = build_topics(topics_cfg)
+    rescored = rescore_articles(raw, topics, title_weight, min_score)
+    if save:
+        await save_articles(rescored, len(raw))
+    return raw, rescored
 
 
-async def _upsert_articles(cfg: dict, articles: list[dict]) -> None:
-    from db import upsert_articles
+async def _run_import(
+    cfg: ConfigDict, articles: list[dict[str, Any]], bookmark_ids: list[str] | None = None
+) -> None:
+    """Init DB, upsert articles, optionally bookmark them (single DB session)."""
+    from db import bookmark_articles, upsert_articles
 
     await _init_db(cfg)
     await upsert_articles(articles)
+    if bookmark_ids:
+        await bookmark_articles(bookmark_ids)
 
 
-async def _bookmark_all(cfg: dict, ids: list[str]) -> None:
-    from db import bookmark_articles
+async def _get_active_topics(cfg: ConfigDict) -> dict[str, Any]:
+    """Init DB and return active topics (DB-first, YAML fallback)."""
+    from db import get_or_seed_scoring_config
+    from scorer import DEFAULT_TOPICS
 
     await _init_db(cfg)
-    await bookmark_articles(ids)
+    return await get_or_seed_scoring_config(cfg, DEFAULT_TOPICS)
 
 
 # ── Commands ───────────────────────────────────────────────────────────────
 
 
-def cmd_check(args, cfg: dict) -> int:
+def cmd_check(args: argparse.Namespace, cfg: ConfigDict) -> int:
     """Test FreshRSS connection and DB reachability."""
-    fr = cfg["freshrss"]
+    fr = cfg["freshrss"]  # type: ignore[typeddict-item]
     print(f"\n{BOLD}FreshRSS connection check{RESET}\n")
     print(info(f"URL      : {fr['url']}"))
     print(info(f"Username : {fr['username']}"))
@@ -120,12 +172,13 @@ def cmd_check(args, cfg: dict) -> int:
 
     try:
         with make_client(cfg) as client:
-            count = client.ping()
+            count = client.sample_one()
             print(ok(f"Auth OK — reading-list API reachable ({count} article sampled)"))
 
             starred = client.fetch_starred(max_items=10)
             print(ok(f"Starred stream reachable ({len(starred)} fetched, limited to 10)"))
     except Exception as e:
+        logger.exception("check: FreshRSS connection failed")
         print(err(f"FreshRSS error: {e}"))
         return 1
 
@@ -136,18 +189,21 @@ def cmd_check(args, cfg: dict) -> int:
         print(info(f"DB URL   : {db_url}"))
         print(ok(f"DB reachable — {s['articles']} articles, {s['bookmarks']} bookmarks"))
     except Exception as e:
+        logger.exception("check: DB stats failed")
         print(warn(f"DB check failed: {e}"))
+        return 1
 
     print()
     return 0
 
 
-def cmd_stats(args, cfg: dict) -> int:
+def cmd_stats(args: argparse.Namespace, cfg: ConfigDict) -> int:
     """Show DB statistics."""
     print(f"\n{BOLD}DB statistics{RESET}\n")
     try:
         s = asyncio.run(_db_stats(cfg))
     except Exception as e:
+        logger.exception("stats: DB query failed")
         print(err(f"DB error: {e}"))
         return 1
 
@@ -170,85 +226,55 @@ def cmd_stats(args, cfg: dict) -> int:
     return 0
 
 
-def cmd_fetch(args, cfg: dict) -> int:
+def cmd_fetch(args: argparse.Namespace, cfg: ConfigDict) -> int:
     """Fetch unread articles from FreshRSS, score and save to DB."""
     print(f"\n{BOLD}Fetching unread articles{RESET}\n")
 
-    fetch_cfg = cfg.get("fetch", {})
-    scoring_cfg = cfg.get("scoring", {})
-    batch_size = fetch_cfg.get("batch_size", 1000)
-    max_batches = fetch_cfg.get("max_batches", 10)
-    title_weight = scoring_cfg.get("title_weight", 3)
-    min_score = scoring_cfg.get("min_score", 1.0)
-
-    from scorer import build_topics, score_articles
-
-    topics = build_topics(cfg.get("topics", {}))
-    if not topics:
-        print(warn("No topics configured — articles will score 0"))
-
-    all_scored = []
-    total_fetched = 0
+    min_score = float(cfg.get("scoring", {}).get("min_score", 1.0))
 
     try:
-        with make_client(cfg) as client:
-            for batch in client.fetch_unread(batch_size=batch_size, max_batches=max_batches):
-                total_fetched += len(batch)
-                scored = score_articles(batch, topics, title_weight, min_score=0)
-                relevant = sum(1 for a in scored if a.score >= min_score)
-                all_scored.extend(scored)
-                print(info(f"Batch: {len(batch)} fetched, {relevant} relevant"))
+        all_articles, total_fetched, batch_info = asyncio.run(
+            _run_fetch(cfg, save=not args.dry_run)
+        )
     except Exception as e:
+        logger.exception("fetch: failed")
         print(err(f"Fetch error: {e}"))
         return 1
+
+    for batch_count, relevant in batch_info:
+        print(info(f"Batch: {batch_count} fetched, {relevant} relevant"))
 
     if total_fetched == 0:
         print(warn("No unread articles"))
         return 0
 
-    relevant = sorted(
-        (a for a in all_scored if a.score >= min_score),
-        key=lambda a: a.score,
-        reverse=True,
-    )
     print()
-    print(ok(f"{total_fetched} fetched total — {len(relevant)} relevant (score ≥ {min_score})"))
+    print(ok(f"{total_fetched} fetched total — {len(all_articles)} relevant (score ≥ {min_score})"))
 
     if args.dry_run:
         print(warn("--dry-run: not saving to DB"))
-        if relevant:
+        if all_articles:
             print(f"\n{BOLD}Top 5:{RESET}")
-            for a in relevant[:5]:
-                print(f"    [{a.score:.0f}]  {a.article.title[:72]}")
+            for a in all_articles[:5]:
+                print(f"    [{a['score']:.0f}]  {a['title'][:72]}")
     else:
-        try:
-            asyncio.run(_save(cfg, [a.to_dict() for a in relevant], total_fetched))
-            print(ok("Saved to DB"))
-        except Exception as e:
-            print(err(f"DB save failed: {e}"))
-            return 1
+        print(ok("Saved to DB"))
 
     print()
     return 0
 
 
-def cmd_rescore(args, cfg: dict) -> int:
+def cmd_rescore(args: argparse.Namespace, cfg: ConfigDict) -> int:
     """Rescore DB articles with the current config weights."""
     print(f"\n{BOLD}Rescoring from DB{RESET}\n")
 
-    scoring_cfg = cfg.get("scoring", {})
-    title_weight = scoring_cfg.get("title_weight", 3)
-    min_score = scoring_cfg.get("min_score", 1.0)
-
-    from freshrss_client import article_from_row
-    from scorer import build_topics, score_article
-
-    topics = build_topics(cfg.get("topics", {}))
+    min_score = float(cfg.get("scoring", {}).get("min_score", 1.0))
 
     try:
-        raw = asyncio.run(_load_for_rescore(cfg))
+        raw, rescored = asyncio.run(_run_rescore(cfg, save=not args.dry_run))
     except Exception as e:
-        print(err(f"DB load failed: {e}"))
+        logger.exception("rescore: failed")
+        print(err(f"Rescore failed: {e}"))
         return 1
 
     if not raw:
@@ -256,31 +282,18 @@ def cmd_rescore(args, cfg: dict) -> int:
         return 0
 
     print(info(f"Rescoring {len(raw)} articles..."))
-    rescored = []
-    for r in raw:
-        art = article_from_row(r)
-        scored = score_article(art, topics, title_weight)
-        if scored.score >= min_score:
-            rescored.append(scored.to_dict())
-
-    rescored.sort(key=lambda a: a["score"], reverse=True)
     print(ok(f"{len(rescored)} articles above min_score={min_score}"))
 
     if args.dry_run:
         print(warn("--dry-run: not saving to DB"))
     else:
-        try:
-            asyncio.run(_save(cfg, rescored, len(raw)))
-            print(ok("Saved to DB"))
-        except Exception as e:
-            print(err(f"DB save failed: {e}"))
-            return 1
+        print(ok("Saved to DB"))
 
     print()
     return 0
 
 
-def cmd_import(args, cfg: dict) -> int:
+def cmd_import(args: argparse.Namespace, cfg: ConfigDict) -> int:
     """Import articles from a JSON file or from FreshRSS starred."""
     if args.starred:
         return _import_starred(args, cfg)
@@ -290,23 +303,43 @@ def cmd_import(args, cfg: dict) -> int:
     return _import_file(args, cfg)
 
 
-def _import_starred(args, cfg: dict) -> int:
+async def _score_and_import_file(cfg: ConfigDict, articles: list, title_weight: int) -> list:
+    """Score file articles against active topics and upsert them in DB. Returns scored list."""
+    from scorer import build_topics, score_articles
+
+    topics = build_topics(await _get_active_topics(cfg))
+    scored = score_articles(articles, topics, title_weight, min_score=0)
+    await _run_import(cfg, [a.to_dict() for a in scored])
+    return scored
+
+
+async def _score_and_import_starred(cfg: ConfigDict, starred: list, title_weight: int) -> list:
+    """Score starred articles against active topics and upsert+bookmark them in DB. Returns scored list."""
+    from scorer import build_topics, score_articles
+
+    topics = build_topics(await _get_active_topics(cfg))
+    scored = score_articles(starred, topics, title_weight, min_score=0)
+    await _run_import(
+        cfg,
+        [a.to_dict() for a in scored],
+        bookmark_ids=[a.article.id for a in scored],
+    )
+    return scored
+
+
+def _import_starred(args: argparse.Namespace, cfg: ConfigDict) -> int:
     """Fetch starred items from FreshRSS, score and import into DB + bookmarks."""
     print(f"\n{BOLD}Importing FreshRSS starred articles{RESET}\n")
 
-    scoring_cfg = cfg.get("scoring", {})
-    title_weight = scoring_cfg.get("title_weight", 3)
+    title_weight = cfg.get("scoring", {}).get("title_weight", 3)
     max_items = args.limit or 500
-
-    from scorer import build_topics, score_articles
-
-    topics = build_topics(cfg.get("topics", {}))
 
     try:
         with make_client(cfg) as client:
             print(info(f"Fetching up to {max_items} starred articles..."))
             starred = client.fetch_starred(max_items=max_items)
     except Exception as e:
+        logger.exception("import-starred: FreshRSS fetch failed")
         print(err(f"Fetch error: {e}"))
         return 1
 
@@ -315,19 +348,21 @@ def _import_starred(args, cfg: dict) -> int:
         return 0
 
     print(ok(f"Fetched {len(starred)} starred articles"))
-    scored = score_articles(starred, topics, title_weight, min_score=0)
 
     if args.dry_run:
+        from scorer import build_topics, score_articles
+
+        topics = build_topics(asyncio.run(_get_active_topics(cfg)))
+        scored = score_articles(starred, topics, title_weight, min_score=0)
         print(warn("--dry-run: not saving to DB"))
         for a in scored[:5]:
             print(f"    [{a.score:.0f}]  {a.article.title[:72]}")
     else:
         try:
-            dicts = [a.to_dict() for a in scored]
-            asyncio.run(_upsert_articles(cfg, dicts))
-            asyncio.run(_bookmark_all(cfg, [a.article.id for a in scored]))
+            scored = asyncio.run(_score_and_import_starred(cfg, starred, title_weight))
             print(ok(f"Imported {len(scored)} articles — all bookmarked"))
         except Exception as e:
+            logger.exception("import-starred: DB upsert/bookmark failed")
             print(err(f"DB error: {e}"))
             return 1
 
@@ -335,7 +370,7 @@ def _import_starred(args, cfg: dict) -> int:
     return 0
 
 
-def _import_file(args, cfg: dict) -> int:
+def _import_file(args: argparse.Namespace, cfg: ConfigDict) -> int:
     """Import articles from a JSON file (list of article objects)."""
     path = Path(args.file)
     print(f"\n{BOLD}Importing from {path.name}{RESET}\n")
@@ -347,6 +382,7 @@ def _import_file(args, cfg: dict) -> int:
     try:
         data = json.loads(path.read_text())
     except Exception as e:
+        logger.exception("import-file: JSON parse failed")
         print(err(f"JSON parse error: {e}"))
         return 1
 
@@ -354,8 +390,7 @@ def _import_file(args, cfg: dict) -> int:
         print(err("JSON must be a list of article objects"))
         return 1
 
-    from freshrss_client import Article
-    from scorer import build_topics, score_articles
+    from models import Article
 
     articles, skipped = [], 0
     for item in data:
@@ -380,18 +415,21 @@ def _import_file(args, cfg: dict) -> int:
 
     scoring_cfg = cfg.get("scoring", {})
     title_weight = scoring_cfg.get("title_weight", 3)
-    topics = build_topics(cfg.get("topics", {}))
-    scored = score_articles(articles, topics, title_weight, min_score=0)
 
     if args.dry_run:
+        from scorer import build_topics, score_articles
+
+        topics = build_topics(asyncio.run(_get_active_topics(cfg)))
+        scored = score_articles(articles, topics, title_weight, min_score=0)
         print(warn("--dry-run: not saving to DB"))
         for a in scored[:5]:
             print(f"    [{a.score:.0f}]  {a.article.title[:72]}")
     else:
         try:
-            asyncio.run(_upsert_articles(cfg, [a.to_dict() for a in scored]))
+            scored = asyncio.run(_score_and_import_file(cfg, articles, title_weight))
             print(ok(f"Imported {len(scored)} articles"))
         except Exception as e:
+            logger.exception("import-file: DB upsert failed")
             print(err(f"DB error: {e}"))
             return 1
 
@@ -399,7 +437,7 @@ def _import_file(args, cfg: dict) -> int:
     return 0
 
 
-def cmd_tune(args, cfg: dict) -> int:
+def cmd_tune(args: argparse.Namespace, cfg: ConfigDict) -> int:
     """
     Analyze FreshRSS starred articles and suggest weight adjustments.
 
@@ -411,7 +449,7 @@ def cmd_tune(args, cfg: dict) -> int:
 
     from scorer import analyze_favorites, build_topics
 
-    topics = build_topics(cfg.get("topics", {}))
+    topics = build_topics(asyncio.run(_get_active_topics(cfg)))
     max_items = args.limit or 200
 
     if not topics:
@@ -423,6 +461,7 @@ def cmd_tune(args, cfg: dict) -> int:
             print(info(f"Fetching up to {max_items} starred articles..."))
             starred = client.fetch_starred(max_items=max_items)
     except Exception as e:
+        logger.exception("tune: FreshRSS fetch failed")
         print(err(f"Fetch error: {e}"))
         return 1
 
@@ -435,7 +474,8 @@ def cmd_tune(args, cfg: dict) -> int:
 
     scoring_cfg = cfg.get("scoring", {})
     title_weight = scoring_cfg.get("title_weight", 3)
-    analysis = analyze_favorites(starred, topics, title_weight)
+    feed_weights = cfg.get("feed_weights", {})
+    analysis = analyze_favorites(starred, topics, title_weight, feed_weights=feed_weights or None)
 
     # ── Top keywords ──────────────────────────────────────────────────────
     print(f"{BOLD}Top keywords in your favorites:{RESET}")
@@ -482,10 +522,11 @@ def cmd_tune(args, cfg: dict) -> int:
 
     if args.apply:
         try:
-            _apply_weights(cfg, analysis["suggestions"])
+            _apply_weights(analysis["suggestions"])
             print(ok(f"Weights written to {CONFIG_PATH}"))
             print(info("Run  python cli.py rescore  to apply new weights to existing DB articles"))
         except Exception as e:
+            logger.exception("tune: failed to write config")
             print(err(f"Failed to write config: {e}"))
             return 1
     else:
@@ -495,7 +536,7 @@ def cmd_tune(args, cfg: dict) -> int:
     return 0
 
 
-async def _load_articles_for_digest(cfg: dict) -> list[dict]:
+async def _load_articles_for_digest(cfg: ConfigDict) -> list[dict[str, Any]]:
     from db import load_articles
 
     await _init_db(cfg)
@@ -503,13 +544,14 @@ async def _load_articles_for_digest(cfg: dict) -> list[dict]:
     return articles
 
 
-def cmd_digest(args, cfg: dict) -> int:
+def cmd_digest(args: argparse.Namespace, cfg: ConfigDict) -> int:
     """Build and print the Telegram digest from DB articles. Optionally send it."""
-    from telegram_digest import build_digest, send_message
+    from telegram_digest import TelegramConfig, build_digest, send_message
 
     try:
         articles = asyncio.run(_load_articles_for_digest(cfg))
     except Exception as e:
+        logger.exception("digest: DB load failed")
         print(err(f"DB error: {e}"))
         return 1
 
@@ -517,16 +559,15 @@ def cmd_digest(args, cfg: dict) -> int:
     print(text)
 
     if args.send:
-        tg = cfg.get("telegram", {})
-        bot_token = tg.get("bot_token", "")
-        chat_id = tg.get("chat_id", "")
-        if not bot_token or not chat_id:
+        tg_cfg = TelegramConfig.from_dict(dict(cfg.get("telegram", {})))
+        if not tg_cfg.is_configured():
             print(err("Telegram bot_token or chat_id not configured"))
             return 1
         try:
-            asyncio.run(send_message(bot_token, chat_id, text))
+            asyncio.run(send_message(tg_cfg, text))
             print(ok("Digest sent via Telegram"))
         except Exception as e:
+            logger.exception("digest: Telegram send failed")
             print(err(f"Send failed: {e}"))
             return 1
 
@@ -534,7 +575,7 @@ def cmd_digest(args, cfg: dict) -> int:
     return 0
 
 
-def _apply_weights(cfg: dict, suggestions: dict) -> None:
+def _apply_weights(suggestions: dict[str, Any]) -> None:
     if not CONFIG_PATH.exists():
         raise FileNotFoundError("config.yaml not found")
     with CONFIG_PATH.open() as f:

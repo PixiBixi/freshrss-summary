@@ -3,7 +3,7 @@
 import pytest
 
 import config as config_module
-from app import hash_password, verify_password
+from auth import hash_password, verify_password
 from config import load_config
 
 # ── Password hashing ──────────────────────────────────────────────────────────
@@ -146,4 +146,13 @@ class TestCache:
         assert c.total_fetched == 0
         assert c.last_refresh is None
         assert c.is_loading is False
+        assert c.initialized is False
         assert c.error is None
+
+    def test_populate_sets_initialized(self):
+        from app import Cache
+
+        c = Cache()
+        assert c.initialized is False
+        c.populate([{"matched_topics": {}}], last_refresh=1000.0, total_fetched=1)
+        assert c.initialized is True

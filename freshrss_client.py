@@ -3,36 +3,13 @@
 import logging
 import urllib.parse
 from collections.abc import Generator
-from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
 
+from models import Article
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class Article:
-    id: str
-    title: str
-    url: str
-    content: str
-    summary: str
-    feed_title: str
-    published: int  # Unix timestamp
-    categories: list[str] = field(default_factory=list)
-
-
-def article_from_row(row: dict) -> "Article":
-    """Reconstruct an Article from a DB row dict (for rescore operations)."""
-    return Article(
-        id=row["id"],
-        title=row["title"],
-        url=row["url"],
-        content=row["content"],
-        summary="",
-        feed_title=row["feed_title"],
-        published=row["published"],
-    )
 
 
 class FreshRSSClient:
@@ -89,7 +66,6 @@ class FreshRSSClient:
             if not token:
                 raise RuntimeError("FreshRSS returned empty CSRF token")
             self._csrf_token = token
-            return token
         return self._csrf_token
 
     # ------------------------------------------------------------------
@@ -132,18 +108,20 @@ class FreshRSSClient:
         """
         continuation = None
         for batch_num in range(max_batches):
-            logger.info("Fetching batch %d (batch_size=%d)...", batch_num + 1, batch_size)
             articles, continuation = self._fetch_batch(continuation, batch_size)
 
             if not articles:
-                logger.info("No more articles.")
                 break
 
-            logger.info("Batch %d: got %d articles", batch_num + 1, len(articles))
+            logger.info(
+                "Batch %d: %d articles (continuation=%s)",
+                batch_num + 1,
+                len(articles),
+                bool(continuation),
+            )
             yield articles
 
             if not continuation:
-                logger.info("No continuation token — all unread fetched.")
                 break
 
     # ------------------------------------------------------------------
@@ -163,7 +141,7 @@ class FreshRSSClient:
             chunk = article_ids[i : i + chunk_size]
             pairs = [("T", csrf), ("a", "user/-/state/com.google/read")]
             pairs += [("i", article_id) for article_id in chunk]
-            body = urllib.parse.urlencode(pairs, doseq=False).encode()
+            body = urllib.parse.urlencode(pairs).encode()
 
             resp = self._client.post(
                 f"{self.base_url}/api/greader.php/reader/api/0/edit-tag",
@@ -182,16 +160,16 @@ class FreshRSSClient:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _parse_item(item: dict) -> Article:
+    def _parse_item(item: dict[str, Any]) -> Article:
         title = item.get("title", "(no title)")
+        alternates = item.get("alternate", [])
         url = ""
-        for alt in item.get("alternate", []):
+        for alt in alternates:
             if alt.get("type") == "text/html":
                 url = alt.get("href", "")
                 break
         if not url:
-            urls = item.get("alternate", [])
-            url = urls[0].get("href", "") if urls else ""
+            url = alternates[0].get("href", "") if alternates else ""
 
         content = ""
         summary = item.get("summary", {})
@@ -220,7 +198,7 @@ class FreshRSSClient:
             categories=categories,
         )
 
-    def ping(self) -> int:
+    def sample_one(self) -> int:
         """Authenticate and fetch one article to verify connectivity. Returns article count sampled (0 or 1)."""
         self._ensure_auth()
         articles, _ = self._fetch_batch(None, 1)
@@ -241,8 +219,13 @@ class FreshRSSClient:
     def close(self) -> None:
         self._client.close()
 
-    def __enter__(self):
+    def __enter__(self) -> "FreshRSSClient":
         return self
 
-    def __exit__(self, *args):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
         self.close()
