@@ -10,3 +10,4 @@ venv/
 .superpowers/
 docs/superpowers/
 .desloppify/
+.claude/
