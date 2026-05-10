@@ -51,6 +51,7 @@ from db import (
     get_meta,
     get_or_seed_scoring_config,
     get_pending_sync,
+    get_scoring_config,
     get_user_hash,
     init_db,
     load_articles,
@@ -716,8 +717,11 @@ async def list_feeds() -> dict[str, Any]:
 @app.get("/api/config/scoring", dependencies=[Depends(require_auth)])
 async def get_scoring() -> dict[str, Any]:
     """Return the active scoring topics config and feed weights (from DB, or seeded from config.yaml)."""
+    topics = await get_scoring_config()
+    if topics is None:
+        topics = await get_or_seed_scoring_config(load_config(), DEFAULT_TOPICS)
     return {
-        "topics": await get_or_seed_scoring_config(load_config(), DEFAULT_TOPICS),
+        "topics": topics,
         "feed_weights": await get_feed_weights(),
     }
 
