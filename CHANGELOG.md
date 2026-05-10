@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.2](https://github.com/PixiBixi/freshrss-summary/compare/v1.6.1...v1.6.2) (2026-05-10)
+
+
+### Bug Fixes
+
+* **ci:** lowercase GHCR owner for Helm OCI push ([dcdcdb1](https://github.com/PixiBixi/freshrss-summary/commit/dcdcdb1f49e5cfa55cc6969b26638ea23b46e8a4))
+
 ## [1.6.1](https://github.com/PixiBixi/freshrss-summary/compare/v1.6.0...v1.6.1) (2026-05-10)
 
 
