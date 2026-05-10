@@ -87,7 +87,7 @@ jobs:
       - uses: bsord/helm-push@v4.2.0
         with:
           useOCIRegistry: true
-          registry-url: oci://ghcr.io/${{ env.OWNER }}
+          registry-url: oci://ghcr.io/${{ env.OWNER }}/charts
           username: ${{ github.actor }}
           access-token: ${{ secrets.GITHUB_TOKEN }}
           chart-folder: helm/freshrss-summary
