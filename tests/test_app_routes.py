@@ -9,8 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app import app, cache
 from db import metadata, set_engine_for_testing
-
-TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+from tests.conftest import TEST_DB_URL
 
 _ARTICLE = {
     "id": "tag:a",

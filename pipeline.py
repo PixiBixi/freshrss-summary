@@ -14,7 +14,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from freshrss_client import FreshRSSClient
-from models import ArticleDict, article_from_row
+from models import ArticleDict, DbArticleRow, article_from_row
 from scorer import TopicConfig, score_article, score_articles
 
 
@@ -61,7 +61,7 @@ def fetch_and_score_iter(
 
 
 def rescore_articles(
-    raw: list[ArticleDict],
+    raw: list[DbArticleRow],
     topics: list[TopicConfig],
     title_weight: int = 3,
     min_score: float = 1.0,

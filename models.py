@@ -33,6 +33,17 @@ class ArticleDict(TypedDict, total=False):
     _read: bool
 
 
+class DbArticleRow(TypedDict):
+    """Shape of rows returned by db.load_for_rescore()."""
+
+    id: str
+    title: str
+    url: str
+    content: str
+    feed_title: str
+    published: int
+
+
 def article_from_row(row: dict[str, Any]) -> Article:
     """Reconstruct an Article from a DB row dict (for rescore operations)."""
     return Article(

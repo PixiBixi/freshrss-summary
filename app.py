@@ -205,7 +205,7 @@ class Cache:
         self.trending_alerted: set[tuple[str, int]] = set()
 
     def populate(
-        self, articles: list[dict[str, Any]], last_refresh: float | None, total_fetched: int
+        self, articles: list[ArticleDict], last_refresh: float | None, total_fetched: int
     ) -> None:
         self.articles = articles
         self.last_refresh = last_refresh
@@ -345,7 +345,7 @@ async def index(request: Request) -> HTMLResponse:
     )
 
 
-@app.get("/login", response_class=HTMLResponse)
+@app.get("/login", response_class=Response)
 async def login_page(request: Request) -> Response:
     if request.session.get("authenticated"):
         return RedirectResponse(url="/", status_code=302)
@@ -456,7 +456,7 @@ async def _get_or_seed_scoring_config() -> dict[str, Any]:
 
 
 @app.post("/api/mark-read", dependencies=[Depends(require_auth)])
-async def mark_read(req: MarkReadRequest) -> dict[str, str]:
+async def mark_read(req: MarkReadRequest) -> dict[str, Any]:
     if not req.article_ids:
         raise HTTPException(status_code=400, detail="No article IDs provided")
 
@@ -479,9 +479,9 @@ async def mark_read(req: MarkReadRequest) -> dict[str, str]:
             "FreshRSS unreachable — queuing %d article(s) for deferred sync", len(req.article_ids)
         )
         await add_pending_sync(req.article_ids)
-        return {"status": "queued", "marked": str(len(req.article_ids))}
+        return {"status": "queued", "marked": len(req.article_ids)}
 
-    return {"status": "ok", "marked": str(len(req.article_ids))}
+    return {"status": "ok", "marked": len(req.article_ids)}
 
 
 def _blocking_fetch_and_score(

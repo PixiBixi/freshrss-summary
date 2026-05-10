@@ -108,18 +108,20 @@ class FreshRSSClient:
         """
         continuation = None
         for batch_num in range(max_batches):
-            logger.info("Fetching batch %d (batch_size=%d)...", batch_num + 1, batch_size)
             articles, continuation = self._fetch_batch(continuation, batch_size)
 
             if not articles:
-                logger.info("No more articles.")
                 break
 
-            logger.info("Batch %d: got %d articles", batch_num + 1, len(articles))
+            logger.info(
+                "Batch %d: %d articles (continuation=%s)",
+                batch_num + 1,
+                len(articles),
+                bool(continuation),
+            )
             yield articles
 
             if not continuation:
-                logger.info("No continuation token — all unread fetched.")
                 break
 
     # ------------------------------------------------------------------

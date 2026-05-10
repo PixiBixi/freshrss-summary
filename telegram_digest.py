@@ -22,7 +22,7 @@ class TelegramConfig:
     webhook_secret: str = field(default="")
 
     @classmethod
-    def from_dict(cls, d: dict) -> TelegramConfig:
+    def from_dict(cls, d: dict[str, Any]) -> TelegramConfig:
         """Build from a raw config dict. Returns empty-string fields if keys are missing."""
         return cls(
             bot_token=d.get("bot_token", ""),

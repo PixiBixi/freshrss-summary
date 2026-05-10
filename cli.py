@@ -191,6 +191,7 @@ def cmd_check(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     except Exception as e:
         logger.exception("check: DB stats failed")
         print(warn(f"DB check failed: {e}"))
+        return 1
 
     print()
     return 0
@@ -302,6 +303,16 @@ def cmd_import(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
     return _import_file(args, cfg)
 
 
+async def _score_and_import_file(cfg: dict[str, Any], articles: list, title_weight: int) -> list:
+    """Score file articles against active topics and upsert them in DB. Returns scored list."""
+    from scorer import build_topics, score_articles
+
+    topics = build_topics(await _get_active_topics(cfg))
+    scored = score_articles(articles, topics, title_weight, min_score=0)
+    await _run_import(cfg, [a.to_dict() for a in scored])
+    return scored
+
+
 async def _score_and_import_starred(cfg: dict[str, Any], starred: list, title_weight: int) -> list:
     """Score starred articles against active topics and upsert+bookmark them in DB. Returns scored list."""
     from scorer import build_topics, score_articles
@@ -380,7 +391,6 @@ def _import_file(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
         return 1
 
     from models import Article
-    from scorer import build_topics, score_articles
 
     articles, skipped = [], 0
     for item in data:
@@ -405,16 +415,18 @@ def _import_file(args: argparse.Namespace, cfg: dict[str, Any]) -> int:
 
     scoring_cfg = cfg.get("scoring", {})
     title_weight = scoring_cfg.get("title_weight", 3)
-    topics = build_topics(asyncio.run(_get_active_topics(cfg)))
-    scored = score_articles(articles, topics, title_weight, min_score=0)
 
     if args.dry_run:
+        from scorer import build_topics, score_articles
+
+        topics = build_topics(asyncio.run(_get_active_topics(cfg)))
+        scored = score_articles(articles, topics, title_weight, min_score=0)
         print(warn("--dry-run: not saving to DB"))
         for a in scored[:5]:
             print(f"    [{a.score:.0f}]  {a.article.title[:72]}")
     else:
         try:
-            asyncio.run(_run_import(cfg, [a.to_dict() for a in scored]))
+            scored = asyncio.run(_score_and_import_file(cfg, articles, title_weight))
             print(ok(f"Imported {len(scored)} articles"))
         except Exception as e:
             logger.exception("import-file: DB upsert failed")
