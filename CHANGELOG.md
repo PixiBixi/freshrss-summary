@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/PixiBixi/freshrss-summary/compare/v1.7.0...v1.7.1) (2026-05-11)
+
+
+### Bug Fixes
+
+* **auth:** preserve DB password over ADMIN_PASSWORD env var on restart ([eee9367](https://github.com/PixiBixi/freshrss-summary/commit/eee93670100831c0b63b4c9e211dec516611b923))
+
 ## [1.7.0](https://github.com/PixiBixi/freshrss-summary/compare/v1.6.3...v1.7.0) (2026-05-11)
 
 
