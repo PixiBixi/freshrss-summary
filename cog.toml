@@ -1,0 +1,12 @@
+ignore_merge_commits = true
+
+[commit_types]
+desloppify = { changelog_title = "Code Health" }
+
+[changelog]
+path = "CHANGELOG.md"
+template = "remote"
+remote = "github.com"
+repository = "freshrss-summary"
+owner = "PixiBixi"
+authors = []

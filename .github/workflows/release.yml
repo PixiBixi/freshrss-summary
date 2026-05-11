@@ -6,28 +6,48 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
+  packages: write
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  release-please:
+  release:
     runs-on: ubuntu-latest
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
+      bumped: ${{ steps.bump.outputs.bumped }}
+      tag_name: ${{ steps.bump.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
+      - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-          release-type: simple
+
+      - uses: oknozor/cocogitto-action@v3
+        with:
+          git-user: github-actions[bot]
+          git-user-email: github-actions[bot]@users.noreply.github.com
+          check-latest-tag-only: true
+
+      - name: Bump version
+        id: bump
+        run: |
+          BEFORE=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          cog bump --auto || true
+          AFTER=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ "$BEFORE" != "$AFTER" ]; then
+            git push
+            git push origin "$AFTER"
+            echo "bumped=true" >> "$GITHUB_OUTPUT"
+            echo "tag_name=$AFTER" >> "$GITHUB_OUTPUT"
+          else
+            echo "bumped=false" >> "$GITHUB_OUTPUT"
+          fi
 
   build-push:
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    needs: release
+    if: needs.release.outputs.bumped == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -35,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ needs.release.outputs.tag_name }}
 
       - uses: docker/setup-qemu-action@v3
 
@@ -52,8 +72,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag_name }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.tag_name }}
+            type=semver,pattern={{version}},value=${{ needs.release.outputs.tag_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.tag_name }}
             type=sha,prefix=sha-
 
       - uses: docker/build-push-action@v6
@@ -67,8 +87,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   push-helm:
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    needs: release
+    if: needs.release.outputs.bumped == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -76,11 +96,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ needs.release.outputs.tag_name }}
 
       - name: Set chart version and lowercase owner
         run: |
-          VERSION="${{ needs.release-please.outputs.tag_name }}"
+          VERSION="${{ needs.release.outputs.tag_name }}"
           sed -i "s/^version: .*/version: ${VERSION#v}/" helm/freshrss-summary/Chart.yaml
           echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
