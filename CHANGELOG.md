@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.8.0](https://github.com/PixiBixi/freshrss-summary/compare/c04057d325815e581ccc84a9973f0f3e3f62736b..v1.8.0) - 2026-05-11
+#### Features
+- **(ci)** create GitHub release after cog bump with changelog notes - ([c04057d](https://github.com/PixiBixi/freshrss-summary/commit/c04057d325815e581ccc84a9973f0f3e3f62736b)) - Jeremy Delgado
+
+- - -
+
 ## [v1.7.2](https://github.com/PixiBixi/freshrss-summary/compare/eaba6f926b2f56145ece610148da37f5e2255104..v1.7.2) - 2026-05-11
 #### Bug Fixes
 - **(ci)** add cog separator to CHANGELOG.md so cog bump can insert new versions - ([967153a](https://github.com/PixiBixi/freshrss-summary/commit/967153ac96e315d27439d449d9d78182f3ade1aa)) - Jeremy Delgado
