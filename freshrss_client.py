@@ -124,6 +124,69 @@ class FreshRSSClient:
             if not continuation:
                 break
 
+    def fetch_unread_ids(self, max_items: int = 50_000) -> set[str]:
+        """Fetch all unread article IDs — lightweight, no content payload."""
+        self._ensure_auth()
+        all_ids: set[str] = set()
+        continuation: str | None = None
+
+        while len(all_ids) < max_items:
+            params: dict[str, Any] = {
+                "s": "user/-/state/com.google/reading-list",
+                "xt": "user/-/state/com.google/read",
+                "n": min(10_000, max_items - len(all_ids)),
+                "output": "json",
+            }
+            if continuation:
+                params["c"] = continuation
+
+            resp = self._client.get(
+                f"{self.base_url}/api/greader.php/reader/api/0/stream/items/ids",
+                headers=self._auth_headers(),
+                params=params,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            refs = data.get("itemRefs", [])
+            if not refs:
+                break
+            for ref in refs:
+                all_ids.add(ref["id"])
+
+            continuation = data.get("continuation")
+            if not continuation:
+                break
+
+        logger.info("fetch_unread_ids: %d unread articles in FreshRSS", len(all_ids))
+        return all_ids
+
+    def fetch_articles_by_ids(self, ids: list[str]) -> list[Article]:
+        """Fetch full article content for specific IDs (used in incremental refresh)."""
+        self._ensure_auth()
+        articles: list[Article] = []
+        chunk_size = 250
+
+        for i in range(0, len(ids), chunk_size):
+            chunk = ids[i : i + chunk_size]
+            pairs = [("output", "json")] + [("i", id_) for id_ in chunk]
+            body = urllib.parse.urlencode(pairs).encode()
+
+            resp = self._client.post(
+                f"{self.base_url}/api/greader.php/reader/api/0/stream/items/contents",
+                headers={
+                    **self._auth_headers(),
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                content=body,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            articles.extend(self._parse_item(item) for item in data.get("items", []))
+
+        logger.info("fetch_articles_by_ids: fetched %d articles", len(articles))
+        return articles
+
     # ------------------------------------------------------------------
     # Mark as read
     # ------------------------------------------------------------------
