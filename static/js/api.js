@@ -31,7 +31,7 @@ function _requireAuth() {
 
 async function loadArticles() {
   try {
-    const params = new URLSearchParams({ days: state.days });
+    const params = new URLSearchParams({ days: state.days, limit: 0 });
     if (state.showRead) params.set('show_read', 'true');
     const data = await (await fetch(`/api/articles?${params}`)).json();
     state.articles = data.articles;
@@ -148,6 +148,7 @@ function triggerRefresh() {
   const freshMap = new Map();
   let buffer = [];
   let renderTimer = null;
+  let isIncremental = false;
 
   function flushBuffer(isFinal = false) {
     renderTimer = null;
@@ -155,7 +156,14 @@ function triggerRefresh() {
     buffer = [];
 
     if (isFinal) {
-      state.articles = [...freshMap.values()];
+      if (isIncremental) {
+        // Merge: removed articles already dropped by 'removed' event handler
+        const existingIds = new Set(state.articles.map(a => a.id));
+        const toAdd = [...freshMap.values()].filter(a => !existingIds.has(a.id));
+        state.articles = [...state.articles, ...toAdd];
+      } else {
+        state.articles = [...freshMap.values()];
+      }
       state.displayed = 100;
     } else {
       const existingIds = new Set(state.articles.map(a => a.id));
@@ -173,11 +181,19 @@ function triggerRefresh() {
       case 'progress':
         updateToast(event.message);
         break;
+      case 'removed': {
+        const removedSet = new Set(event.ids);
+        state.articles = state.articles.filter(a => !removedSet.has(a.id));
+        buildTopicPills(state.articles);
+        applyFilters();
+        break;
+      }
       case 'article':
         buffer.push(event.article);
         if (!renderTimer) renderTimer = setTimeout(() => flushBuffer(false), 400);
         break;
       case 'done':
+        isIncremental = !!event.incremental;
         if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
         flushBuffer(true);
         es.close();
