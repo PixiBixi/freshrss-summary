@@ -1,4 +1,5 @@
 ignore_merge_commits = true
+tag_prefix = "v"
 
 [commit_types]
 desloppify = { changelog_title = "Code Health" }
