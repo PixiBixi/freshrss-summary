@@ -239,7 +239,16 @@ async def load_articles() -> tuple[list[ArticleDict], float | None, int]:
             (
                 await conn.execute(
                     select(
-                        articles_table,
+                        articles_table.c.id,
+                        articles_table.c.title,
+                        articles_table.c.url,
+                        articles_table.c.feed_title,
+                        articles_table.c.published,
+                        articles_table.c.score,
+                        articles_table.c.matched_topics,
+                        articles_table.c.matched_keywords,
+                        articles_table.c.top_topic,
+                        articles_table.c.summary,
                         bookmarks_table.c.id.is_not(None).label("bookmarked"),
                     )
                     .select_from(
@@ -281,6 +290,68 @@ async def load_articles() -> tuple[list[ArticleDict], float | None, int]:
     last_refresh = float(meta["last_refresh"]) if "last_refresh" in meta else None
     total_fetched = int(meta.get("total_fetched", 0))
     return articles, last_refresh, total_fetched
+
+
+async def get_unread_ids() -> set[str]:
+    """Return all unread article IDs from DB (for incremental diff with FreshRSS)."""
+    async with get_engine().connect() as conn:
+        rows = (
+            await conn.execute(
+                select(articles_table.c.id).where(articles_table.c.read_at.is_(None))
+            )
+        ).all()
+    return {r[0] for r in rows}
+
+
+async def sync_articles(
+    new_articles: list[ArticleDict],
+    removed_ids: set[str],
+    total_fetched: int,
+) -> None:
+    """Incremental sync: insert new articles, mark removed as read, purge stale."""
+    now = int(time.time())
+    cutoff_read = now - 7 * 86400
+
+    async with get_engine().begin() as conn:
+        if removed_ids:
+            removed_list = list(removed_ids)
+            for i in range(0, len(removed_list), DB_CHUNK_SIZE):
+                chunk = removed_list[i : i + DB_CHUNK_SIZE]
+                await conn.execute(
+                    update(articles_table)
+                    .where(
+                        articles_table.c.id.in_(chunk),
+                        articles_table.c.read_at.is_(None),
+                    )
+                    .values(read_at=now)
+                )
+
+        await conn.execute(
+            delete(articles_table).where(
+                articles_table.c.read_at.is_not(None),
+                articles_table.c.read_at < cutoff_read,
+            )
+        )
+
+        if new_articles:
+            new_ids = [a["id"] for a in new_articles]
+            for i in range(0, len(new_ids), DB_CHUNK_SIZE):
+                chunk = new_ids[i : i + DB_CHUNK_SIZE]
+                await conn.execute(delete(articles_table).where(articles_table.c.id.in_(chunk)))
+            await conn.execute(
+                insert(articles_table),
+                [_article_to_row(a, now) for a in new_articles],
+            )
+
+        await _set_meta(conn, "last_refresh", str(now))
+        await _set_meta(conn, "total_fetched", str(total_fetched))
+
+    logger.info(
+        "Incremental sync: +%d new, -%d removed (%d total unread in FreshRSS)",
+        len(new_articles),
+        len(removed_ids),
+        total_fetched,
+    )
 
 
 async def load_for_rescore() -> list[DbArticleRow]:
