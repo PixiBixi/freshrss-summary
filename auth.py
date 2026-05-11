@@ -10,7 +10,7 @@ import time
 from fastapi import HTTPException, Request
 
 from config import CONFIG_PATH, get_secret_key_from_config
-from db import has_users, upsert_user
+from db import get_user_hash, upsert_user
 
 logger = logging.getLogger(__name__)
 
@@ -36,17 +36,20 @@ async def init_admin_user() -> None:
     """
     Ensure at least one user exists in DB.
 
-    - If ADMIN_PASSWORD env var is set: upsert admin with that password (useful
-      for Docker secrets / initial deploy / password reset).
-    - Else if DB has no users: generate a random password, store it, log it.
+    - If the user already exists in DB: keep the stored password (DB wins over env var).
+    - Else if ADMIN_PASSWORD env var is set: create admin with that password.
+    - Else: generate a random password, store it, log it.
     """
     admin_username = os.environ.get("ADMIN_USERNAME", "admin")
-    admin_password = os.environ.get("ADMIN_PASSWORD")
 
+    if await get_user_hash(admin_username):
+        return
+
+    admin_password = os.environ.get("ADMIN_PASSWORD")
     if admin_password:
         await upsert_user(admin_username, hash_password(admin_password))
-        logger.info("Admin user '%s' password applied from ADMIN_PASSWORD env var", admin_username)
-    elif not await has_users():
+        logger.info("Admin user '%s' created from ADMIN_PASSWORD env var", admin_username)
+    else:
         admin_password = secrets.token_urlsafe(16)
         await upsert_user(admin_username, hash_password(admin_password))
         sep = "=" * 56
@@ -54,7 +57,7 @@ async def init_admin_user() -> None:
         logger.warning("  FIRST RUN — admin account created")
         logger.warning("  Username : %s", admin_username)
         logger.warning("  Password : %s", admin_password)
-        logger.warning("  Set ADMIN_PASSWORD env var to override on restart")
+        logger.warning("  Set ADMIN_PASSWORD env var to set initial password")
         logger.warning(sep)
 
 
