@@ -60,6 +60,51 @@ def fetch_and_score_iter(
             yield scored, total_fetched
 
 
+def fetch_and_score_incremental_iter(
+    cfg: dict[str, Any],
+    topics: list[TopicConfig],
+    db_unread_ids: set[str],
+    feed_weights: dict[str, float] | None = None,
+) -> Iterator[tuple[list[ArticleDict], set[str], int]]:
+    """
+    Incremental fetch: diff IDs first, then fetch content only for new articles.
+
+    Yields (scored_batch, removed_ids, total_freshrss_unread_count) for each chunk.
+    `removed_ids` and `total_freshrss_unread_count` are stable across yields.
+    Runs synchronously — use asyncio.to_thread from async contexts.
+    """
+    fr_cfg = cfg["freshrss"]
+    scoring_cfg = cfg.get("scoring", {})
+    title_weight = int(scoring_cfg.get("title_weight", 3))
+    min_score = float(scoring_cfg.get("min_score", 1.0))
+    chunk_size = int(cfg.get("fetch", {}).get("batch_size", 250))
+
+    with FreshRSSClient(fr_cfg["url"], fr_cfg["username"], fr_cfg["api_password"]) as client:
+        freshrss_ids = client.fetch_unread_ids()
+        total_fetched = len(freshrss_ids)
+        new_ids = list(freshrss_ids - db_unread_ids)
+        removed_ids = db_unread_ids - freshrss_ids
+
+        if not new_ids:
+            yield [], removed_ids, total_fetched
+            return
+
+        for i in range(0, len(new_ids), chunk_size):
+            chunk = new_ids[i : i + chunk_size]
+            articles = client.fetch_articles_by_ids(chunk)
+            scored = [
+                sa.to_dict()
+                for sa in score_articles(
+                    articles,
+                    topics,
+                    title_weight=title_weight,
+                    min_score=min_score,
+                    feed_weights=feed_weights,
+                )
+            ]
+            yield scored, removed_ids, total_fetched
+
+
 def rescore_articles(
     raw: list[DbArticleRow],
     topics: list[TopicConfig],
