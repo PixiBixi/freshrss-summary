@@ -45,6 +45,19 @@ jobs:
             echo "bumped=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Create GitHub release
+        if: steps.bump.outputs.bumped == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.bump.outputs.tag_name }}"
+          # Extract changelog section for this version
+          NOTES=$(awk "/^## .*${TAG#v}/{found=1; next} found && /^- - -/{exit} found{print}" CHANGELOG.md)
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes "${NOTES:-Release $TAG}" \
+            --verify-tag
+
   build-push:
     needs: release
     if: needs.release.outputs.bumped == 'true'
