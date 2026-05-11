@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.7.0](https://github.com/PixiBixi/freshrss-summary/compare/v1.6.3...v1.7.0) (2026-05-11)
+
+
+### Features
+
+* **app:** switch SSE refresh to incremental pipeline ([9f14b24](https://github.com/PixiBixi/freshrss-summary/commit/9f14b2472e756977b8a0b967164449ca52532a2a))
+* **db:** add get_unread_ids, sync_articles and fix load_articles columns ([273f907](https://github.com/PixiBixi/freshrss-summary/commit/273f9070992075a22b7d599e779a476d5428b7e5))
+* **freshrss_client:** add fetch_unread_ids and fetch_articles_by_ids ([7bbb7c8](https://github.com/PixiBixi/freshrss-summary/commit/7bbb7c8d8b95f6bb672cc42dfba5ffcc9c01a8d2))
+* **pipeline:** add fetch_and_score_incremental_iter ([fd53854](https://github.com/PixiBixi/freshrss-summary/commit/fd53854b3f72aa0c0d7de21bf5a06a32f5bbbf59))
+
+
+### Bug Fixes
+
+* **ui:** load all articles on init, merge SSE increments to fix new-tab state ([b144b79](https://github.com/PixiBixi/freshrss-summary/commit/b144b79dfa4b83b97fb38a434544cb52c5b57bd9))
+
 ## [1.6.3](https://github.com/PixiBixi/freshrss-summary/compare/v1.6.2...v1.6.3) (2026-05-10)
 
 
