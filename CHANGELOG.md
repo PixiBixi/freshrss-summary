@@ -1,3 +1,6 @@
+# Changelog
+
+- - -
 ## Unreleased ([51e2bb7..dfa942e](https://github.com/PixiBixi/freshrss-summary/compare/51e2bb7..dfa942e))
 #### Code Health
 - fix code quality + schema drift + type annotations - ([e276842](https://github.com/PixiBixi/freshrss-summary/commit/e276842b99cebf836546c292577b5d3bb97d27bb)) - Jeremy Delgado
