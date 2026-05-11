@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.8.1](https://github.com/PixiBixi/freshrss-summary/compare/a57e411945fb17b4172ced97096ce1593497473e..v1.8.1) - 2026-05-11
+#### Bug Fixes
+- **(ci)** explicitly tag Docker image as latest on each release - ([a57e411](https://github.com/PixiBixi/freshrss-summary/commit/a57e411945fb17b4172ced97096ce1593497473e)) - Jeremy Delgado
+
+- - -
+
 ## [v1.8.0](https://github.com/PixiBixi/freshrss-summary/compare/c04057d325815e581ccc84a9973f0f3e3f62736b..v1.8.0) - 2026-05-11
 #### Features
 - **(ci)** create GitHub release after cog bump with changelog notes - ([c04057d](https://github.com/PixiBixi/freshrss-summary/commit/c04057d325815e581ccc84a9973f0f3e3f62736b)) - Jeremy Delgado
