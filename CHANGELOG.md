@@ -1,6 +1,15 @@
 # Changelog
 
 - - -
+## [v1.7.2](https://github.com/PixiBixi/freshrss-summary/compare/eaba6f926b2f56145ece610148da37f5e2255104..v1.7.2) - 2026-05-11
+#### Bug Fixes
+- **(ci)** add cog separator to CHANGELOG.md so cog bump can insert new versions - ([967153a](https://github.com/PixiBixi/freshrss-summary/commit/967153ac96e315d27439d449d9d78182f3ade1aa)) - Jeremy Delgado
+- **(ci)** add tag_prefix=v to cog.toml so cocogitto resolves existing v* tags - ([c4c18cd](https://github.com/PixiBixi/freshrss-summary/commit/c4c18cdec12bc49f66eac52a45fe4cda08a51223)) - Jeremy Delgado
+#### Miscellaneous Chores
+- **(ci)** replace release-please-action with cocogitto-action - ([eaba6f9](https://github.com/PixiBixi/freshrss-summary/commit/eaba6f926b2f56145ece610148da37f5e2255104)) - Jeremy Delgado
+
+- - -
+
 ## Unreleased ([51e2bb7..dfa942e](https://github.com/PixiBixi/freshrss-summary/compare/51e2bb7..dfa942e))
 #### Code Health
 - fix code quality + schema drift + type annotations - ([e276842](https://github.com/PixiBixi/freshrss-summary/commit/e276842b99cebf836546c292577b5d3bb97d27bb)) - Jeremy Delgado
