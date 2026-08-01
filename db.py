@@ -63,6 +63,9 @@ articles_table = Table(
     Column("fetched_at", Integer, nullable=False),
     Column("read_at", Integer),  # NULL = unread; set = soft-deleted (marked as read)
     Index("idx_score", "score"),
+    # read_at filters every unread lookup; without this SQLite full-scans the
+    # table and walks the overflow pages of the `content` blob.
+    Index("idx_read_at", "read_at"),
 )
 
 meta_table = Table(
@@ -120,19 +123,20 @@ def get_engine() -> AsyncEngine:
 
 
 async def _run_migrations(conn: AsyncConnection) -> None:
-    """Apply additive DDL migrations. Each ALTER is idempotent — duplicate-column errors are expected and swallowed."""
+    """Apply additive DDL migrations. Each statement is idempotent — "already exists" errors are expected and swallowed."""
     _MIGRATIONS = [
-        ("articles", "content", "ALTER TABLE articles ADD COLUMN content TEXT DEFAULT ''"),
-        ("articles", "read_at", "ALTER TABLE articles ADD COLUMN read_at INTEGER"),
+        ("articles.content column", "ALTER TABLE articles ADD COLUMN content TEXT DEFAULT ''"),
+        ("articles.read_at column", "ALTER TABLE articles ADD COLUMN read_at INTEGER"),
+        ("idx_read_at index", "CREATE INDEX idx_read_at ON articles (read_at)"),
     ]
-    for _, column, stmt in _MIGRATIONS:
+    for label, stmt in _MIGRATIONS:
         try:
             await conn.execute(text(stmt))
-            logger.info("DB migrated: added %s column", column)
+            logger.info("DB migrated: %s", label)
         except Exception as exc:
             msg = str(exc).lower()
             if "duplicate" not in msg and "already exists" not in msg:
-                logger.exception("Migration ALTER failed unexpectedly for %s", column)
+                logger.exception("Migration failed unexpectedly for %s", label)
                 raise
             # else: column already exists — expected on every run after first
 
