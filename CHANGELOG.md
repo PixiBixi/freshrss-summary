@@ -1,6 +1,35 @@
 # Changelog
 
 - - -
+## [v1.8.2](https://github.com/PixiBixi/freshrss-summary/compare/d230c9420e4483e998e6b85c9136fe5517c43950..v1.8.2) - 2026-08-01
+#### Bug Fixes
+- (**deps**) declare itsdangerous and python-multipart as runtime dependencies (#43) - ([30592a9](https://github.com/PixiBixi/freshrss-summary/commit/30592a96651bbce20419e71588ffae1a0f4923e5)) - Jérémy
+#### Continuous Integration
+- trigger on PRs to master instead of every branch push (#42) - ([aec8798](https://github.com/PixiBixi/freshrss-summary/commit/aec87982fdae6590a7d4b99f9427efffc9a05c33)) - Jérémy
+#### Miscellaneous Chores
+- (**deps**) update oknozor/cocogitto-action action to v4 (#41) - ([ae3fc8e](https://github.com/PixiBixi/freshrss-summary/commit/ae3fc8e45d1fdbf62386189378f8f56a6b8110ca)) - renovate[bot]
+- (**deps**) update docker/login-action action to v4 (#37) - ([778b98f](https://github.com/PixiBixi/freshrss-summary/commit/778b98fd36ce19de83fff03f5c632e35d4e82426)) - renovate[bot]
+- (**deps**) update docker/setup-buildx-action action to v4 (#39) - ([ba7de87](https://github.com/PixiBixi/freshrss-summary/commit/ba7de87ad5d811f7c3eb0fb062d148b9d8653121)) - renovate[bot]
+- (**deps**) update docker/setup-qemu-action action to v4 (#40) - ([c581957](https://github.com/PixiBixi/freshrss-summary/commit/c581957e9fc90aaa2b44847b08df557cc2abce1d)) - renovate[bot]
+- (**deps**) update docker/metadata-action action to v6 (#38) - ([b54d8aa](https://github.com/PixiBixi/freshrss-summary/commit/b54d8aaa035fc9141432807a903091f889e2b649)) - renovate[bot]
+- (**deps**) update docker/build-push-action action to v7 (#36) - ([046ebe6](https://github.com/PixiBixi/freshrss-summary/commit/046ebe65c8b56c8b0fd86fda9a45f3ecc30b1717)) - renovate[bot]
+- (**deps**) update python docker tag to v3.14 (#30) - ([e3ee58e](https://github.com/PixiBixi/freshrss-summary/commit/e3ee58e1fdd0be5687c6d4ebc64d03609b5c75b3)) - renovate[bot]
+- (**deps**) update astral-sh/setup-uv action to v9 (#33) - ([88d505b](https://github.com/PixiBixi/freshrss-summary/commit/88d505ba0c14f1bcb85db052b92abf904e224c3e)) - renovate[bot]
+- (**deps**) update dependency pytest to v9 (#34) - ([467a245](https://github.com/PixiBixi/freshrss-summary/commit/467a245735f7a2337d0639ac08b3be1de942e4a5)) - renovate[bot]
+- (**deps**) update dependency pytest-asyncio to v1.4.0 (#35) - ([b1e6409](https://github.com/PixiBixi/freshrss-summary/commit/b1e6409efd46c700e38a044439a7fb9b90a6fa12)) - renovate[bot]
+- (**deps**) update dependency uvicorn to v0.52.1 (#29) - ([f9e8c9b](https://github.com/PixiBixi/freshrss-summary/commit/f9e8c9b913a28a549001caa57184896f31da49a3)) - renovate[bot]
+- (**deps**) update dependency prometheus-client to v0.26.0 (#26) - ([9f06f11](https://github.com/PixiBixi/freshrss-summary/commit/9f06f1138b9299af0dcfdc23dc24ca2c3a9a02e2)) - renovate[bot]
+- (**deps**) update dependency fastapi to v0.141.1 (#25) - ([cd485fb](https://github.com/PixiBixi/freshrss-summary/commit/cd485fb6910e8f281ee574abbec3e25edd9d2bc8)) - renovate[bot]
+- (**deps**) update dependency sqlalchemy to v2.0.51 (#23) - ([ff7590d](https://github.com/PixiBixi/freshrss-summary/commit/ff7590d0fd935d65e57bd9c51413768af0a45f2f)) - renovate[bot]
+- (**deps**) update actions/setup-python action to v7 (#32) - ([0df3f3a](https://github.com/PixiBixi/freshrss-summary/commit/0df3f3a53a5c81a35ecbc98760db32fa6633a1d1)) - renovate[bot]
+- (**deps**) update actions/checkout action to v7 (#31) - ([e29d688](https://github.com/PixiBixi/freshrss-summary/commit/e29d6885acb29553b48e263114909d06fba39842)) - renovate[bot]
+- (**deps**) update dependency pytest to v8.4.2 (#27) - ([2ee8d78](https://github.com/PixiBixi/freshrss-summary/commit/2ee8d78b025781a582aad58ad86b6aededae379a)) - renovate[bot]
+- (**deps**) update dependency apscheduler to v3.11.3 (#24) - ([fb3d94f](https://github.com/PixiBixi/freshrss-summary/commit/fb3d94fb500855d03cefd6f1f033f94dd916fc65)) - renovate[bot]
+- (**deps**) update dependency python-multipart to v0.0.32 (#22) - ([489f078](https://github.com/PixiBixi/freshrss-summary/commit/489f07882b943a5d6ddb6549a363c4252a27ad7a)) - renovate[bot]
+- (**deps**) update dependency greenlet to v3.5.4 (#21) - ([d230c94](https://github.com/PixiBixi/freshrss-summary/commit/d230c9420e4483e998e6b85c9136fe5517c43950)) - renovate[bot]
+
+- - -
+
 ## [v1.8.1](https://github.com/PixiBixi/freshrss-summary/compare/a57e411945fb17b4172ced97096ce1593497473e..v1.8.1) - 2026-05-11
 #### Bug Fixes
 - **(ci)** explicitly tag Docker image as latest on each release - ([a57e411](https://github.com/PixiBixi/freshrss-summary/commit/a57e411945fb17b4172ced97096ce1593497473e)) - Jeremy Delgado
