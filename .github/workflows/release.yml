@@ -19,7 +19,7 @@ jobs:
       bumped: ${{ steps.bump.outputs.bumped }}
       tag_name: ${{ steps.bump.outputs.tag_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -66,7 +66,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release.outputs.tag_name }}
 
@@ -108,7 +108,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release.outputs.tag_name }}
 
