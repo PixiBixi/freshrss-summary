@@ -1,6 +1,17 @@
 # Changelog
 
 - - -
+## [v1.8.5](https://github.com/PixiBixi/freshrss-summary/compare/98fe95e69ddeeb1c24af14ef24fcf9e99b01c86c..v1.8.5) - 2026-08-01
+#### Bug Fixes
+- (**pipeline**) track processed article IDs so low scorers are not re-fetched - ([15c08a0](https://github.com/PixiBixi/freshrss-summary/commit/15c08a0c83feffdacae18781aa12f4daef9a0f07)) - Jeremy Delgado
+#### Performance Improvements
+- (**client**) reuse a shared FreshRSS client instead of one per call - ([98fe95e](https://github.com/PixiBixi/freshrss-summary/commit/98fe95e69ddeeb1c24af14ef24fcf9e99b01c86c)) - Jeremy Delgado
+- (**rescore**) score across worker processes instead of a GIL-bound thread - ([5a06fd0](https://github.com/PixiBixi/freshrss-summary/commit/5a06fd08b580d38690f78dced471c20a38c024b1)) - Jeremy Delgado
+#### Continuous Integration
+- (**renovate**) automerge non-major python and action updates - ([7c043d8](https://github.com/PixiBixi/freshrss-summary/commit/7c043d8566727d44a1402ec2a29e40f45ab77f45)) - Jeremy Delgado
+
+- - -
+
 ## [v1.8.4](https://github.com/PixiBixi/freshrss-summary/compare/9fce926965f38710a6d4371d6687f7a27e491efe..v1.8.4) - 2026-08-01
 #### Bug Fixes
 - (**api**) distinguish misconfiguration from unreachable FreshRSS in mark-read - ([4e0cc6a](https://github.com/PixiBixi/freshrss-summary/commit/4e0cc6a7622526f492193d76bc91f78e925f364c)) - Jeremy Delgado
