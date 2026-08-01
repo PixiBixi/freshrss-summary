@@ -1,6 +1,7 @@
 """FreshRSS Google Reader-compatible API client."""
 
 import logging
+import threading
 import urllib.parse
 from collections.abc import Generator
 from typing import Any
@@ -191,6 +192,23 @@ class FreshRSSClient:
     # Mark as read
     # ------------------------------------------------------------------
 
+    def invalidate_auth(self) -> None:
+        """Drop cached auth and CSRF tokens so the next call re-authenticates."""
+        self._auth_token = None
+        self._csrf_token = None
+
+    def _edit_tag(self, chunk: list[str], csrf: str) -> httpx.Response:
+        pairs = [("T", csrf), ("a", "user/-/state/com.google/read")]
+        pairs += [("i", article_id) for article_id in chunk]
+        return self._client.post(
+            f"{self.base_url}/api/greader.php/reader/api/0/edit-tag",
+            headers={
+                **self._auth_headers(),
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            content=urllib.parse.urlencode(pairs).encode(),
+        )
+
     def mark_as_read(self, article_ids: list[str]) -> None:
         """Mark a list of article IDs as read in FreshRSS."""
         if not article_ids:
@@ -202,18 +220,14 @@ class FreshRSSClient:
         chunk_size = 250
         for i in range(0, len(article_ids), chunk_size):
             chunk = article_ids[i : i + chunk_size]
-            pairs = [("T", csrf), ("a", "user/-/state/com.google/read")]
-            pairs += [("i", article_id) for article_id in chunk]
-            body = urllib.parse.urlencode(pairs).encode()
-
-            resp = self._client.post(
-                f"{self.base_url}/api/greader.php/reader/api/0/edit-tag",
-                headers={
-                    **self._auth_headers(),
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-                content=body,
-            )
+            resp = self._edit_tag(chunk, csrf)
+            if resp.status_code == 401:
+                # Tokens are cached across calls now, so they can outlive their
+                # server-side validity. Re-authenticate once before giving up.
+                logger.info("FreshRSS token rejected — re-authenticating")
+                self.invalidate_auth()
+                csrf = self._get_csrf_token()
+                resp = self._edit_tag(chunk, csrf)
             resp.raise_for_status()
 
         logger.info("Marked %d articles as read", len(article_ids))
@@ -292,3 +306,42 @@ class FreshRSSClient:
         exc_tb: object,
     ) -> None:
         self.close()
+
+
+# ---------------------------------------------------------------------------
+# Shared instance
+# ---------------------------------------------------------------------------
+
+_shared_lock = threading.Lock()
+_shared_client: FreshRSSClient | None = None
+_shared_key: tuple[str, str, str] | None = None
+
+
+def get_shared_client(base_url: str, username: str, api_password: str) -> FreshRSSClient:
+    """
+    Return a process-wide client, reusing its connection pool and auth tokens.
+
+    Building a client per call costs a TCP/TLS handshake plus ClientLogin plus a
+    CSRF fetch before the actual request — four round-trips to mark one article
+    read. Callers must NOT close the returned client; use close_shared_client()
+    at shutdown. Credentials are part of the key, so a config change rebuilds it.
+    """
+    global _shared_client, _shared_key
+    key = (base_url, username, api_password)
+    with _shared_lock:
+        if _shared_client is None or _shared_key != key:
+            if _shared_client is not None:
+                _shared_client.close()
+            _shared_client = FreshRSSClient(*key)
+            _shared_key = key
+        return _shared_client
+
+
+def close_shared_client() -> None:
+    """Close the shared client, if one was created."""
+    global _shared_client, _shared_key
+    with _shared_lock:
+        if _shared_client is not None:
+            _shared_client.close()
+            _shared_client = None
+            _shared_key = None
