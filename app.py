@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import httpx
 import itsdangerous
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import (
@@ -372,15 +373,31 @@ async def mark_read(req: MarkReadRequest) -> dict[str, Any]:
     cache.articles = [a for a in cache.articles if a["id"] not in ids_set]
     await set_articles_read(req.article_ids)
 
+    # load_config() raises RuntimeError on missing credentials. That is a
+    # misconfiguration, not an unreachable upstream: reported as plain "queued" it
+    # was indistinguishable from a network blip, so pending_sync grew forever while
+    # nobody noticed FreshRSS was never contacted. Surfaced as its own status and
+    # logged at error level — but still a 200, because marking read locally must
+    # never fail on an upstream concern.
+    try:
+        cfg = load_config()
+    except RuntimeError:
+        logger.error(
+            "FreshRSS is not configured — %d article(s) marked read locally only",
+            len(req.article_ids),
+        )
+        await add_pending_sync(req.article_ids)
+        return {"status": "not_configured", "marked": len(req.article_ids)}
+
     # Best-effort upstream sync; queue for retry if FreshRSS is unreachable
     try:
 
         def _sync_mark_read() -> None:
-            with _make_freshrss_client(load_config()) as c:
+            with _make_freshrss_client(cfg) as c:
                 c.mark_as_read(req.article_ids)
 
         await asyncio.to_thread(_sync_mark_read)
-    except Exception:
+    except (httpx.HTTPError, RuntimeError):
         logger.exception(
             "FreshRSS unreachable — queuing %d article(s) for deferred sync", len(req.article_ids)
         )
