@@ -30,5 +30,12 @@ target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
-ignore = ["E501"]
+# B: bugbear, ASYNC: blocking calls in async, RUF: incl. dangling tasks (RUF006),
+# SLF: private member access on third-party libs
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF", "SLF"]
+# RUF003: typographic characters (×, ') are deliberate in the French comments
+ignore = ["E501", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests legitimately reach into internals and use mutable fixtures.
+"tests/*" = ["SLF001", "RUF012"]

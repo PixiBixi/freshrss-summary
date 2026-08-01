@@ -3,19 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
-if TYPE_CHECKING:
-    pass
-
 __all__ = [
     "CONTENT_TYPE_LATEST",
-    "generate_latest",
     "_Metrics",
     "_get_metrics",
     "_update_prom_cache",
+    "generate_latest",
 ]
 
 
@@ -41,9 +38,12 @@ def _get_metrics() -> _Metrics:
         try:
             return factory()
         except ValueError:
+            # Re-registration: the module was reloaded (uvicorn --reload, tests) so
+            # our singleton is gone, but the collectors are still in the global
+            # registry. prometheus_client exposes no public lookup by name.
             from prometheus_client import REGISTRY
 
-            return REGISTRY._names_to_collectors[name]  # type: ignore[attr-defined]
+            return REGISTRY._names_to_collectors[name]  # noqa: SLF001  # type: ignore[attr-defined]
 
     _metrics = _Metrics(
         articles=_get_or_register_metric(
