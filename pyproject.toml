@@ -24,6 +24,11 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 pythonpath = ["."]
+# Deprecations fail the build instead of surfacing in production logs months later.
+# A static linter cannot catch these: they are raised at runtime, often from inside a
+# dependency. When one is genuinely outside our control, add a targeted entry such as
+# "ignore::DeprecationWarning:some_module" rather than dropping the error rule.
+filterwarnings = ["error::DeprecationWarning"]
 
 [tool.ruff]
 target-version = "py312"
