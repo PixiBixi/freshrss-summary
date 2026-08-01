@@ -1,7 +1,7 @@
 """Domain model for articles."""
 
 from dataclasses import dataclass, field
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 
 @dataclass
@@ -52,6 +52,20 @@ class DbArticleRow(TypedDict):
     content: str
     feed_title: str
     published: int
+
+
+def strip_content(article: ArticleDict) -> ArticleDict:
+    """
+    Return a copy without `_content`, the full article text.
+
+    `_content` is only needed on the way to the DB (see db._article_to_row): it
+    averages ~10 kB per article, so keeping it in the cache both bloats memory and
+    leaks the whole text through the public /api/articles.
+
+    Note `_read` is deliberately preserved despite its underscore: the frontend
+    reads it (static/js/render.js:157) to flag already-read entries.
+    """
+    return cast(ArticleDict, {k: v for k, v in article.items() if k != "_content"})
 
 
 def article_from_row(row: dict[str, Any]) -> Article:

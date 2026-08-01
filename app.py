@@ -69,7 +69,7 @@ from db import (
 from freshrss_client import FreshRSSClient
 from logging_config import LOGGING_CONFIG
 from metrics import CONTENT_TYPE_LATEST, _get_metrics, _update_prom_cache, generate_latest
-from models import ArticleDict
+from models import ArticleDict, strip_content
 from pipeline import fetch_and_score_incremental_iter, rescore_articles
 from scheduler import run_daily_at, run_every
 from scorer import DEFAULT_TOPICS, build_topics
@@ -110,10 +110,13 @@ class Cache:
     def populate(
         self, articles: list[ArticleDict], last_refresh: float | None, total_fetched: int
     ) -> None:
-        self.articles = articles
+        # Single choke point for the cache: `_content` holds the full article text
+        # (~10 kB each) and is only needed on the way to the DB. Keeping it here
+        # would both bloat memory and leak it through the public /api/articles.
+        self.articles = [strip_content(a) for a in articles]
         self.last_refresh = last_refresh
         self.total_fetched = total_fetched
-        self.all_topics = sorted({t for a in articles for t in a["matched_topics"]})
+        self.all_topics = sorted({t for a in self.articles for t in a["matched_topics"]})
         self.initialized = True
 
 
@@ -539,7 +542,10 @@ async def refresh_stream() -> StreamingResponse:
                     _put({"type": "progress", "message": msg, "_load_progress": msg})
                     for d in scored_batch:
                         all_new_articles.append(d)
-                        _put({"type": "article", "article": d})
+                        # `d` still carries `_content` for the DB write below; the
+                        # client gets a stripped copy. The filter applied to the
+                        # event itself only covers its top-level keys.
+                        _put({"type": "article", "article": strip_content(d)})
 
             # Handle case where generator yielded nothing (e.g. network error before first yield)
             if first_batch and removed_ids:
