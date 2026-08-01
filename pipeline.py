@@ -15,7 +15,25 @@ from typing import Any
 
 from freshrss_client import FreshRSSClient
 from models import ArticleDict, DbArticleRow, article_from_row
-from scorer import TopicConfig, score_article, score_articles
+from scorer import TopicConfig, build_topics, score_article, score_articles
+
+
+def rescore_chunk(
+    raw: list[DbArticleRow],
+    topics_cfg: dict[str, Any],
+    title_weight: int,
+    min_score: float,
+    feed_weights: dict[str, float] | None,
+) -> list[ArticleDict]:
+    """
+    Re-score one chunk of DB rows, building the topics locally.
+
+    Lives here rather than in app.py on purpose: it is the entry point submitted to
+    a ProcessPoolExecutor, and a spawned worker re-imports the module that defines
+    it. Importing app.py would build the whole FastAPI application in every worker.
+    Arguments and the return value are plain dicts and lists, hence picklable.
+    """
+    return rescore_articles(raw, build_topics(topics_cfg), title_weight, min_score, feed_weights)
 
 
 def fetch_and_score_iter(
