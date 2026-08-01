@@ -1,6 +1,15 @@
 # Changelog
 
 - - -
+## [v1.8.6](https://github.com/PixiBixi/freshrss-summary/compare/f88caea101c27550aa80d281c053118bda1f5e4d..v1.8.6) - 2026-08-01
+#### Bug Fixes
+- (**refresh**) claim the refresh slot atomically to block concurrent runs - ([f88caea](https://github.com/PixiBixi/freshrss-summary/commit/f88caea101c27550aa80d281c053118bda1f5e4d)) - Jeremy Delgado
+- (**ui**) stop rescore action crashing on the missing rescore-btn element - ([e9532fd](https://github.com/PixiBixi/freshrss-summary/commit/e9532fd5ff2c01df2dbe57b0558191dd708820ef)) - Jeremy Delgado
+#### Miscellaneous Chores
+- (**ruff**) enable bugbear, async, ruff and self rulesets - ([31a6441](https://github.com/PixiBixi/freshrss-summary/commit/31a6441c213c016217ec91c266b185f0332e3f74)) - Jeremy Delgado
+
+- - -
+
 ## [v1.8.5](https://github.com/PixiBixi/freshrss-summary/compare/98fe95e69ddeeb1c24af14ef24fcf9e99b01c86c..v1.8.5) - 2026-08-01
 #### Bug Fixes
 - (**pipeline**) track processed article IDs so low scorers are not re-fetched - ([15c08a0](https://github.com/PixiBixi/freshrss-summary/commit/15c08a0c83feffdacae18781aa12f4daef9a0f07)) - Jeremy Delgado
