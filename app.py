@@ -1,10 +1,12 @@
 """FreshRSS Summary — FastAPI backend."""
 
 import asyncio
+import concurrent.futures
 import datetime
 import json
 import logging
 import logging.config
+import math
 import os
 import secrets
 import time
@@ -72,7 +74,7 @@ from freshrss_client import FreshRSSClient, close_shared_client, get_shared_clie
 from logging_config import LOGGING_CONFIG
 from metrics import CONTENT_TYPE_LATEST, _get_metrics, _update_prom_cache, generate_latest
 from models import ArticleDict, strip_content
-from pipeline import fetch_and_score_incremental_iter, rescore_articles
+from pipeline import fetch_and_score_incremental_iter, rescore_chunk
 from scheduler import run_daily_at, run_every
 from scorer import DEFAULT_TOPICS, build_topics
 from telegram_digest import (
@@ -708,18 +710,57 @@ async def refresh_stream() -> StreamingResponse:
     )
 
 
-def _blocking_rescore_compute(
+_RESCORE_WORKERS = max(1, (os.cpu_count() or 2) - 1)
+_RESCORE_MIN_CHUNK = 500  # below this, spawning processes costs more than it saves
+
+
+async def _rescore_compute(
     raw: list[dict[str, Any]],
     cfg: ConfigDict,
     topics_cfg: dict[str, Any],
     feed_weights: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
-    """CPU re-scoring of cached articles. Runs in a thread pool via asyncio.to_thread."""
+    """
+    Re-score articles across worker processes.
+
+    Scoring is regex-bound and CPython's `re` never releases the GIL, so running
+    this through asyncio.to_thread still stalled the event loop for the whole job
+    (~4 ms per article, measured). Processes move the work off the loop entirely
+    and split it across cores. Falls back to a thread when spawning is impossible
+    (restricted container, no /dev/shm) — degraded, but still correct.
+    """
     scoring_cfg = cfg.get("scoring", {})
     title_weight = int(scoring_cfg.get("title_weight", 3))
     min_score = float(scoring_cfg.get("min_score", 1.0))
-    topics = build_topics(topics_cfg)
-    return rescore_articles(raw, topics, title_weight, min_score, feed_weights)
+
+    workers = min(_RESCORE_WORKERS, max(1, len(raw) // _RESCORE_MIN_CHUNK))
+    if workers <= 1:
+        return await asyncio.to_thread(
+            rescore_chunk, raw, topics_cfg, title_weight, min_score, feed_weights
+        )
+
+    size = math.ceil(len(raw) / workers)
+    chunks = [raw[i : i + size] for i in range(0, len(raw), size)]
+    loop = asyncio.get_running_loop()
+    try:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as pool:
+            results = await asyncio.gather(
+                *(
+                    loop.run_in_executor(
+                        pool, rescore_chunk, c, topics_cfg, title_weight, min_score, feed_weights
+                    )
+                    for c in chunks
+                )
+            )
+    except OSError:
+        logger.warning("Process pool unavailable — falling back to a single thread")
+        return await asyncio.to_thread(
+            rescore_chunk, raw, topics_cfg, title_weight, min_score, feed_weights
+        )
+
+    merged = [a for chunk in results for a in chunk]
+    merged.sort(key=lambda a: a["score"], reverse=True)
+    return merged
 
 
 async def _do_rescore_from_db() -> None:
@@ -733,9 +774,7 @@ async def _do_rescore_from_db() -> None:
         cfg = load_config()
         topics_cfg = await get_or_seed_scoring_config(load_config(), DEFAULT_TOPICS)
         feed_weights = await get_feed_weights()
-        article_dicts = await asyncio.to_thread(
-            _blocking_rescore_compute, raw, cfg, topics_cfg, feed_weights
-        )
+        article_dicts = await _rescore_compute(raw, cfg, topics_cfg, feed_weights)
         total_fetched = int(await get_meta("total_fetched", "0"))
         cache.load_progress = "Sauvegarde..."
         await _persist_and_populate(
