@@ -113,6 +113,29 @@ class Cache:
         self.refresh_task: asyncio.Task | None = None
         self.trending_alerted: set[tuple[str, int]] = set()
 
+    def try_begin_loading(self) -> bool:
+        """
+        Claim the refresh slot, or return False if one is already running.
+
+        Test and set happen with no `await` in between, which makes them atomic on
+        the single-threaded event loop. Checking `is_loading` in a handler and
+        letting the worker set it later left a window several awaits wide: a
+        double-click, or the scheduler firing during a manual refresh, started two
+        concurrent fetches writing the same rows.
+
+        Every caller must pair this with end_loading() in a finally.
+        """
+        if self.is_loading:
+            return False
+        self.is_loading = True
+        self.error = None
+        self.load_progress = "Démarrage..."
+        return True
+
+    def end_loading(self) -> None:
+        """Release the refresh slot."""
+        self.is_loading = False
+
     def populate(
         self, articles: list[ArticleDict], last_refresh: float | None, total_fetched: int
     ) -> None:
@@ -436,7 +459,7 @@ async def mark_read(req: MarkReadRequest) -> dict[str, Any]:
 
 async def _auto_refresh() -> None:
     """Scheduled job: runs _do_fetch_and_score unless a refresh is already in progress."""
-    if cache.is_loading:
+    if not cache.try_begin_loading():
         logger.info("Scheduled refresh skipped — already in progress")
         return
     logger.info("Scheduled refresh starting")
@@ -490,10 +513,11 @@ async def _incremental_persist_and_populate(
 
 
 async def _do_fetch_and_score() -> None:
-    """Background task: incremental fetch → score → sync DB → populate cache."""
-    cache.is_loading = True
-    cache.error = None
-    cache.load_progress = "Démarrage..."
+    """Background task: incremental fetch → score → sync DB → populate cache.
+
+    The refresh slot is claimed by the caller via cache.try_begin_loading(); this
+    only owns releasing it.
+    """
     _t0 = time.perf_counter()
 
     try:
@@ -559,23 +583,23 @@ async def _do_fetch_and_score() -> None:
         cache.load_progress = "Erreur"
         logger.exception("Refresh failed")
     finally:
-        cache.is_loading = False
+        cache.end_loading()
 
 
 @app.post("/api/refresh", dependencies=[Depends(require_auth)])
 async def refresh() -> dict[str, Any]:
     """Start async refresh. Returns immediately; poll /api/status for progress."""
-    if cache.is_loading:
+    if not cache.try_begin_loading():
         return {"status": "already_loading", "progress": cache.load_progress}
 
-    cache.refresh_task = asyncio.create_task(_do_fetch_and_score())
+    cache.refresh_task = _spawn(_do_fetch_and_score())
     return {"status": "started"}
 
 
 @app.get("/api/refresh/stream", dependencies=[Depends(require_auth)])
 async def refresh_stream() -> StreamingResponse:
     """SSE: fetch → score per batch → stream each scored article as it arrives."""
-    if cache.is_loading:
+    if not cache.try_begin_loading():
 
         async def _busy():
             yield f"data: {json.dumps({'type': 'busy'})}\n\n"
@@ -599,8 +623,7 @@ async def refresh_stream() -> StreamingResponse:
         cfg: ConfigDict,
     ) -> None:
         # Runs in a thread pool — survives SSE client disconnections.
-        # Owns is_loading lifecycle; responsible for DB sync, cache populate, clearing is_loading.
-        cache.is_loading = True
+        # The slot was already claimed by the handler; this owns releasing it.
         all_new_articles: list[dict[str, Any]] = []
         removed_ids: set[str] = set()
         total_fetched = 0
@@ -686,12 +709,9 @@ async def refresh_stream() -> StreamingResponse:
                 }
             )
         finally:
-            cache.is_loading = False
+            cache.end_loading()
 
     async def _event_gen():
-        cache.error = None
-        cache.load_progress = "Démarrage..."
-
         try:
             cfg = load_config()
             topics_cfg = await get_or_seed_scoring_config(cfg, DEFAULT_TOPICS)
@@ -701,6 +721,8 @@ async def refresh_stream() -> StreamingResponse:
             logger.exception("refresh-stream init failed")
             cache.error = f"{type(e).__name__}: {e}"
             cache.load_progress = "Erreur"
+            # The worker never starts, so nothing downstream would release the slot.
+            cache.end_loading()
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
             return
 
@@ -786,9 +808,11 @@ async def _rescore_compute(
 
 
 async def _do_rescore_from_db() -> None:
-    """Background task: rescore from DB → persist → populate cache."""
-    cache.is_loading = True
-    cache.error = None
+    """Background task: rescore from DB → persist → populate cache.
+
+    The refresh slot is claimed by the caller via cache.try_begin_loading(); this
+    only owns releasing it.
+    """
     cache.load_progress = "Démarrage du re-scoring..."
 
     try:
@@ -809,13 +833,13 @@ async def _do_rescore_from_db() -> None:
         cache.load_progress = "Erreur"
         logger.exception("Rescore failed")
     finally:
-        cache.is_loading = False
+        cache.end_loading()
 
 
 @app.post("/api/rescore", dependencies=[Depends(require_auth)])
 async def rescore() -> dict[str, Any]:
     """Re-score cached articles with current config. No FreshRSS fetch."""
-    if cache.is_loading:
+    if not cache.try_begin_loading():
         return {"status": "already_loading", "progress": cache.load_progress}
 
     if not cache.articles and not await load_for_rescore():

@@ -569,3 +569,39 @@ class TestSmokeEndpoints:
     async def test_metrics_returns_prometheus_text(self, authed_client_no_ratelimit, db_engine):
         resp = await authed_client_no_ratelimit.get("/metrics")
         assert resp.status_code == 200
+
+
+class TestRefreshConcurrency:
+    """Concurrent refresh requests must not start more than one job.
+
+    The guard used to test `cache.is_loading` in the handler while the worker set
+    it several awaits later, so a double-click started two fetches writing the
+    same rows.
+    """
+
+    async def test_only_one_concurrent_refresh_starts(self, authed_client):
+        import asyncio
+        from unittest.mock import patch
+
+        started = 0
+
+        async def _slow_refresh():
+            nonlocal started
+            started += 1
+            try:
+                await asyncio.sleep(0.05)
+            finally:
+                cache.end_loading()
+
+        with patch("app._do_fetch_and_score", _slow_refresh):
+            responses = await asyncio.gather(
+                *(authed_client.post("/api/refresh") for _ in range(5))
+            )
+
+        statuses = [r.json()["status"] for r in responses]
+        assert statuses.count("started") == 1, statuses
+        assert statuses.count("already_loading") == 4, statuses
+
+        await asyncio.sleep(0.15)
+        assert started == 1, "exactly one refresh job ran"
+        assert not cache.is_loading, "slot released once the job finished"
