@@ -68,7 +68,7 @@ from db import (
     sync_articles,
     toggle_bookmark,
 )
-from freshrss_client import FreshRSSClient
+from freshrss_client import FreshRSSClient, close_shared_client, get_shared_client
 from logging_config import LOGGING_CONFIG
 from metrics import CONTENT_TYPE_LATEST, _get_metrics, _update_prom_cache, generate_latest
 from models import ArticleDict, strip_content
@@ -189,6 +189,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     for task in bg_tasks:
         task.cancel()
     await asyncio.gather(*bg_tasks, return_exceptions=True)
+    close_shared_client()
 
 
 _session_middleware: "_SessionMiddleware | None" = None
@@ -258,6 +259,12 @@ def _make_freshrss_client(cfg: ConfigDict) -> FreshRSSClient:
     """Build a FreshRSSClient from the freshrss section of the config."""
     fr = cfg["freshrss"]  # type: ignore[typeddict-item]
     return FreshRSSClient(fr["url"], fr["username"], fr["api_password"])
+
+
+def _shared_freshrss_client(cfg: ConfigDict) -> FreshRSSClient:
+    """Process-wide client for short mark-read calls — must not be closed by callers."""
+    fr = cfg["freshrss"]  # type: ignore[typeddict-item]
+    return get_shared_client(fr["url"], fr["username"], fr["api_password"])
 
 
 # ---------------------------------------------------------------------------
@@ -410,8 +417,7 @@ async def mark_read(req: MarkReadRequest) -> dict[str, Any]:
     try:
 
         def _sync_mark_read() -> None:
-            with _make_freshrss_client(cfg) as c:
-                c.mark_as_read(req.article_ids)
+            _shared_freshrss_client(cfg).mark_as_read(req.article_ids)
 
         await asyncio.to_thread(_sync_mark_read)
     except (httpx.HTTPError, RuntimeError):
@@ -491,8 +497,7 @@ async def _do_fetch_and_score() -> None:
             try:
 
                 def _sync_pending() -> None:
-                    with _make_freshrss_client(cfg) as c:
-                        c.mark_as_read(pending)
+                    _shared_freshrss_client(cfg).mark_as_read(pending)
 
                 await asyncio.to_thread(_sync_pending)
                 await clear_pending_sync(pending)
