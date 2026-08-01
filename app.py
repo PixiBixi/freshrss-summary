@@ -224,6 +224,18 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 # ---------------------------------------------------------------------------
 
 
+def _safe_next_url(raw: str) -> str:
+    """
+    Return `raw` if it is a local path, else "/".
+
+    `?next=//evil.tld` and `?next=https://evil.tld` would otherwise turn the
+    post-login redirect into an open redirect towards an attacker-controlled site.
+    """
+    if raw.startswith("/") and not raw.startswith(("//", "/\\")):
+        return raw
+    return "/"
+
+
 def _make_freshrss_client(cfg: ConfigDict) -> FreshRSSClient:
     """Build a FreshRSSClient from the freshrss section of the config."""
     fr = cfg["freshrss"]  # type: ignore[typeddict-item]
@@ -274,7 +286,7 @@ async def login(
         request.session.clear()
         request.session["authenticated"] = True
         request.session["username"] = username
-        next_url = request.query_params.get("next", "/")
+        next_url = _safe_next_url(request.query_params.get("next", "/"))
         return RedirectResponse(url=next_url, status_code=303)
 
     return templates.TemplateResponse(
