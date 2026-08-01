@@ -14,7 +14,7 @@ jobs:
 
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - uses: pre-commit/action@v3.0.1
 
@@ -26,7 +26,7 @@ jobs:
       - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
-          python-version: "3.12"
+          python-version: "3.14"
           # v6+ no longer creates/activates a venv by default
           activate-environment: true
 
