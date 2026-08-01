@@ -1,6 +1,14 @@
 # Changelog
 
 - - -
+## [v1.8.4](https://github.com/PixiBixi/freshrss-summary/compare/9fce926965f38710a6d4371d6687f7a27e491efe..v1.8.4) - 2026-08-01
+#### Bug Fixes
+- (**api**) distinguish misconfiguration from unreachable FreshRSS in mark-read - ([4e0cc6a](https://github.com/PixiBixi/freshrss-summary/commit/4e0cc6a7622526f492193d76bc91f78e925f364c)) - Jeremy Delgado
+- (**async**) keep strong references to spawned background tasks - ([8148c9f](https://github.com/PixiBixi/freshrss-summary/commit/8148c9f3f2b8eaa5ee42c62b515291c200868f31)) - Jeremy Delgado
+- (**auth**) reject off-site redirect targets in the login next parameter - ([9fce926](https://github.com/PixiBixi/freshrss-summary/commit/9fce926965f38710a6d4371d6687f7a27e491efe)) - Jeremy Delgado
+
+- - -
+
 ## [v1.8.3](https://github.com/PixiBixi/freshrss-summary/compare/0f22a6ce11cdd0f5248ecf6c55f9766ee1f2bf23..v1.8.3) - 2026-08-01
 #### Bug Fixes
 - (**api**) stop leaking full article content to cache and SSE clients - ([bee1c23](https://github.com/PixiBixi/freshrss-summary/commit/bee1c23b73a9dd02b933e3b8c4a88dcc5b22e86b)) - Jeremy Delgado
