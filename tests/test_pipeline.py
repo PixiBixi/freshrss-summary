@@ -7,7 +7,11 @@ of higher-level wrappers in app.py or cli.py.
 from unittest.mock import MagicMock, patch
 
 from models import Article, ArticleDict
-from pipeline import fetch_and_score_iter, rescore_articles
+from pipeline import (
+    fetch_and_score_incremental_iter,
+    fetch_and_score_iter,
+    rescore_articles,
+)
 from scorer import TopicConfig
 
 # ---------------------------------------------------------------------------
@@ -191,3 +195,71 @@ class TestRescoreArticles:
         """Empty input returns empty output."""
         result = rescore_articles([], _TOPICS)
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Incremental diff: sub-threshold articles must not be re-fetched forever
+# ---------------------------------------------------------------------------
+
+
+class TestIncrementalSeenIds:
+    """The diff runs against every processed ID, not just the stored ones.
+
+    Articles scoring below min_score are never persisted, so diffing against the
+    articles table alone re-listed them on every refresh — they were downloaded
+    and re-scored indefinitely.
+    """
+
+    @staticmethod
+    def _fake_client(unread: set[str], fetched: list[list[str]]):
+        client = MagicMock()
+        client.__enter__ = lambda self: self
+        client.__exit__ = lambda self, *a: False
+        client.fetch_unread_ids.return_value = set(unread)
+
+        def _fetch(ids):
+            fetched.append(list(ids))
+            return [
+                Article(
+                    id=i,
+                    title="kubernetes" if "relevant" in i else "unrelated topic",
+                    url="http://x",
+                    content="kubernetes" if "relevant" in i else "unrelated topic",
+                    summary="",
+                    feed_title="Feed",
+                    published=0,
+                )
+                for i in ids
+            ]
+
+        client.fetch_articles_by_ids.side_effect = _fetch
+        return client
+
+    def _run(self, seen: set[str], fetched: list[list[str]], unread: set[str]):
+        client = self._fake_client(unread, fetched)
+        with patch("pipeline.FreshRSSClient", return_value=client):
+            scored, processed = [], []
+            for batch in fetch_and_score_incremental_iter(_MINIMAL_CFG, _TOPICS, seen):
+                scored.extend(batch.scored)
+                processed.extend(batch.processed_ids)
+        return scored, processed
+
+    def test_processed_ids_include_articles_below_min_score(self):
+        unread = {"relevant-1", "boring-1", "boring-2"}
+        fetched: list[list[str]] = []
+
+        scored, processed = self._run(set(), fetched, unread)
+
+        assert len(scored) == 1, "only the relevant article clears min_score"
+        assert set(processed) == unread, "every fetched ID is reported, whatever its score"
+
+    def test_second_refresh_refetches_nothing(self):
+        unread = {"relevant-1", "boring-1", "boring-2"}
+        fetched: list[list[str]] = []
+
+        _, processed = self._run(set(), fetched, unread)
+        seen = set(processed)
+        self._run(seen, fetched, unread)
+
+        assert sum(len(f) for f in fetched[:1]) == 3, "first refresh fetches everything"
+        assert fetched[1:] == [], "second refresh fetches nothing — not even the low scorers"
