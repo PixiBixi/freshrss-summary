@@ -11,7 +11,7 @@ side effects. Callers (app.py, cli.py) own progress reporting and persistence.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, NamedTuple
 
 from freshrss_client import FreshRSSClient
 from models import ArticleDict, DbArticleRow, article_from_row
@@ -78,18 +78,33 @@ def fetch_and_score_iter(
             yield scored, total_fetched
 
 
+class IncrementalBatch(NamedTuple):
+    """One chunk produced by fetch_and_score_incremental_iter."""
+
+    scored: list[ArticleDict]
+    removed_ids: set[str]
+    total_fetched: int
+    processed_ids: list[str]
+
+
 def fetch_and_score_incremental_iter(
     cfg: dict[str, Any],
     topics: list[TopicConfig],
-    db_unread_ids: set[str],
+    seen_ids: set[str],
     feed_weights: dict[str, float] | None = None,
-) -> Iterator[tuple[list[ArticleDict], set[str], int]]:
+) -> Iterator[IncrementalBatch]:
     """
     Incremental fetch: diff IDs first, then fetch content only for new articles.
 
-    Yields (scored_batch, removed_ids, total_freshrss_unread_count) for each chunk.
-    `removed_ids` and `total_freshrss_unread_count` are stable across yields.
-    Runs synchronously — use asyncio.to_thread from async contexts.
+    Yields an IncrementalBatch per chunk; `removed_ids` and `total_fetched` are
+    stable across yields. Runs synchronously — use asyncio.to_thread from async
+    contexts.
+
+    `seen_ids` must be every ID already processed, not just the ones stored in
+    `articles`: anything scoring below min_score is never persisted, so diffing
+    against the articles table alone would re-list it on every refresh forever.
+    `processed_ids` carries the IDs handled in this chunk so the caller can
+    record them — this module stays free of persistence side effects.
     """
     fr_cfg = cfg["freshrss"]
     scoring_cfg = cfg.get("scoring", {})
@@ -100,11 +115,11 @@ def fetch_and_score_incremental_iter(
     with FreshRSSClient(fr_cfg["url"], fr_cfg["username"], fr_cfg["api_password"]) as client:
         freshrss_ids = client.fetch_unread_ids()
         total_fetched = len(freshrss_ids)
-        new_ids = list(freshrss_ids - db_unread_ids)
-        removed_ids = db_unread_ids - freshrss_ids
+        new_ids = list(freshrss_ids - seen_ids)
+        removed_ids = seen_ids - freshrss_ids
 
         if not new_ids:
-            yield [], removed_ids, total_fetched
+            yield IncrementalBatch([], removed_ids, total_fetched, [])
             return
 
         for i in range(0, len(new_ids), chunk_size):
@@ -120,7 +135,7 @@ def fetch_and_score_incremental_iter(
                     feed_weights=feed_weights,
                 )
             ]
-            yield scored, removed_ids, total_fetched
+            yield IncrementalBatch(scored, removed_ids, total_fetched, chunk)
 
 
 def rescore_articles(

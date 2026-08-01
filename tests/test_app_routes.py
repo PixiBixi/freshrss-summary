@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app import app, cache
 from db import metadata, set_engine_for_testing
+from pipeline import IncrementalBatch
 from tests.conftest import TEST_DB_URL
 
 _ARTICLE = {
@@ -294,8 +295,8 @@ class TestRefreshStream:
             patch("app.build_topics", return_value={}),
             patch(
                 "app.fetch_and_score_incremental_iter",
-                # new signature: yields (scored_batch, removed_ids, total_fetched)
-                return_value=iter([([article], set(), 1)]),
+                # yields IncrementalBatch(scored, removed_ids, total_fetched, processed_ids)
+                return_value=iter([IncrementalBatch([article], set(), 1, [article["id"]])]),
             ),
             patch(
                 "app.load_config",
@@ -305,7 +306,8 @@ class TestRefreshStream:
             ),
             patch("app.get_or_seed_scoring_config", new_callable=AsyncMock, return_value={}),
             patch("app.get_feed_weights", new_callable=AsyncMock, return_value={}),
-            patch("app.get_unread_ids", new_callable=AsyncMock, return_value=set()),
+            patch("app.get_seen_ids", new_callable=AsyncMock, return_value=set()),
+            patch("app._record_refresh_ids", new_callable=AsyncMock),
             patch("app._incremental_persist_and_populate", new_callable=AsyncMock),
         ):
             events = []
@@ -341,7 +343,8 @@ class TestRefreshStream:
             ),
             patch("app.get_or_seed_scoring_config", new_callable=AsyncMock, return_value={}),
             patch("app.get_feed_weights", new_callable=AsyncMock, return_value={}),
-            patch("app.get_unread_ids", new_callable=AsyncMock, return_value=set()),
+            patch("app.get_seen_ids", new_callable=AsyncMock, return_value=set()),
+            patch("app._record_refresh_ids", new_callable=AsyncMock),
         ):
             events = []
             async with authed_client.stream("GET", "/api/refresh/stream") as resp:

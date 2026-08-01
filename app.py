@@ -47,6 +47,7 @@ from db import (
     add_snooze,
     clear_pending_sync,
     delete_snooze,
+    forget_seen_ids,
     get_all_feed_titles,
     get_bookmarked_ids,
     get_due_snoozes,
@@ -56,12 +57,13 @@ from db import (
     get_or_seed_scoring_config,
     get_pending_sync,
     get_scoring_config,
-    get_unread_ids,
+    get_seen_ids,
     get_user_hash,
     init_db,
     load_articles,
     load_for_rescore,
     load_read_articles,
+    record_seen_ids,
     save_articles,
     set_articles_read,
     set_feed_weights,
@@ -464,6 +466,12 @@ async def _persist_and_populate(
     _update_prom_cache(cache.articles, cache.last_refresh)
 
 
+async def _record_refresh_ids(processed: list[str], removed: set[str]) -> None:
+    """Record processed IDs and forget the ones FreshRSS no longer lists as unread."""
+    await record_seen_ids(processed)
+    await forget_seen_ids(removed)
+
+
 async def _incremental_persist_and_populate(
     new_articles: list[dict[str, Any]],
     removed_ids: set[str],
@@ -507,23 +515,28 @@ async def _do_fetch_and_score() -> None:
             except Exception:
                 logger.exception("Pending sync flush failed, will retry on next refresh")
 
-        db_unread_ids = await get_unread_ids()
+        seen_ids = await get_seen_ids()
 
-        def _blocking_incremental() -> tuple[list[dict[str, Any]], set[str], int]:
+        def _blocking_incremental() -> tuple[list[dict[str, Any]], set[str], int, list[str]]:
             all_new: list[dict[str, Any]] = []
             removed: set[str] = set()
             total = 0
+            processed: list[str] = []
             topics = build_topics(topics_cfg)
-            for batch, batch_removed, batch_total in fetch_and_score_incremental_iter(
-                cfg, topics, db_unread_ids, feed_weights
-            ):
-                cache.load_progress = f"Récupération : {len(all_new) + len(batch)} nouveaux..."
-                all_new.extend(batch)
-                removed = batch_removed
-                total = batch_total
-            return all_new, removed, total
+            for b in fetch_and_score_incremental_iter(cfg, topics, seen_ids, feed_weights):
+                cache.load_progress = f"Récupération : {len(all_new) + len(b.scored)} nouveaux..."
+                all_new.extend(b.scored)
+                removed = b.removed_ids
+                total = b.total_fetched
+                processed.extend(b.processed_ids)
+            return all_new, removed, total, processed
 
-        new_articles, removed_ids, total_fetched = await asyncio.to_thread(_blocking_incremental)
+        new_articles, removed_ids, total_fetched, processed_ids = await asyncio.to_thread(
+            _blocking_incremental
+        )
+        # Recorded whatever their score: articles below min_score are never stored
+        # in `articles`, so this is the only thing keeping them out of the next diff.
+        await _record_refresh_ids(processed_ids, removed_ids)
 
         if not new_articles and not removed_ids:
             cache.load_progress = "Aucun changement"
@@ -582,7 +595,7 @@ async def refresh_stream() -> StreamingResponse:
     def _sse_refresh_worker(
         topics_cfg: dict[str, Any],
         feed_weights: dict[str, float],
-        db_unread_ids: set[str],
+        seen_ids: set[str],
         cfg: ConfigDict,
     ) -> None:
         # Runs in a thread pool — survives SSE client disconnections.
@@ -596,11 +609,12 @@ async def refresh_stream() -> StreamingResponse:
         try:
             topics = build_topics(topics_cfg)
             first_batch = True
-            for scored_batch, batch_removed, batch_total in fetch_and_score_incremental_iter(
-                cfg, topics, db_unread_ids, feed_weights
-            ):
-                removed_ids = batch_removed
-                total_fetched = batch_total
+            processed_ids: list[str] = []
+            for b in fetch_and_score_incremental_iter(cfg, topics, seen_ids, feed_weights):
+                scored_batch = b.scored
+                removed_ids = b.removed_ids
+                total_fetched = b.total_fetched
+                processed_ids.extend(b.processed_ids)
 
                 # Emit removed IDs before the first article batch so the UI can drop them
                 if first_batch:
@@ -621,6 +635,14 @@ async def refresh_stream() -> StreamingResponse:
             # Handle case where generator yielded nothing (e.g. network error before first yield)
             if first_batch and removed_ids:
                 _put({"type": "removed", "ids": list(removed_ids)})
+
+            # Before the early return below: a batch where every article scored under
+            # min_score yields nothing to store, yet those IDs must still be recorded
+            # or the next refresh re-downloads them.
+            if processed_ids or removed_ids:
+                asyncio.run_coroutine_threadsafe(
+                    _record_refresh_ids(processed_ids, removed_ids), loop
+                ).result()
 
             if not all_new_articles and not removed_ids:
                 logger.info("Stream refresh: no changes")
@@ -674,7 +696,7 @@ async def refresh_stream() -> StreamingResponse:
             cfg = load_config()
             topics_cfg = await get_or_seed_scoring_config(cfg, DEFAULT_TOPICS)
             feed_weights = await get_feed_weights()
-            db_unread_ids = await get_unread_ids()
+            seen_ids = await get_seen_ids()
         except Exception as e:
             logger.exception("refresh-stream init failed")
             cache.error = f"{type(e).__name__}: {e}"
@@ -682,7 +704,7 @@ async def refresh_stream() -> StreamingResponse:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
             return
 
-        _spawn(asyncio.to_thread(_sse_refresh_worker, topics_cfg, feed_weights, db_unread_ids, cfg))
+        _spawn(asyncio.to_thread(_sse_refresh_worker, topics_cfg, feed_weights, seen_ids, cfg))
         try:
             while True:
                 event = await q.get()

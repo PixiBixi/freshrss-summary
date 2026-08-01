@@ -90,6 +90,17 @@ pending_sync_table = Table(
     Column("queued_at", Integer, nullable=False),
 )
 
+# Every article ID the incremental refresh has already processed, including the
+# ones scored below min_score that never make it into `articles`. Without this,
+# the diff `freshrss_ids - <ids in articles>` keeps re-listing them forever, so
+# they are re-downloaded and re-scored on every single refresh.
+seen_ids_table = Table(
+    "seen_ids",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("seen_at", Integer, nullable=False),
+)
+
 snooze_table = Table(
     "snooze",
     metadata,
@@ -155,6 +166,7 @@ async def init_db(url: str = DEFAULT_DB_URL) -> None:
     async with _engine.begin() as conn:
         await conn.run_sync(metadata.create_all)
         await _run_migrations(conn)
+        await _seed_seen_ids(conn)
 
     safe_url = url.split("@")[-1] if "@" in url else url
     logger.info("DB ready: %s", safe_url)
@@ -445,6 +457,78 @@ async def get_all_feed_titles() -> list[str]:
             select(articles_table.c.feed_title).distinct().order_by(articles_table.c.feed_title)
         )
     return [r[0] for r in rows if r[0]]
+
+
+async def get_seen_ids() -> set[str]:
+    """Return every article ID the incremental refresh has already processed."""
+    async with get_engine().connect() as conn:
+        rows = (await conn.execute(select(seen_ids_table.c.id))).all()
+    return {r[0] for r in rows}
+
+
+async def record_seen_ids(ids: list[str]) -> None:
+    """Mark article IDs as processed, whatever their score."""
+    if not ids:
+        return
+    now = int(time.time())
+    async with get_engine().begin() as conn:
+        for i in range(0, len(ids), DB_CHUNK_SIZE):
+            chunk = ids[i : i + DB_CHUNK_SIZE]
+            existing = {
+                r[0]
+                for r in (
+                    await conn.execute(
+                        select(seen_ids_table.c.id).where(seen_ids_table.c.id.in_(chunk))
+                    )
+                ).all()
+            }
+            fresh = [{"id": i_, "seen_at": now} for i_ in chunk if i_ not in existing]
+            if fresh:
+                await conn.execute(insert(seen_ids_table), fresh)
+
+
+async def forget_seen_ids(ids: set[str]) -> None:
+    """
+    Drop seen IDs that FreshRSS no longer reports as unread.
+
+    Keeps the table bounded to the size of the upstream unread set instead of
+    growing forever. Callers pass the `removed_ids` the refresh already computed.
+    """
+    if not ids:
+        return
+    stale = list(ids)
+    async with get_engine().begin() as conn:
+        for i in range(0, len(stale), DB_CHUNK_SIZE):
+            chunk = stale[i : i + DB_CHUNK_SIZE]
+            await conn.execute(delete(seen_ids_table).where(seen_ids_table.c.id.in_(chunk)))
+
+
+async def _seed_seen_ids(conn: AsyncConnection) -> None:
+    """
+    Backfill seen_ids from the articles already stored, once.
+
+    Without this, the first refresh after upgrading would see an empty seen_ids,
+    treat every unread article as new, and re-download the whole backlog.
+    Articles scored below min_score were never stored, so they are re-fetched
+    once — then recorded, and never again.
+    """
+    already = (await conn.execute(select(seen_ids_table.c.id).limit(1))).first()
+    if already:
+        return
+    rows = (
+        await conn.execute(
+            select(articles_table.c.id, articles_table.c.fetched_at).where(
+                articles_table.c.read_at.is_(None)
+            )
+        )
+    ).all()
+    if not rows:
+        return
+    await conn.execute(
+        insert(seen_ids_table),
+        [{"id": r[0], "seen_at": r[1]} for r in rows],
+    )
+    logger.info("Seeded seen_ids with %d article(s) already known", len(rows))
 
 
 async def get_or_create_secret_key() -> str:

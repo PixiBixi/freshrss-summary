@@ -128,6 +128,13 @@ The URL can also be set via the `DATABASE_URL` environment variable.
 
 DB schema migrations are applied automatically on startup (additive only).
 
+The `seen_ids` table tracks every article ID the incremental refresh has already
+processed, including the ones scored below `min_score` that are never stored in
+`articles`. Without it the refresh diff would re-list them every time, so they
+would be downloaded and re-scored on every run. It is seeded from the articles
+already present on first startup and pruned as FreshRSS drops IDs from its unread
+set, so it stays roughly the size of that set.
+
 ## Environment variables
 
 All config values can be overridden by environment variables:
