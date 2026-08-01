@@ -23,6 +23,10 @@ class _Metrics:
     refreshes: Counter
     refresh_dur: Histogram
     topic_articles: Gauge
+    rescores: Counter
+    rescore_dur: Histogram
+    rescore_articles: Histogram
+    rescore_workers: Gauge
 
 
 _metrics: _Metrics | None = None
@@ -72,6 +76,35 @@ def _get_metrics() -> _Metrics:
         topic_articles=_get_or_register_metric(
             "freshrss_articles_by_topic",
             lambda: Gauge("freshrss_articles_by_topic", "Articles per topic in cache", ["topic"]),
+        ),
+        rescores=_get_or_register_metric(
+            "freshrss_rescores_total",
+            lambda: Counter("freshrss_rescores_total", "Rescore runs since startup"),
+        ),
+        rescore_dur=_get_or_register_metric(
+            "freshrss_rescore_duration_seconds",
+            lambda: Histogram(
+                "freshrss_rescore_duration_seconds",
+                "Scoring phase of a rescore, in seconds",
+                # A rescore is minutes-scale on a small host and seconds-scale on a
+                # big one; the buckets have to span both to stay readable.
+                buckets=[1, 5, 10, 20, 30, 60, 120, 300],
+            ),
+        ),
+        rescore_articles=_get_or_register_metric(
+            "freshrss_rescore_articles",
+            lambda: Histogram(
+                "freshrss_rescore_articles",
+                "Articles processed per rescore",
+                buckets=[100, 500, 1000, 5000, 10000, 25000, 50000],
+            ),
+        ),
+        rescore_workers=_get_or_register_metric(
+            "freshrss_rescore_workers",
+            lambda: Gauge(
+                "freshrss_rescore_workers",
+                "Worker processes used by the last rescore",
+            ),
         ),
     )
     return _metrics

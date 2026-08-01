@@ -829,6 +829,11 @@ async def _rescore_compute(
         _RESCORE_CPUS,
         len(raw) / elapsed if elapsed else 0,
     )
+    m = _get_metrics()
+    m.rescores.inc()
+    m.rescore_dur.observe(elapsed)
+    m.rescore_articles.observe(len(raw))
+    m.rescore_workers.set(workers)
 
     merged = [a for chunk in results for a in chunk]
     merged.sort(key=lambda a: a["score"], reverse=True)
