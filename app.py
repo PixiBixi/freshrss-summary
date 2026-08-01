@@ -754,7 +754,28 @@ async def refresh_stream() -> StreamingResponse:
     )
 
 
-_RESCORE_WORKERS = max(1, (os.cpu_count() or 2) - 1)
+def _available_cpus() -> int:
+    """
+    CPU budget usable by this process, honouring container limits.
+
+    os.cpu_count() reports the host's CPUs: under `docker --cpus=2` on a 16-core
+    box it returns 16 and we would oversubscribe by 8x. cgroup v2 publishes the
+    real quota in cpu.max ("<quota> <period>", or "max" when uncapped).
+    """
+    try:
+        quota, period = Path("/sys/fs/cgroup/cpu.max").read_text().split()
+        if quota != "max":
+            return max(1, round(int(quota) / int(period)))
+    except (OSError, ValueError):
+        pass
+    # process_cpu_count() honours CPU affinity; it is 3.13+, hence the getattr.
+    counter = getattr(os, "process_cpu_count", None) or os.cpu_count
+    return counter() or 2
+
+
+_RESCORE_CPUS = _available_cpus()
+# Leave one CPU to the event loop so the UI stays responsive during a rescore.
+_RESCORE_WORKERS = max(1, _RESCORE_CPUS - 1)
 _RESCORE_MIN_CHUNK = 500  # below this, spawning processes costs more than it saves
 
 
@@ -777,15 +798,13 @@ async def _rescore_compute(
     title_weight = int(scoring_cfg.get("title_weight", 3))
     min_score = float(scoring_cfg.get("min_score", 1.0))
 
-    workers = min(_RESCORE_WORKERS, max(1, len(raw) // _RESCORE_MIN_CHUNK))
-    if workers <= 1:
-        return await asyncio.to_thread(
-            rescore_chunk, raw, topics_cfg, title_weight, min_score, feed_weights
-        )
-
+    # One worker still means one *process*: even without parallelism that keeps the
+    # regex work off the event loop, which a thread cannot do.
+    workers = max(1, min(_RESCORE_WORKERS, math.ceil(len(raw) / _RESCORE_MIN_CHUNK)))
     size = math.ceil(len(raw) / workers)
     chunks = [raw[i : i + size] for i in range(0, len(raw), size)]
     loop = asyncio.get_running_loop()
+    _t0 = time.perf_counter()
     try:
         with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as pool:
             results = await asyncio.gather(
@@ -801,6 +820,15 @@ async def _rescore_compute(
         return await asyncio.to_thread(
             rescore_chunk, raw, topics_cfg, title_weight, min_score, feed_weights
         )
+    elapsed = time.perf_counter() - _t0
+    logger.info(
+        "Rescored %d articles in %.1fs using %d worker process(es) (%d CPUs visible, %.0f articles/s)",
+        len(raw),
+        elapsed,
+        workers,
+        _RESCORE_CPUS,
+        len(raw) / elapsed if elapsed else 0,
+    )
 
     merged = [a for chunk in results for a in chunk]
     merged.sort(key=lambda a: a["score"], reverse=True)
