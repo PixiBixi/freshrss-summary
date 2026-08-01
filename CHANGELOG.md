@@ -1,6 +1,16 @@
 # Changelog
 
 - - -
+## [v1.9.0](https://github.com/PixiBixi/freshrss-summary/compare/976588e9340dad8eb2041e5e4eee5f7a7e19b8c8..v1.9.0) - 2026-08-01
+#### Features
+- (**metrics**) expose rescore duration, volume and worker count - ([be638a5](https://github.com/PixiBixi/freshrss-summary/commit/be638a5634b688431e127173cfb65b4fb61f0423)) - Jeremy Delgado
+#### Bug Fixes
+- (**rescore**) keep a worker process at low CPU counts and log the sizing - ([82b4165](https://github.com/PixiBixi/freshrss-summary/commit/82b4165dc3c5a7ac4f1fa623abcfbc087fb5334e)) - Jeremy Delgado
+#### Miscellaneous Chores
+- (**tests**) fail on DeprecationWarning - ([976588e](https://github.com/PixiBixi/freshrss-summary/commit/976588e9340dad8eb2041e5e4eee5f7a7e19b8c8)) - Jeremy Delgado
+
+- - -
+
 ## [v1.8.6](https://github.com/PixiBixi/freshrss-summary/compare/f88caea101c27550aa80d281c053118bda1f5e4d..v1.8.6) - 2026-08-01
 #### Bug Fixes
 - (**refresh**) claim the refresh slot atomically to block concurrent runs - ([f88caea](https://github.com/PixiBixi/freshrss-summary/commit/f88caea101c27550aa80d281c053118bda1f5e4d)) - Jeremy Delgado
