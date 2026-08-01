@@ -3,7 +3,7 @@ name = "freshrss-summary"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi==0.135.2",
+    "fastapi==0.141.1",
     "pydantic==2.13.4",
     "uvicorn[standard]==0.42.0",
     "httpx==0.28.1",
