@@ -8,7 +8,7 @@ import logging.config
 import os
 import secrets
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Coroutine
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -223,6 +223,23 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+_inflight_tasks: set[asyncio.Task] = set()
+
+
+def _spawn(coro: Coroutine[Any, Any, Any]) -> asyncio.Task:
+    """
+    Schedule `coro` and keep a strong reference until it finishes.
+
+    The event loop only holds a weak reference to running tasks, so a bare
+    asyncio.create_task() can be garbage-collected mid-flight — silently killing
+    the work and swallowing any exception it raised.
+    """
+    task = asyncio.create_task(coro)
+    _inflight_tasks.add(task)
+    task.add_done_callback(_inflight_tasks.discard)
+    return task
 
 
 def _safe_next_url(raw: str) -> str:
@@ -658,9 +675,7 @@ async def refresh_stream() -> StreamingResponse:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
             return
 
-        asyncio.create_task(
-            asyncio.to_thread(_sse_refresh_worker, topics_cfg, feed_weights, db_unread_ids, cfg)
-        )
+        _spawn(asyncio.to_thread(_sse_refresh_worker, topics_cfg, feed_weights, db_unread_ids, cfg))
         try:
             while True:
                 event = await q.get()
@@ -923,7 +938,7 @@ async def telegram_webhook(request: Request) -> dict[str, Any]:
     body = await request.json()
     text: str = body.get("message", {}).get("text", "")
     if text.startswith("/digest"):
-        asyncio.create_task(send_digest(tg_cfg, await _all_articles_for_digest()))
+        _spawn(send_digest(tg_cfg, await _all_articles_for_digest()))
 
     return {}
 
