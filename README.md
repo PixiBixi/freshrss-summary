@@ -323,7 +323,9 @@ Returns `503` with `"status": "degraded"` if the DB is unreachable.
 
 ### Prometheus metrics
 
-`GET /metrics` — no authentication required. Standard Prometheus text format.
+`GET /metrics` — **authentication required**, like every other mutating or
+operational endpoint. Point your scraper at it with a session cookie, or put it
+behind your own reverse-proxy auth. Standard Prometheus text format.
 
 | Metric | Type | Description |
 |--------|------|-------------|
@@ -332,6 +334,20 @@ Returns `503` with `"status": "degraded"` if the DB is unreachable.
 | `freshrss_last_refresh_timestamp_seconds` | Gauge | Unix timestamp of last successful refresh |
 | `freshrss_refreshes_total` | Counter | Successful refreshes since startup |
 | `freshrss_refresh_duration_seconds` | Histogram | Refresh duration (buckets: 2s–300s) |
+| `freshrss_rescores_total` | Counter | Rescore runs since startup |
+| `freshrss_rescore_duration_seconds` | Histogram | Scoring phase of a rescore (buckets: 1s–300s) |
+| `freshrss_rescore_articles` | Histogram | Articles processed per rescore |
+| `freshrss_rescore_workers` | Gauge | Worker processes used by the last rescore |
+
+Rescore duration scales with the article count divided by the number of worker
+processes, and that worker count is derived from the CPUs the container can
+actually use. Divide `rescore_duration_seconds_sum` by `rescore_articles_sum` for
+a per-article cost that is comparable across hosts:
+
+```promql
+rate(freshrss_rescore_duration_seconds_sum[1h])
+  / rate(freshrss_rescore_articles_sum[1h])
+```
 
 ## Testing
 
