@@ -9,8 +9,8 @@ import time
 
 from fastapi import HTTPException, Request
 
-from config import CONFIG_PATH, get_secret_key_from_config
-from db import get_user_hash, upsert_user
+from config import get_secret_key_from_config
+from db import get_or_create_secret_key, get_user_hash, upsert_user
 
 logger = logging.getLogger(__name__)
 
@@ -61,19 +61,24 @@ async def init_admin_user() -> None:
         logger.warning(sep)
 
 
-def get_secret_key() -> str:
-    """Return secret key for session signing. Precedence: env > config > random (warns)."""
+async def resolve_secret_key() -> str:
+    """
+    Return the secret key for session signing. Precedence: env > config > database.
+
+    The database fallback generates a random key on first run and persists it, so
+    sessions survive restarts. It must never be *derived* from something public:
+    a key computed from the config path is identical on every installation, which
+    lets anyone forge a signed session cookie and bypass authentication entirely.
+    """
     if v := os.environ.get("SECRET_KEY"):
         return v
     if sk := get_secret_key_from_config():
         return sk
-    # No key configured: derive a stable key from the config path so sessions
-    # survive restarts, but document that this is not cryptographically ideal.
     logger.warning(
-        "No SECRET_KEY configured — session key derived from config path. "
-        "Set auth.secret_key in config.yaml or SECRET_KEY env var for production."
+        "No SECRET_KEY configured — using a random key persisted in the database. "
+        "Set SECRET_KEY or auth.secret_key to control it explicitly."
     )
-    return hashlib.sha256(str(CONFIG_PATH.resolve()).encode()).hexdigest()
+    return await get_or_create_secret_key()
 
 
 def require_auth(request: Request) -> None:

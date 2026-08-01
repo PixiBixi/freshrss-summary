@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import itsdangerous
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import (
     HTMLResponse,
@@ -29,11 +30,11 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from auth import (
-    get_secret_key,
     hash_password,
     init_admin_user,
     login_rate_limit,
     require_auth,
+    resolve_secret_key,
     verify_password,
 )
 from config import ConfigDict, load_config
@@ -155,6 +156,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     cfg = load_config()
     db_url = cfg.get("database", {}).get("url", DEFAULT_DB_URL)
     await init_db(db_url)
+    if _session_middleware is not None:
+        _session_middleware.bind_secret_key(await resolve_secret_key())
     await init_admin_user()
     articles, last_refresh, total_fetched = await load_articles()
     if articles:
@@ -187,11 +190,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await asyncio.gather(*bg_tasks, return_exceptions=True)
 
 
+_session_middleware: "_SessionMiddleware | None" = None
+
+
 class _SessionMiddleware(SessionMiddleware):
-    """Bind the session secret key when the middleware stack is built."""
+    """
+    Session middleware whose signing key is bound during startup.
+
+    Starlette builds the middleware stack *before* running the lifespan body, so
+    the key cannot be read here: it may live in the database, which `init_db()`
+    has not opened yet. The placeholder below is replaced by `bind_secret_key()`
+    at the end of the lifespan, before any request is served.
+    """
 
     def __init__(self, app: Any) -> None:
-        super().__init__(app, secret_key=get_secret_key())
+        super().__init__(app, secret_key=secrets.token_hex(32))
+        global _session_middleware
+        _session_middleware = self
+
+    def bind_secret_key(self, key: str) -> None:
+        self.signer = itsdangerous.TimestampSigner(key)
 
 
 app = FastAPI(title="FreshRSS Summary", lifespan=lifespan)

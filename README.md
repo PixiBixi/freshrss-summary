@@ -145,6 +145,16 @@ All config values can be overridden by environment variables:
 | `SECRET_KEY` | `auth.secret_key` |
 | `REFRESH_INTERVAL_MINUTES` | `scheduler.interval_minutes` |
 
+### Session key
+
+Sessions are signed with, in order of precedence: `SECRET_KEY`, then `auth.secret_key`
+in `config.yaml`, then a random key generated on first run and stored in the database.
+
+The generated key is persisted, so sessions survive restarts, and it is shared by every
+replica pointing at the same database. Setting `SECRET_KEY` explicitly is still
+recommended — it keeps the key out of the database and lets you rotate it, which
+invalidates all active sessions.
+
 ## Docker
 
 ```bash

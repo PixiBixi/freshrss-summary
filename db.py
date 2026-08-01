@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -444,6 +445,26 @@ async def get_all_feed_titles() -> list[str]:
             select(articles_table.c.feed_title).distinct().order_by(articles_table.c.feed_title)
         )
     return [r[0] for r in rows if r[0]]
+
+
+async def get_or_create_secret_key() -> str:
+    """
+    Return the persisted session signing key, generating one on first run.
+
+    Stored in `meta` so the key survives restarts and is shared by every replica
+    pointing at the same database.
+    """
+    async with get_engine().begin() as conn:
+        row = (
+            await conn.execute(
+                select(meta_table.c.value).where(meta_table.c.key == "session_secret_key")
+            )
+        ).first()
+        if row and row[0]:
+            return str(row[0])
+        key = secrets.token_hex(32)
+        await _set_meta(conn, "session_secret_key", key)
+    return key
 
 
 async def get_meta(key: str, default: str = "0") -> str:
