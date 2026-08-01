@@ -24,11 +24,13 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: oknozor/cocogitto-action@v3
+      - uses: oknozor/cocogitto-action@v4
         with:
           git-user: github-actions[bot]
           git-user-email: github-actions[bot]@users.noreply.github.com
-          check-latest-tag-only: true
+          # v4 replaced the check/check-latest-tag-only inputs with command/args
+          command: check
+          args: --from-latest-tag
 
       - name: Bump version
         id: bump
