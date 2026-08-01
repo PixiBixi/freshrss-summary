@@ -28,7 +28,7 @@ def verify_password(plain: str, stored: str) -> bool:
         salt_hex, key_hex = stored.split(":", 1)
         key = hashlib.scrypt(plain.encode(), salt=bytes.fromhex(salt_hex), n=16384, r=8, p=1)
         return key.hex() == key_hex
-    except Exception:  # noqa: BLE001 — broad catch intentional: any malformed hash → reject
+    except Exception:  # broad catch intentional: any malformed hash → reject
         return False
 
 

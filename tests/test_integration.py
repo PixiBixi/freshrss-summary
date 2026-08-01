@@ -36,7 +36,7 @@ async def test_upsert_and_load_roundtrip(db):
     ]
 
     await upsert_articles(articles)
-    loaded, last_refresh, total_fetched = await load_articles()
+    loaded, last_refresh, _total_fetched = await load_articles()
 
     assert len(loaded) == 2
     loaded_by_id = {a["id"]: a for a in loaded}
