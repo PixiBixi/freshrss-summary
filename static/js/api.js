@@ -226,6 +226,14 @@ function triggerRefresh() {
 
 function triggerRescore() {
   const btn = document.getElementById('rescore-btn');
+  // Since the editorial redesign the rescore action lives in the overflow menu
+  // and in the command palette — neither leaves a button in the DOM to carry the
+  // two-step confirm, and the menu closes on click anyway. Fall back to a plain
+  // dialog so the action still cannot fire by accident.
+  if (!btn) {
+    if (window.confirm(t('btn.rescoreConfirm'))) _doRescore();
+    return;
+  }
   if (btn.dataset.confirming === 'true') {
     clearTimeout(btn._confirmTimer);
     delete btn.dataset.confirming;
