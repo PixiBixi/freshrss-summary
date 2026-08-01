@@ -1,4 +1,4 @@
-fastapi==0.135.2
+fastapi==0.141.1
 itsdangerous==2.2.0
 python-multipart==0.0.32
 pydantic==2.13.4
