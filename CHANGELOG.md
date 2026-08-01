@@ -1,6 +1,16 @@
 # Changelog
 
 - - -
+## [v1.8.3](https://github.com/PixiBixi/freshrss-summary/compare/0f22a6ce11cdd0f5248ecf6c55f9766ee1f2bf23..v1.8.3) - 2026-08-01
+#### Bug Fixes
+- (**api**) stop leaking full article content to cache and SSE clients - ([bee1c23](https://github.com/PixiBixi/freshrss-summary/commit/bee1c23b73a9dd02b933e3b8c4a88dcc5b22e86b)) - Jeremy Delgado
+- (**auth**) persist a random session key instead of deriving it from the config path - ([9a699b4](https://github.com/PixiBixi/freshrss-summary/commit/9a699b42dbece418e6d3e0d7683d5d992316ee2b)) - Jeremy Delgado
+- (**deps**) use sqlalchemy[asyncio] so greenlet is always installed - ([3f2a18c](https://github.com/PixiBixi/freshrss-summary/commit/3f2a18cb0960af6d5b9fee5330288441c3a47776)) - Jeremy Delgado
+#### Performance Improvements
+- (**db**) index articles.read_at - ([0f22a6c](https://github.com/PixiBixi/freshrss-summary/commit/0f22a6ce11cdd0f5248ecf6c55f9766ee1f2bf23)) - Jeremy Delgado
+
+- - -
+
 ## [v1.8.2](https://github.com/PixiBixi/freshrss-summary/compare/d230c9420e4483e998e6b85c9136fe5517c43950..v1.8.2) - 2026-08-01
 #### Bug Fixes
 - (**deps**) declare itsdangerous and python-multipart as runtime dependencies (#43) - ([30592a9](https://github.com/PixiBixi/freshrss-summary/commit/30592a96651bbce20419e71588ffae1a0f4923e5)) - Jérémy
