@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: oknozor/cocogitto-action@v4
+      - uses: cocogitto/cocogitto-action@v4
         with:
           git-user: github-actions[bot]
           git-user-email: github-actions[bot]@users.noreply.github.com
