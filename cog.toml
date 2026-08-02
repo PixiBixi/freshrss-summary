@@ -3,6 +3,10 @@ tag_prefix = "v"
 
 [commit_types]
 desloppify = { changelog_title = "Code Health" }
+# Out of the box cog only bumps on feat and fix, so a release made only of perf
+# work produced no tag and therefore no Docker image — the improvement sat on
+# master until some unrelated fix happened to carry it out.
+perf = { changelog_title = "Performance Improvements", bump_patch = true }
 
 [changelog]
 path = "CHANGELOG.md"
