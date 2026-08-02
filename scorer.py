@@ -13,12 +13,25 @@ class TopicConfig:
     keywords: list[str]
     weight: float = 1.0
     pattern: re.Pattern | None = field(default=None, init=False, repr=False)
+    lowered_keywords: list[str] = field(default_factory=list, init=False, repr=False)
 
     def __post_init__(self):
         if self.keywords:
             # Single compiled regex with capturing group — one findall() per topic per text
             pat = r"\b(" + "|".join(re.escape(kw) for kw in self.keywords) + r")\b"
             self.pattern = re.compile(pat)
+            self.lowered_keywords = [kw.lower() for kw in self.keywords]
+
+    def may_match(self, *texts: str) -> bool:
+        """
+        Whether any keyword occurs as a plain substring of `texts`.
+
+        A cheap gate before the regex: `\\bKW\\b` can only match where `KW` occurs,
+        so a topic whose keywords are all absent cannot match and its two findall()
+        passes over ~10 kB of article text can be skipped outright. Deliberately
+        over-inclusive — it never skips a topic the regex would have matched.
+        """
+        return any(kw in text for text in texts for kw in self.lowered_keywords)
 
 
 @dataclass
@@ -81,7 +94,7 @@ def score_article(
     all_keywords: set[str] = set()
 
     for topic in topics:
-        if topic.pattern is None:
+        if topic.pattern is None or not topic.may_match(title_lower, content_lower):
             continue
         title_matches = topic.pattern.findall(title_lower)
         content_matches = topic.pattern.findall(content_lower)
