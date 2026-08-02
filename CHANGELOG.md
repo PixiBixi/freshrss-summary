@@ -1,6 +1,14 @@
 # Changelog
 
 - - -
+## [v1.9.1](https://github.com/PixiBixi/freshrss-summary/compare/21b2a677837e210b3087d0c9d0981f12985b1ab2..v1.9.1) - 2026-08-02
+#### Performance Improvements
+- (**scorer**) gate the per-topic regex behind a substring check - ([21b2a67](https://github.com/PixiBixi/freshrss-summary/commit/21b2a677837e210b3087d0c9d0981f12985b1ab2)) - Jeremy Delgado
+#### Continuous Integration
+- (**cog**) let perf commits bump a patch version - ([c1d941a](https://github.com/PixiBixi/freshrss-summary/commit/c1d941a7827ba30d1504b731a0d09bb545bbb7a4)) - Jeremy Delgado
+
+- - -
+
 ## [v1.9.0](https://github.com/PixiBixi/freshrss-summary/compare/976588e9340dad8eb2041e5e4eee5f7a7e19b8c8..v1.9.0) - 2026-08-01
 #### Features
 - (**metrics**) expose rescore duration, volume and worker count - ([be638a5](https://github.com/PixiBixi/freshrss-summary/commit/be638a5634b688431e127173cfb65b4fb61f0423)) - Jeremy Delgado
