@@ -358,3 +358,75 @@ class TestAnalyzeFavorites:
         result = analyze_favorites(articles, topics, title_weight=3)
         keywords = [kw for kw, _ in result["top_keywords"]]
         assert keywords[0] == "kubernetes"
+
+
+class TestSubstringGate:
+    """The substring gate must never change what the regex would have matched.
+
+    `\\bKW\\b` can only match where `KW` occurs as a substring, so skipping a topic
+    whose keywords are all absent is safe. This locks that invariant in: a gate
+    that ever became under-inclusive would silently drop articles from the feed.
+    """
+
+    _TOPICS = [
+        TopicConfig(name="K8s", keywords=["kubernetes", "pod", "gke"], weight=2.0),
+        TopicConfig(name="Overlap", keywords=["pod security", "gke enterprise"], weight=1.5),
+        TopicConfig(name="Absent", keywords=["quantum", "blockchain"], weight=3.0),
+    ]
+
+    def _score_without_gate(self, article, topics, title_weight=3):
+        """Reference implementation: regex on every topic, no gate."""
+        title = article.title.lower()
+        content = _strip_html(article.content).lower()
+        out = {}
+        for topic in topics:
+            if topic.pattern is None:
+                continue
+            hits = len(topic.pattern.findall(title)) * title_weight + len(
+                topic.pattern.findall(content)
+            )
+            if hits:
+                out[topic.name] = hits * topic.weight
+        return out
+
+    @pytest.mark.parametrize(
+        "title,content",
+        [
+            ("Kubernetes pod restart", "A pod crashed on gke today"),
+            ("GKE enterprise rollout", "pod security policy on gke enterprise"),
+            ("Nothing relevant here", "just a cooking recipe with no keywords"),
+            ("pod", "pod pod pod"),
+            ("", ""),
+        ],
+    )
+    def test_gate_matches_ungated_scoring(self, title, content):
+        article = Article(
+            id="1",
+            title=title,
+            url="u",
+            content=content,
+            summary="",
+            feed_title="Feed",
+            published=0,
+        )
+        scored = score_article(article, self._TOPICS)
+        assert scored.matched_topics == self._score_without_gate(article, self._TOPICS)
+
+    def test_gate_skips_topics_with_no_keyword_present(self):
+        absent = self._TOPICS[2]
+        assert not absent.may_match("kubernetes pod", "nothing about physics")
+
+    def test_gate_is_over_inclusive_not_under(self):
+        """A substring without word boundaries still opens the gate — then scores 0."""
+        topic = TopicConfig(name="T", keywords=["pod"], weight=1.0)
+        assert topic.may_match("podcast episode", ""), "substring present → gate opens"
+        article = Article(
+            id="1",
+            title="podcast episode",
+            url="u",
+            content="",
+            summary="",
+            feed_title="F",
+            published=0,
+        )
+        assert score_article(article, [topic]).matched_topics == {}, "but \\b rejects it"
