@@ -14,7 +14,7 @@ dependencies = [
     # [asyncio] pulls greenlet, which SQLAlchemy's async engine needs. Without the
     # extra it is only installed on platforms matching SQLAlchemy's own markers —
     # macOS arm64 reports "arm64" and is not one of them.
-    "sqlalchemy[asyncio]==2.0.51",
+    "sqlalchemy[asyncio]==2.0.52",
     "aiosqlite==0.22.1",
     "prometheus-client==0.26.0",
 ]
