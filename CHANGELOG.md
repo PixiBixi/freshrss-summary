@@ -1,6 +1,16 @@
 # Changelog
 
 - - -
+## [v1.9.2](https://github.com/PixiBixi/freshrss-summary/compare/cc5b327b5c3b8efe0060fadd29f3b736bddac28c..v1.9.2) - 2026-08-12
+#### Bug Fixes
+- (**deps**) update dependency sqlalchemy to v2.0.52 (#56) - ([b777db0](https://github.com/PixiBixi/freshrss-summary/commit/b777db03712c343bbb6d0f8af4e810f1876bbfa3)) - renovate[bot]
+#### Continuous Integration
+- (**release**) use the canonical cocogitto-action path - ([cc5b327](https://github.com/PixiBixi/freshrss-summary/commit/cc5b327b5c3b8efe0060fadd29f3b736bddac28c)) - Jeremy Delgado
+#### Miscellaneous Chores
+- (**deps**) update dependency greenlet to v3.5.5 (#55) - ([0fb4b3b](https://github.com/PixiBixi/freshrss-summary/commit/0fb4b3b615b10d0ca4644c2fae9e8105b79ef7a1)) - renovate[bot]
+
+- - -
+
 ## [v1.9.1](https://github.com/PixiBixi/freshrss-summary/compare/21b2a677837e210b3087d0c9d0981f12985b1ab2..v1.9.1) - 2026-08-02
 #### Performance Improvements
 - (**scorer**) gate the per-topic regex behind a substring check - ([21b2a67](https://github.com/PixiBixi/freshrss-summary/commit/21b2a677837e210b3087d0c9d0981f12985b1ab2)) - Jeremy Delgado
