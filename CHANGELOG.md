@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.3](https://github.com/PixiBixi/freshrss-summary/compare/5a394f37b63267b7af28e20803a933438b5444ef..v1.9.3) - 2026-08-13
+#### Bug Fixes
+- (**deps**) update dependency uvicorn to v0.52.2 (#58) - ([5a394f3](https://github.com/PixiBixi/freshrss-summary/commit/5a394f37b63267b7af28e20803a933438b5444ef)) - renovate[bot]
+
+- - -
+
 ## [v1.9.2](https://github.com/PixiBixi/freshrss-summary/compare/cc5b327b5c3b8efe0060fadd29f3b736bddac28c..v1.9.2) - 2026-08-12
 #### Bug Fixes
 - (**deps**) update dependency sqlalchemy to v2.0.52 (#56) - ([b777db0](https://github.com/PixiBixi/freshrss-summary/commit/b777db03712c343bbb6d0f8af4e810f1876bbfa3)) - renovate[bot]
