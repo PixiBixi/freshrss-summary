@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.5](https://github.com/PixiBixi/freshrss-summary/compare/9a170cf4a223a11641501af6f2eaf85ef3ab6c05..v1.9.5) - 2026-08-19
+#### Bug Fixes
+- (**deps**) update dependency uvicorn to v0.52.4 (#60) - ([9a170cf](https://github.com/PixiBixi/freshrss-summary/commit/9a170cf4a223a11641501af6f2eaf85ef3ab6c05)) - renovate[bot]
+
+- - -
+
 ## [v1.9.4](https://github.com/PixiBixi/freshrss-summary/compare/5bf4b72591a20ca97944b72d57948157d3fb6ac1..v1.9.4) - 2026-08-14
 #### Bug Fixes
 - (**deps**) update dependency uvicorn to v0.52.3 (#59) - ([5bf4b72](https://github.com/PixiBixi/freshrss-summary/commit/5bf4b72591a20ca97944b72d57948157d3fb6ac1)) - renovate[bot]
