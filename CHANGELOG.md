@@ -1,6 +1,16 @@
 # Changelog
 
 - - -
+## [v1.9.6](https://github.com/PixiBixi/freshrss-summary/compare/408f37d0fd936a664d9471e7c5de4782229f8481..v1.9.6) - 2026-08-23
+#### Continuous Integration
+- (**cog**) let a chore cut its own patch release - ([947c756](https://github.com/PixiBixi/freshrss-summary/commit/947c756faa13ce796ca020c109174a82df8a478e)) - Jeremy Delgado
+#### Miscellaneous Chores
+- (**deps**) update astral-sh/setup-uv action to v10 - ([408f37d](https://github.com/PixiBixi/freshrss-summary/commit/408f37d0fd936a664d9471e7c5de4782229f8481)) - renovate[bot]
+#### Style
+- replace em dashes with hyphens - ([5c0dffc](https://github.com/PixiBixi/freshrss-summary/commit/5c0dffcd1472e1910cbca70d6407ed270ba07b39)) - Jeremy Delgado
+
+- - -
+
 ## [v1.9.5](https://github.com/PixiBixi/freshrss-summary/compare/9a170cf4a223a11641501af6f2eaf85ef3ab6c05..v1.9.5) - 2026-08-19
 #### Bug Fixes
 - (**deps**) update dependency uvicorn to v0.52.4 (#60) - ([9a170cf](https://github.com/PixiBixi/freshrss-summary/commit/9a170cf4a223a11641501af6f2eaf85ef3ab6c05)) - renovate[bot]
