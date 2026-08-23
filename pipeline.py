@@ -45,7 +45,7 @@ def fetch_and_score_iter(
     Generator: fetch unread articles in batches, score each batch.
 
     Yields (scored_batch, cumulative_total_fetched) for each batch so callers
-    can report progress incrementally. Runs synchronously — use asyncio.to_thread
+    can report progress incrementally. Runs synchronously - use asyncio.to_thread
     when calling from an async context.
 
     Args:
@@ -97,14 +97,14 @@ def fetch_and_score_incremental_iter(
     Incremental fetch: diff IDs first, then fetch content only for new articles.
 
     Yields an IncrementalBatch per chunk; `removed_ids` and `total_fetched` are
-    stable across yields. Runs synchronously — use asyncio.to_thread from async
+    stable across yields. Runs synchronously - use asyncio.to_thread from async
     contexts.
 
     `seen_ids` must be every ID already processed, not just the ones stored in
     `articles`: anything scoring below min_score is never persisted, so diffing
     against the articles table alone would re-list it on every refresh forever.
     `processed_ids` carries the IDs handled in this chunk so the caller can
-    record them — this module stays free of persistence side effects.
+    record them - this module stays free of persistence side effects.
     """
     fr_cfg = cfg["freshrss"]
     scoring_cfg = cfg.get("scoring", {})
@@ -149,7 +149,7 @@ def rescore_articles(
     Re-score DB rows with updated topic weights.
 
     Args:
-        raw: article rows from load_for_rescore() — each row is a dict with
+        raw: article rows from load_for_rescore() - each row is a dict with
              id, title, url, content, feed_title, published keys.
         topics: pre-built TopicConfig list from build_topics().
         title_weight: multiplier applied to title keyword matches.

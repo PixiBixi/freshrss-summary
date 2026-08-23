@@ -95,7 +95,7 @@ def load_config() -> ConfigDict:
         with CONFIG_PATH.open() as f:
             cfg = yaml.safe_load(f) or {}
     else:
-        logger.warning("config.yaml not found — relying entirely on environment variables")
+        logger.warning("config.yaml not found - relying entirely on environment variables")
 
     fr = cfg.setdefault("freshrss", {})
     if v := os.environ.get("FRESHRSS_URL"):

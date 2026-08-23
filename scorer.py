@@ -17,7 +17,7 @@ class TopicConfig:
 
     def __post_init__(self):
         if self.keywords:
-            # Single compiled regex with capturing group — one findall() per topic per text
+            # Single compiled regex with capturing group - one findall() per topic per text
             pat = r"\b(" + "|".join(re.escape(kw) for kw in self.keywords) + r")\b"
             self.pattern = re.compile(pat)
             self.lowered_keywords = [kw.lower() for kw in self.keywords]
@@ -29,7 +29,7 @@ class TopicConfig:
         A cheap gate before the regex: `\\bKW\\b` can only match where `KW` occurs,
         so a topic whose keywords are all absent cannot match and its two findall()
         passes over ~10 kB of article text can be skipped outright. Deliberately
-        over-inclusive — it never skips a topic the regex would have matched.
+        over-inclusive - it never skips a topic the regex would have matched.
         """
         return any(kw in text for text in texts for kw in self.lowered_keywords)
 
@@ -63,7 +63,7 @@ class ScoredArticle:
             "top_topic": self.top_topic,
             "feed_weight": round(self.feed_weight, 2),
             "summary": stripped[:400],
-            "_content": stripped,  # full text, stored in DB for rescore — not sent to frontend
+            "_content": stripped,  # full text, stored in DB for rescore - not sent to frontend
         }
 
 
@@ -145,7 +145,7 @@ def analyze_favorites(
 
     Strategy: if a topic appears in X% of starred articles, boost its weight
     by 0.5 * X (e.g. 60% hit rate → weight * 1.30). We never penalize topics
-    with zero hits — absence of stars doesn't mean disinterest.
+    with zero hits - absence of stars doesn't mean disinterest.
 
     Returns:
         total_starred  : number of starred articles analyzed

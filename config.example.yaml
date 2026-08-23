@@ -3,7 +3,7 @@
 # To set/reset the password: set ADMIN_PASSWORD env var before starting.
 # ADMIN_USERNAME env var sets the username (default: admin).
 #
-# Session secret key — generate with: python3 -c "import secrets; print(secrets.token_hex(32))"
+# Session secret key - generate with: python3 -c "import secrets; print(secrets.token_hex(32))"
 # Set via SECRET_KEY env var or auth.secret_key in this file.
 # auth:
 #   secret_key: ""
@@ -16,7 +16,7 @@ freshrss:
   # Set it in FreshRSS → Settings → Authentication → API password.
 
 database:
-  # SQLAlchemy async URL — default: SQLite in data/articles.db
+  # SQLAlchemy async URL - default: SQLite in data/articles.db
   # url: sqlite+aiosqlite:///./data/articles.db
   # url: mysql+aiomysql://user:pass@host:3306/freshrss
   # url: postgresql+asyncpg://user:pass@host:5432/freshrss
@@ -49,7 +49,7 @@ telegram:
   bot_token: ""          # TELEGRAM_BOT_TOKEN
   chat_id: ""            # TELEGRAM_CHAT_ID
   digest_hour: 21        # Hour in Europe/Paris timezone (0-23)
-  webhook_secret: ""     # TELEGRAM_WEBHOOK_SECRET — any random string, e.g.:
+  webhook_secret: ""     # TELEGRAM_WEBHOOK_SECRET - any random string, e.g.:
                          # python3 -c "import secrets; print(secrets.token_hex(16))"
 
 scoring:

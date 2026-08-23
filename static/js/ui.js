@@ -190,7 +190,7 @@ function setRefreshBtnLoading(on) {
 }
 
 function setRescoreBtnLoading(on) {
-  // rescore btn is now in overflow menu — no DOM button to update
+  // rescore btn is now in overflow menu - no DOM button to update
 }
 
 // ── Last refresh label ─────────────────────────────────────────────────
@@ -591,7 +591,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.addEventListener('keydown', (e) => {
-    // ⌘K / Ctrl+K — toggle palette
+    // ⌘K / Ctrl+K - toggle palette
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       e.preventDefault();
       const palette = document.getElementById('cmd-palette');

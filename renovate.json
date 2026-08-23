@@ -4,7 +4,7 @@
   "platformAutomerge": false,
   "packageRules": [
     {
-      "description": "Python deps (requirements*.txt via pip_requirements, pyproject.toml/uv.lock via pep621): automerge minor/patch once CI is green. platformAutomerge is disabled repo-wide (see top-level setting) so Renovate polls GitHub check statuses itself instead of relying on GitHub's native auto-merge, which would need branch protection with required status checks to actually block on a red CI — this repo has none.",
+      "description": "Python deps (requirements*.txt via pip_requirements, pyproject.toml/uv.lock via pep621): automerge minor/patch once CI is green. platformAutomerge is disabled repo-wide (see top-level setting) so Renovate polls GitHub check statuses itself instead of relying on GitHub's native auto-merge, which would need branch protection with required status checks to actually block on a red CI - this repo has none.",
       "matchManagers": ["pip_requirements", "pep621"],
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true,
@@ -26,13 +26,13 @@
       "automerge": false
     },
     {
-      "description": "Group the docker/* GitHub Actions used in .github/workflows/release.yml (setup-qemu-action, setup-buildx-action, login-action, metadata-action, build-push-action) into a single PR — they're versioned and released together upstream and have historically bumped as a batch.",
+      "description": "Group the docker/* GitHub Actions used in .github/workflows/release.yml (setup-qemu-action, setup-buildx-action, login-action, metadata-action, build-push-action) into a single PR - they're versioned and released together upstream and have historically bumped as a batch.",
       "matchManagers": ["github-actions"],
       "matchPackageNames": ["docker/*"],
       "groupName": "docker GitHub Actions"
     },
     {
-      "description": "Do not manage this repo's own published image. ghcr.io/pixibixi/freshrss-summary in docker-compose.yml and helm/freshrss-summary/values.yaml is the artifact this repo builds and publishes (release.yml), not a third-party dependency — Renovate must not open bump PRs against it.",
+      "description": "Do not manage this repo's own published image. ghcr.io/pixibixi/freshrss-summary in docker-compose.yml and helm/freshrss-summary/values.yaml is the artifact this repo builds and publishes (release.yml), not a third-party dependency - Renovate must not open bump PRs against it.",
       "matchManagers": ["docker-compose", "helm-values"],
       "matchPackageNames": ["ghcr.io/pixibixi/freshrss-summary"],
       "enabled": false

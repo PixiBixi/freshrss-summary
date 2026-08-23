@@ -33,7 +33,7 @@ class FreshRSSClient:
         )
         if resp.status_code == 401:
             raise RuntimeError(
-                "FreshRSS auth failed (401) — verifie username et api_password dans config.yaml "
+                "FreshRSS auth failed (401) - verifie username et api_password dans config.yaml "
                 "(FreshRSS → Settings → Authentication → API password)"
             )
         resp.raise_for_status()
@@ -44,7 +44,7 @@ class FreshRSSClient:
                 break
 
         if not self._auth_token:
-            raise RuntimeError("FreshRSS auth failed — check credentials")
+            raise RuntimeError("FreshRSS auth failed - check credentials")
 
         logger.info("FreshRSS auth OK")
 
@@ -126,7 +126,7 @@ class FreshRSSClient:
                 break
 
     def fetch_unread_ids(self, max_items: int = 50_000) -> set[str]:
-        """Fetch all unread article IDs — lightweight, no content payload."""
+        """Fetch all unread article IDs - lightweight, no content payload."""
         self._ensure_auth()
         all_ids: set[str] = set()
         continuation: str | None = None
@@ -224,7 +224,7 @@ class FreshRSSClient:
             if resp.status_code == 401:
                 # Tokens are cached across calls now, so they can outlive their
                 # server-side validity. Re-authenticate once before giving up.
-                logger.info("FreshRSS token rejected — re-authenticating")
+                logger.info("FreshRSS token rejected - re-authenticating")
                 self.invalidate_auth()
                 csrf = self._get_csrf_token()
                 resp = self._edit_tag(chunk, csrf)
@@ -322,7 +322,7 @@ def get_shared_client(base_url: str, username: str, api_password: str) -> FreshR
     Return a process-wide client, reusing its connection pool and auth tokens.
 
     Building a client per call costs a TCP/TLS handshake plus ClientLogin plus a
-    CSRF fetch before the actual request — four round-trips to mark one article
+    CSRF fetch before the actual request - four round-trips to mark one article
     read. Callers must NOT close the returned client; use close_shared_client()
     at shutdown. Credentials are part of the key, so a config change rebuilds it.
     """

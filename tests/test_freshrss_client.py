@@ -1,4 +1,4 @@
-"""Unit tests for freshrss_client.py — httpx mocked with unittest.mock."""
+"""Unit tests for freshrss_client.py - httpx mocked with unittest.mock."""
 
 from unittest.mock import MagicMock, patch
 

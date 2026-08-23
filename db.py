@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# SQLite caps IN-clause variables at 999 — chunk to stay safe on all backends
+# SQLite caps IN-clause variables at 999 - chunk to stay safe on all backends
 DB_CHUNK_SIZE = 500
 
 DEFAULT_DB_PATH = Path(__file__).parent / "data" / "articles.db"
@@ -135,7 +135,7 @@ def get_engine() -> AsyncEngine:
 
 
 async def _run_migrations(conn: AsyncConnection) -> None:
-    """Apply additive DDL migrations. Each statement is idempotent — "already exists" errors are expected and swallowed."""
+    """Apply additive DDL migrations. Each statement is idempotent - "already exists" errors are expected and swallowed."""
     _MIGRATIONS = [
         ("articles.content column", "ALTER TABLE articles ADD COLUMN content TEXT DEFAULT ''"),
         ("articles.read_at column", "ALTER TABLE articles ADD COLUMN read_at INTEGER"),
@@ -150,7 +150,7 @@ async def _run_migrations(conn: AsyncConnection) -> None:
             if "duplicate" not in msg and "already exists" not in msg:
                 logger.exception("Migration failed unexpectedly for %s", label)
                 raise
-            # else: column already exists — expected on every run after first
+            # else: column already exists - expected on every run after first
 
 
 async def init_db(url: str = DEFAULT_DB_URL) -> None:
@@ -510,7 +510,7 @@ async def _seed_seen_ids(conn: AsyncConnection) -> None:
     Without this, the first refresh after upgrading would see an empty seen_ids,
     treat every unread article as new, and re-download the whole backlog.
     Articles scored below min_score were never stored, so they are re-fetched
-    once — then recorded, and never again.
+    once - then recorded, and never again.
     """
     already = (await conn.execute(select(seen_ids_table.c.id).limit(1))).first()
     if already:
@@ -684,7 +684,7 @@ async def upsert_user(username: str, password_hash: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Pending read sync (outbox — retry when FreshRSS was offline)
+# Pending read sync (outbox - retry when FreshRSS was offline)
 # ---------------------------------------------------------------------------
 
 

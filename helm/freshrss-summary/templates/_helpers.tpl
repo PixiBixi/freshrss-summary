@@ -32,7 +32,7 @@ Create chart label value (chart name + version, no "+" allowed in label values).
 {{- end }}
 
 {{/*
-Common labels — applied to every resource.
+Common labels - applied to every resource.
 */}}
 {{- define "freshrss-summary.labels" -}}
 helm.sh/chart: {{ include "freshrss-summary.chart" . }}
@@ -44,7 +44,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
 {{/*
-Selector labels — used in matchLabels and Service selector.
+Selector labels - used in matchLabels and Service selector.
 Must be stable across upgrades; do NOT include version here.
 */}}
 {{- define "freshrss-summary.selectorLabels" -}}
@@ -64,7 +64,7 @@ ServiceAccount name.
 {{- end }}
 
 {{/*
-Secret name — either the user-provided existing secret or the chart-managed one.
+Secret name - either the user-provided existing secret or the chart-managed one.
 */}}
 {{- define "freshrss-summary.secretName" -}}
 {{- if .Values.secret.existingSecret }}
@@ -75,7 +75,7 @@ Secret name — either the user-provided existing secret or the chart-managed on
 {{- end }}
 
 {{/*
-PVC name — either the user-provided existing claim or the chart-managed one.
+PVC name - either the user-provided existing claim or the chart-managed one.
 */}}
 {{- define "freshrss-summary.pvcName" -}}
 {{- if .Values.persistence.existingClaim }}

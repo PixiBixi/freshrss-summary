@@ -17,7 +17,7 @@ _ARTICLE = {
     "title": "K8s guide",
     "url": "https://example.com/k8s",
     "feed_title": "CNCF",
-    "published": int(time.time()) - 3600,  # 1 hour ago — within any days window
+    "published": int(time.time()) - 3600,  # 1 hour ago - within any days window
     "score": 12.0,
     "matched_topics": {"Kubernetes": 12.0},
     "matched_keywords": ["kubernetes"],
@@ -169,7 +169,7 @@ class TestHealth:
         assert data["db"] == "ok"
 
     async def test_health_no_auth_required(self, client, db_engine):
-        """Health endpoint is public — no session needed."""
+        """Health endpoint is public - no session needed."""
         resp = await client.get("/health")
         assert resp.status_code == 200
 
@@ -365,7 +365,7 @@ class TestRefreshStream:
 
 @pytest_asyncio.fixture
 async def authed_client_no_ratelimit(db_engine):
-    """Authenticated client with rate limiting disabled — avoids 429 in test suites."""
+    """Authenticated client with rate limiting disabled - avoids 429 in test suites."""
     import os
     from unittest.mock import patch
 

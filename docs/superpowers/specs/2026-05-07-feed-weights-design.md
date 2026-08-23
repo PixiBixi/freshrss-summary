@@ -1,4 +1,4 @@
-# Feed Weights — Design Spec
+# Feed Weights - Design Spec
 **Date:** 2026-05-07
 **Status:** Approved
 
@@ -42,7 +42,7 @@ in the database (same table, same row as topics).
 ```
 
 - Feeds absent from `feed_weights` default to `1.0` (neutral).
-- `get_scoring_config` / `save_scoring_config` in `db.py` are unchanged — they already
+- `get_scoring_config` / `save_scoring_config` in `db.py` are unchanged - they already
   store and retrieve an opaque JSON blob.
 
 ---
@@ -70,12 +70,12 @@ total_score = sum(matched_topics.values()) * feed_mult
 `ScoredArticle.to_dict()` exposes the applied multiplier:
 
 ```python
-"feed_weight": feed_mult,  # 1.0 if neutral — used by UI tooltip
+"feed_weight": feed_mult,  # 1.0 if neutral - used by UI tooltip
 ```
 
 `score_articles()` forwards the new param to `score_article()`.
 
-`analyze_favorites()` does **not** receive feed weights — favourite analysis operates
+`analyze_favorites()` does **not** receive feed weights - favourite analysis operates
 on raw topic affinity, not adjusted scores.
 
 ---
@@ -112,7 +112,7 @@ config and pass it down to the scorer. No new endpoints needed.
 
 ## UI
 
-### Config drawer — new "Feeds" tab
+### Config drawer - new "Feeds" tab
 
 The existing scoring config drawer (`ui.js`) gains a second tab alongside "Topics".
 
@@ -129,7 +129,7 @@ The existing scoring config drawer (`ui.js`) gains a second tab alongside "Topic
 - Number input, range `0.1–5.0`, step `0.1`.
 - "Reset" button sets back to `1.0` and removes the entry from the saved dict.
 
-**Save button:** shared with the Topics tab — sends `{ topics, feed_weights }` in one
+**Save button:** shared with the Topics tab - sends `{ topics, feed_weights }` in one
 PUT call.
 
 ### Score tooltip
@@ -153,7 +153,7 @@ feed ×0.50
 
 ## Testing
 
-- `scorer.py`: unit test `score_article()` with `feed_weights={"Feed A": 0.5}` —
+- `scorer.py`: unit test `score_article()` with `feed_weights={"Feed A": 0.5}`:
   verify score is halved vs baseline.
 - `scorer.py`: test missing feed defaults to 1.0.
 - `app.py`: test `GET /api/config/scoring` returns `feed_weights` key.

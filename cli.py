@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FreshRSS Summary — CLI."""
+"""FreshRSS Summary - CLI."""
 
 import argparse
 import asyncio
@@ -173,7 +173,7 @@ def cmd_check(args: argparse.Namespace, cfg: ConfigDict) -> int:
     try:
         with make_client(cfg) as client:
             count = client.sample_one()
-            print(ok(f"Auth OK — reading-list API reachable ({count} article sampled)"))
+            print(ok(f"Auth OK - reading-list API reachable ({count} article sampled)"))
 
             starred = client.fetch_starred(max_items=10)
             print(ok(f"Starred stream reachable ({len(starred)} fetched, limited to 10)"))
@@ -187,7 +187,7 @@ def cmd_check(args: argparse.Namespace, cfg: ConfigDict) -> int:
         s = asyncio.run(_db_stats(cfg))
         db_url = cfg.get("database", {}).get("url", "sqlite (default)")
         print(info(f"DB URL   : {db_url}"))
-        print(ok(f"DB reachable — {s['articles']} articles, {s['bookmarks']} bookmarks"))
+        print(ok(f"DB reachable - {s['articles']} articles, {s['bookmarks']} bookmarks"))
     except Exception as e:
         logger.exception("check: DB stats failed")
         print(warn(f"DB check failed: {e}"))
@@ -249,7 +249,7 @@ def cmd_fetch(args: argparse.Namespace, cfg: ConfigDict) -> int:
         return 0
 
     print()
-    print(ok(f"{total_fetched} fetched total — {len(all_articles)} relevant (score ≥ {min_score})"))
+    print(ok(f"{total_fetched} fetched total - {len(all_articles)} relevant (score ≥ {min_score})"))
 
     if args.dry_run:
         print(warn("--dry-run: not saving to DB"))
@@ -278,7 +278,7 @@ def cmd_rescore(args: argparse.Namespace, cfg: ConfigDict) -> int:
         return 1
 
     if not raw:
-        print(warn("No articles in DB — run fetch first"))
+        print(warn("No articles in DB - run fetch first"))
         return 0
 
     print(info(f"Rescoring {len(raw)} articles..."))
@@ -360,7 +360,7 @@ def _import_starred(args: argparse.Namespace, cfg: ConfigDict) -> int:
     else:
         try:
             scored = asyncio.run(_score_and_import_starred(cfg, starred, title_weight))
-            print(ok(f"Imported {len(scored)} articles — all bookmarked"))
+            print(ok(f"Imported {len(scored)} articles - all bookmarked"))
         except Exception as e:
             logger.exception("import-starred: DB upsert/bookmark failed")
             print(err(f"DB error: {e}"))
@@ -445,7 +445,7 @@ def cmd_tune(args: argparse.Namespace, cfg: ConfigDict) -> int:
     If topic X appears in 60% of your favorites, its weight probably deserves a boost.
     Formula: suggested = current * (1 + 0.5 * hit_rate)
     """
-    print(f"\n{BOLD}Scoring tune — analyzing your starred articles{RESET}\n")
+    print(f"\n{BOLD}Scoring tune - analyzing your starred articles{RESET}\n")
 
     from scorer import analyze_favorites, build_topics
 
@@ -466,7 +466,7 @@ def cmd_tune(args: argparse.Namespace, cfg: ConfigDict) -> int:
         return 1
 
     if not starred:
-        print(warn("No starred articles found — star some articles in FreshRSS first!"))
+        print(warn("No starred articles found - star some articles in FreshRSS first!"))
         return 0
 
     print(ok(f"Fetched {len(starred)} starred articles"))
@@ -517,7 +517,7 @@ def cmd_tune(args: argparse.Namespace, cfg: ConfigDict) -> int:
     print()
 
     if not has_changes:
-        print(ok("Weights look well-calibrated — no significant adjustments suggested"))
+        print(ok("Weights look well-calibrated - no significant adjustments suggested"))
         return 0
 
     if args.apply:
@@ -593,7 +593,7 @@ def _apply_weights(suggestions: dict[str, Any]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="cli",
-        description=f"{BOLD}FreshRSS Summary — CLI{RESET}",
+        description=f"{BOLD}FreshRSS Summary - CLI{RESET}",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""\
 {BOLD}commands:{RESET}

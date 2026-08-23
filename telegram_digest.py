@@ -102,7 +102,7 @@ def build_digest(articles: list[ArticleDict]) -> str:
     weekday = _WEEKDAYS_FR[dt.tm_wday]
     date_str = f"{weekday} {dt.tm_mday} {_MONTHS_FR[dt.tm_mon]}"
 
-    lines: list[str] = [f"📡 <b>FreshRSS Digest</b> — {date_str}", ""]
+    lines: list[str] = [f"📡 <b>FreshRSS Digest</b> - {date_str}", ""]
     for a in top:
         title = _html_escape(a["title"])
         score = int(a["score"])

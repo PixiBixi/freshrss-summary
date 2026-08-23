@@ -282,7 +282,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 40px; }
 .compact-row.shown-read .compact-title { text-decoration: line-through; color: var(--text-3); }
 .badge-read { font-size: 10px; color: var(--text-3); flex-shrink: 0; white-space: nowrap; }
 
-/* List container — pure list, no card */
+/* List container - pure list, no card */
 .feed-list { border-top: 1px solid var(--sep); }
 
 /* ── Mode A: two-line row ─────────────────────────── */

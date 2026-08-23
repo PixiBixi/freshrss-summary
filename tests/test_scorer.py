@@ -1,4 +1,4 @@
-"""Unit tests for scorer.py — pure functions, no I/O."""
+"""Unit tests for scorer.py - pure functions, no I/O."""
 
 import pytest
 
@@ -417,7 +417,7 @@ class TestSubstringGate:
         assert not absent.may_match("kubernetes pod", "nothing about physics")
 
     def test_gate_is_over_inclusive_not_under(self):
-        """A substring without word boundaries still opens the gate — then scores 0."""
+        """A substring without word boundaries still opens the gate - then scores 0."""
         topic = TopicConfig(name="T", keywords=["pod"], weight=1.0)
         assert topic.may_match("podcast episode", ""), "substring present → gate opens"
         article = Article(

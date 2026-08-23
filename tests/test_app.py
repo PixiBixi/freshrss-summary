@@ -1,4 +1,4 @@
-"""Unit tests for app.py — pure functions (hash, config, auth)."""
+"""Unit tests for app.py - pure functions (hash, config, auth)."""
 
 import pytest
 

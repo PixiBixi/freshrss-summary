@@ -1,4 +1,4 @@
-# Telegram Digest — Design Spec
+# Telegram Digest - Design Spec
 
 **Date:** 2026-04-26
 **Status:** Approved
@@ -54,7 +54,7 @@ async def send_digest(cfg: dict, cache: Cache) -> None:
 
 ### FastAPI changes (`app.py`)
 
-**`load_config()`** — add telegram section:
+**`load_config()`** - add telegram section:
 ```python
 tg = cfg.setdefault("telegram", {})
 if v := os.environ.get("TELEGRAM_BOT_TOKEN"):   tg["bot_token"] = v
@@ -63,9 +63,9 @@ if v := os.environ.get("TELEGRAM_WEBHOOK_SECRET"): tg["webhook_secret"] = v
 if v := os.environ.get("PUBLIC_URL"):           cfg.setdefault("server", {})["public_url"] = v
 ```
 
-No validation — missing token/chat_id silently disables the feature.
+No validation - missing token/chat_id silently disables the feature.
 
-**`lifespan()`** — add digest job after existing scheduler setup:
+**`lifespan()`** - add digest job after existing scheduler setup:
 ```python
 from apscheduler.triggers.cron import CronTrigger
 
@@ -101,9 +101,9 @@ async def telegram_webhook(request: Request):
 ## Message Format
 
 ```
-📡 FreshRSS Digest — Dimanche 27 avril
+📡 FreshRSS Digest - Dimanche 27 avril
 
-<a href="url">Kubernetes 1.32 — what's new</a> · <b>142</b> · The Register
+<a href="url">Kubernetes 1.32 - what's new</a> · <b>142</b> · The Register
 <a href="url">ArgoCD multi-source apps GA</a> · <b>98</b> · CNCF Blog
 <a href="url">GKE Autopilot node pool customization</a> · <b>87</b> · Google Cloud
 ...
@@ -128,10 +128,10 @@ telegram:
   bot_token: ""        # TELEGRAM_BOT_TOKEN env var
   chat_id: ""          # TELEGRAM_CHAT_ID env var
   digest_hour: 21      # Hour in Europe/Paris timezone (default: 21)
-  webhook_secret: ""   # TELEGRAM_WEBHOOK_SECRET env var — random string you choose
+  webhook_secret: ""   # TELEGRAM_WEBHOOK_SECRET env var - random string you choose
 
 server:
-  public_url: ""       # PUBLIC_URL env var — e.g. https://freshrss.example.com
+  public_url: ""       # PUBLIC_URL env var - e.g. https://freshrss.example.com
                        # Required for automatic webhook registration
 ```
 
@@ -139,7 +139,7 @@ server:
 
 On startup, if `bot_token` + `chat_id` + `public_url` are all set:
 - Calls `setWebhook` with `url={public_url}/telegram/webhook` and `secret_token={webhook_secret}`
-- Logs success/failure — never crashes the app on failure
+- Logs success/failure - never crashes the app on failure
 
 If `public_url` is absent: webhook not registered automatically. User must call
 `https://api.telegram.org/bot<TOKEN>/setWebhook?url=<URL>/telegram/webhook` manually.

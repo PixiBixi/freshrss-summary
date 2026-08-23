@@ -34,7 +34,7 @@ On first start, an admin account is created automatically with a random password
 
 ```
 ========================================================
-  FIRST RUN — admin account created
+  FIRST RUN - admin account created
   Username : admin
   Password : xK9mP2rT...
   Set ADMIN_PASSWORD env var to override on restart
@@ -58,7 +58,7 @@ Login attempts are rate-limited to **10 per minute per IP**.
 
 ## Config
 
-`config.yaml` (not versioned — contains credentials):
+`config.yaml` (not versioned - contains credentials):
 
 ```yaml
 freshrss:
@@ -94,11 +94,11 @@ scheduler:
 #   secret_key: ""    # generate: python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-Topics and their keywords are editable live from the UI (⚙ **Topics** button in the header) — changes are persisted in the database, no restart required. The initial topic list is seeded from `config.yaml` on first startup.
+Topics and their keywords are editable live from the UI (⚙ **Topics** button in the header) - changes are persisted in the database, no restart required. The initial topic list is seeded from `config.yaml` on first startup.
 
 ## Auto-refresh
 
-Set `scheduler.interval_minutes` (or `REFRESH_INTERVAL_MINUTES` env var) to fetch articles automatically on a schedule — no manual click required.
+Set `scheduler.interval_minutes` (or `REFRESH_INTERVAL_MINUTES` env var) to fetch articles automatically on a schedule - no manual click required.
 
 ```bash
 # Docker / docker-compose
@@ -159,7 +159,7 @@ in `config.yaml`, then a random key generated on first run and stored in the dat
 
 The generated key is persisted, so sessions survive restarts, and it is shared by every
 replica pointing at the same database. Setting `SECRET_KEY` explicitly is still
-recommended — it keeps the key out of the database and lets you rotate it, which
+recommended - it keeps the key out of the database and lets you rotate it, which
 invalidates all active sessions.
 
 ## Docker
@@ -204,14 +204,14 @@ Key values:
 | `freshrss.username` | FreshRSS username |
 | `secret.freshrssApiPassword` | FreshRSS API password (≠ login password) |
 | `secret.adminPassword` | Admin UI password |
-| `secret.secretKey` | JWT secret — generate with `python3 -c "import secrets; print(secrets.token_hex(32))"` |
-| `secret.databaseUrl` | Optional — override SQLite with MySQL/PostgreSQL URL |
+| `secret.secretKey` | JWT secret - generate with `python3 -c "import secrets; print(secrets.token_hex(32))"` |
+| `secret.databaseUrl` | Optional - override SQLite with MySQL/PostgreSQL URL |
 | `persistence.size` | PVC size for SQLite data (default: `1Gi`) |
 | `ingress.enabled` | Expose via ingress controller |
 | `networkPolicy.enabled` | Enable NetworkPolicy (default: `true`) |
-| `networkPolicy.dbPort` | Egress port for external DB — `5432` (PG) / `3306` (MySQL) / `0` to disable |
+| `networkPolicy.dbPort` | Egress port for external DB - `5432` (PG) / `3306` (MySQL) / `0` to disable |
 
-> SQLite is the default — do **not** enable `autoscaling` with SQLite (single-writer constraint).
+> SQLite is the default - do **not** enable `autoscaling` with SQLite (single-writer constraint).
 
 ## CLI
 
@@ -228,7 +228,7 @@ python cli.py <command> [options]
 | `fetch [--dry-run]` | Fetch unread articles from FreshRSS, score, and save to DB |
 | `rescore [--dry-run]` | Reapply current topic weights to articles already in DB |
 | `import [FILE] [--starred] [--limit N] [--dry-run]` | Import from a JSON file or from FreshRSS starred stream |
-| `tune [--apply] [--limit N]` | Analyze starred articles, suggest weight adjustments; `--apply` writes to `config.yaml` (seed only — use the UI to update a running instance) |
+| `tune [--apply] [--limit N]` | Analyze starred articles, suggest weight adjustments; `--apply` writes to `config.yaml` (seed only - use the UI to update a running instance) |
 
 ```bash
 python cli.py check
@@ -244,7 +244,7 @@ python cli.py import articles.json
 score = Σ (title_occurrences × title_weight + body_occurrences) × topic_weight × feed_weight
 ```
 
-The highest-scoring article best matches your configured topics. Score breakdown per topic — plus feed multiplier if non-default — is shown as a tooltip on each article's score badge.
+The highest-scoring article best matches your configured topics. Score breakdown per topic - plus feed multiplier if non-default - is shown as a tooltip on each article's score badge.
 
 ### Topics (default config)
 
@@ -265,7 +265,7 @@ The highest-scoring article best matches your configured topics. Score breakdown
 | Networking | 1.0 |
 | FinOps | 1.2 |
 
-Weights and keywords are editable live from the UI (⚙ **Topics** button) — persisted in the database, no restart required. The `config.yaml` topics section is only used to seed the database on first startup. Use `python cli.py tune --apply` to suggest weight adjustments based on your starred articles.
+Weights and keywords are editable live from the UI (⚙ **Topics** button) - persisted in the database, no restart required. The `config.yaml` topics section is only used to seed the database on first startup. Use `python cli.py tune --apply` to suggest weight adjustments based on your starred articles.
 
 ### Per-feed multipliers
 
@@ -277,37 +277,37 @@ The **Feeds** tab in the scoring modal (⚙ Topics → Feeds) lets you set a sco
 
 - **SSE streaming**: articles appear progressively as they are fetched, no full-page wait
 - **Auto mark-as-read on scroll**: articles scrolled past are silently marked as read in FreshRSS after a 3s debounce
-- **Mark as read**: single article (✓ Lu), all articles in a day group (Mark Day), or all visible (✓ Tout lire) — articles disappear from the page immediately on mark
+- **Mark as read**: single article (✓ Lu), all articles in a day group (Mark Day), or all visible (✓ Tout lire) - articles disappear from the page immediately on mark
 - **Open all**: open every article in a day group as tabs (with confirmation above 10)
-- **Show read**: toggle to reveal articles marked as read (kept 7 days, purged on refresh) — requires login
+- **Show read**: toggle to reveal articles marked as read (kept 7 days, purged on refresh) - requires login
 - **Bookmarks**: starred locally, survive refreshes
 
 ### Filtering & sorting
 
 - **Topic pills**: filter by topic, with article count and proportion mini-bar
 - **Sort**: by score (default), date, or source
-- **Min score**: adjustable live — hides low-relevance articles
+- **Min score**: adjustable live - hides low-relevance articles
 - **Period**: 7d / 14d / 30d / all
 - **Full-text search**: client-side filter on title and feed name
-- **✓ Mark all read**: always-visible button — marks all currently displayed articles as read and removes them from the page; in search mode, scoped to search results
+- **✓ Mark all read**: always-visible button - marks all currently displayed articles as read and removes them from the page; in search mode, scoped to search results
 
 ### Interface
 
 - **Keyboard shortcuts**: `j`/`k` navigate, `Enter`/`o` open, `m` mark as read, `r` refresh, `Esc` close detail
 - **Compact mode**: denser list layout, toggled with ⊟
 - **Score tooltip**: hover the score badge to see per-topic contribution breakdown
-- **Auto-refresh**: configurable background scheduler — open the UI in the morning and articles are already there (see `REFRESH_INTERVAL_MINUTES`)
+- **Auto-refresh**: configurable background scheduler - open the UI in the morning and articles are already there (see `REFRESH_INTERVAL_MINUTES`)
 - **Last refresh indicator**: shows time since last fetch; ⚠ warning if stale (>3h)
 - **Rescore**: reapply current weights without re-fetching
-- **Scoring config** (⚙ Topics): edit topic names, weights, and keywords live; **Feeds** tab for per-feed score multipliers — saved to DB, triggers automatic rescore
-- **Password change** (🔑 Password): change the current user's password directly from the UI — no restart required
-- **i18n**: French, English, German, Spanish, Italian, Portuguese — auto-detected from browser, override persisted in localStorage
+- **Scoring config** (⚙ Topics): edit topic names, weights, and keywords live; **Feeds** tab for per-feed score multipliers - saved to DB, triggers automatic rescore
+- **Password change** (🔑 Password): change the current user's password directly from the UI - no restart required
+- **i18n**: French, English, German, Spanish, Italian, Portuguese - auto-detected from browser, override persisted in localStorage
 
 ## Observability
 
 ### Health check
 
-`GET /health` — no authentication required.
+`GET /health` - no authentication required.
 
 ```json
 {
@@ -323,7 +323,7 @@ Returns `503` with `"status": "degraded"` if the DB is unreachable.
 
 ### Prometheus metrics
 
-`GET /metrics` — **authentication required**, like every other mutating or
+`GET /metrics` - **authentication required**, like every other mutating or
 operational endpoint. Point your scraper at it with a session cookie, or put it
 behind your own reverse-proxy auth. Standard Prometheus text format.
 
@@ -362,7 +362,7 @@ uv run pytest
 uv run pytest -v
 ```
 
-156 tests across 5 modules — no network or FreshRSS access required:
+156 tests across 5 modules - no network or FreshRSS access required:
 
 | Module | Coverage |
 |--------|---------|

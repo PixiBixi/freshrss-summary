@@ -206,7 +206,7 @@ class TestIncrementalSeenIds:
     """The diff runs against every processed ID, not just the stored ones.
 
     Articles scoring below min_score are never persisted, so diffing against the
-    articles table alone re-listed them on every refresh — they were downloaded
+    articles table alone re-listed them on every refresh - they were downloaded
     and re-scored indefinitely.
     """
 
@@ -262,4 +262,4 @@ class TestIncrementalSeenIds:
         self._run(seen, fetched, unread)
 
         assert sum(len(f) for f in fetched[:1]) == 3, "first refresh fetches everything"
-        assert fetched[1:] == [], "second refresh fetches nothing — not even the low scorers"
+        assert fetched[1:] == [], "second refresh fetches nothing - not even the low scorers"

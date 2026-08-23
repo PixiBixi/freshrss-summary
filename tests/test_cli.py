@@ -1,4 +1,4 @@
-"""Unit tests for cli.py — config loading and helper functions."""
+"""Unit tests for cli.py - config loading and helper functions."""
 
 from typing import cast
 from unittest.mock import MagicMock

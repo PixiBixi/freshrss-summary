@@ -97,8 +97,8 @@ function groupByDate(articles) {
     const d   = a.published ? new Date(a.published * 1000) : new Date(0);
     const key = dateKey(d);
     let label;
-    if (key === today)     label = `${t('date.today')} — ${fmtDate(d)}`;
-    else if (key === yest) label = `${t('date.yesterday')} — ${fmtDate(d)}`;
+    if (key === today)     label = `${t('date.today')} - ${fmtDate(d)}`;
+    else if (key === yest) label = `${t('date.yesterday')} - ${fmtDate(d)}`;
     else                   label = fmtDate(d);
     if (!buckets.has(label)) buckets.set(label, []);
     buckets.get(label).push(a);

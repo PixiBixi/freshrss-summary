@@ -1,4 +1,4 @@
-"""FreshRSS Summary — FastAPI backend."""
+"""FreshRSS Summary - FastAPI backend."""
 
 import asyncio
 import concurrent.futures
@@ -261,7 +261,7 @@ def _spawn(coro: Coroutine[Any, Any, Any]) -> asyncio.Task:
     Schedule `coro` and keep a strong reference until it finishes.
 
     The event loop only holds a weak reference to running tasks, so a bare
-    asyncio.create_task() can be garbage-collected mid-flight — silently killing
+    asyncio.create_task() can be garbage-collected mid-flight - silently killing
     the work and swallowing any exception it raised.
     """
     task = asyncio.create_task(coro)
@@ -289,7 +289,7 @@ def _make_freshrss_client(cfg: ConfigDict) -> FreshRSSClient:
 
 
 def _shared_freshrss_client(cfg: ConfigDict) -> FreshRSSClient:
-    """Process-wide client for short mark-read calls — must not be closed by callers."""
+    """Process-wide client for short mark-read calls - must not be closed by callers."""
     fr = cfg["freshrss"]  # type: ignore[typeddict-item]
     return get_shared_client(fr["url"], fr["username"], fr["api_password"])
 
@@ -378,7 +378,7 @@ async def get_articles(
     show_read: bool = False,
 ) -> dict[str, Any]:
     if not cache.initialized:
-        raise HTTPException(status_code=503, detail="Cache initializing — try again shortly")
+        raise HTTPException(status_code=503, detail="Cache initializing - try again shortly")
     if show_read and not request.session.get("authenticated"):
         show_read = False
     articles = cache.articles
@@ -419,7 +419,7 @@ async def mark_read(req: MarkReadRequest) -> dict[str, Any]:
     if not req.article_ids:
         raise HTTPException(status_code=400, detail="No article IDs provided")
 
-    # Local state updated immediately — never blocked by upstream availability
+    # Local state updated immediately - never blocked by upstream availability
     ids_set = set(req.article_ids)
     cache.articles = [a for a in cache.articles if a["id"] not in ids_set]
     await set_articles_read(req.article_ids)
@@ -428,13 +428,13 @@ async def mark_read(req: MarkReadRequest) -> dict[str, Any]:
     # misconfiguration, not an unreachable upstream: reported as plain "queued" it
     # was indistinguishable from a network blip, so pending_sync grew forever while
     # nobody noticed FreshRSS was never contacted. Surfaced as its own status and
-    # logged at error level — but still a 200, because marking read locally must
+    # logged at error level - but still a 200, because marking read locally must
     # never fail on an upstream concern.
     try:
         cfg = load_config()
     except RuntimeError:
         logger.error(
-            "FreshRSS is not configured — %d article(s) marked read locally only",
+            "FreshRSS is not configured - %d article(s) marked read locally only",
             len(req.article_ids),
         )
         await add_pending_sync(req.article_ids)
@@ -449,7 +449,7 @@ async def mark_read(req: MarkReadRequest) -> dict[str, Any]:
         await asyncio.to_thread(_sync_mark_read)
     except (httpx.HTTPError, RuntimeError):
         logger.exception(
-            "FreshRSS unreachable — queuing %d article(s) for deferred sync", len(req.article_ids)
+            "FreshRSS unreachable - queuing %d article(s) for deferred sync", len(req.article_ids)
         )
         await add_pending_sync(req.article_ids)
         return {"status": "queued", "marked": len(req.article_ids)}
@@ -460,7 +460,7 @@ async def mark_read(req: MarkReadRequest) -> dict[str, Any]:
 async def _auto_refresh() -> None:
     """Scheduled job: runs _do_fetch_and_score unless a refresh is already in progress."""
     if not cache.try_begin_loading():
-        logger.info("Scheduled refresh skipped — already in progress")
+        logger.info("Scheduled refresh skipped - already in progress")
         return
     logger.info("Scheduled refresh starting")
     await _do_fetch_and_score()
@@ -622,7 +622,7 @@ async def refresh_stream() -> StreamingResponse:
         seen_ids: set[str],
         cfg: ConfigDict,
     ) -> None:
-        # Runs in a thread pool — survives SSE client disconnections.
+        # Runs in a thread pool - survives SSE client disconnections.
         # The slot was already claimed by the handler; this owns releasing it.
         all_new_articles: list[dict[str, Any]] = []
         removed_ids: set[str] = set()
@@ -738,7 +738,7 @@ async def refresh_stream() -> StreamingResponse:
                 if "_is_loading" in event:
                     cache.is_loading = event["_is_loading"]
                 if event["type"] == "state":
-                    continue  # pure state update — not forwarded to SSE client
+                    continue  # pure state update - not forwarded to SSE client
                 # Strip private fields before forwarding to the SSE client
                 public_event = {k: v for k, v in event.items() if not k.startswith("_")}
                 yield f"data: {json.dumps(public_event)}\n\n"
@@ -792,7 +792,7 @@ async def _rescore_compute(
     this through asyncio.to_thread still stalled the event loop for the whole job
     (~4 ms per article, measured). Processes move the work off the loop entirely
     and split it across cores. Falls back to a thread when spawning is impossible
-    (restricted container, no /dev/shm) — degraded, but still correct.
+    (restricted container, no /dev/shm) - degraded, but still correct.
     """
     scoring_cfg = cfg.get("scoring", {})
     title_weight = int(scoring_cfg.get("title_weight", 3))
@@ -816,7 +816,7 @@ async def _rescore_compute(
                 )
             )
     except OSError:
-        logger.warning("Process pool unavailable — falling back to a single thread")
+        logger.warning("Process pool unavailable - falling back to a single thread")
         return await asyncio.to_thread(
             rescore_chunk, raw, topics_cfg, title_weight, min_score, feed_weights
         )
@@ -1114,7 +1114,7 @@ if __name__ == "__main__":
         # Object form used otherwise to avoid double-import of module-level code
         # (e.g. Prometheus metric registration).
         "app:app" if reload else app,
-        host=str(srv.get("host", "0.0.0.0")),  # nosec B104 — default binds all interfaces; callers override via SERVER_HOST
+        host=str(srv.get("host", "0.0.0.0")),  # nosec B104 - default binds all interfaces; callers override via SERVER_HOST
         port=int(srv.get("port", 8123)),
         reload=reload,
         proxy_headers=True,

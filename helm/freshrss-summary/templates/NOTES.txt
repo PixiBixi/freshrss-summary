@@ -1,5 +1,5 @@
 ====================================================================
-  freshrss-summary — {{ .Chart.AppVersion }}
+  freshrss-summary - {{ .Chart.AppVersion }}
 ====================================================================
 
 Release name : {{ .Release.Name }}
@@ -55,7 +55,7 @@ Health check:
 
 {{- if .Values.secret.existingSecret }}
 Using existing Secret: {{ .Values.secret.existingSecret }}
-(chart does not manage this Secret — update it externally)
+(chart does not manage this Secret - update it externally)
 {{- else }}
 The chart created a Secret named: {{ include "freshrss-summary.fullname" . }}
 
@@ -88,7 +88,7 @@ SQLite backup (online, safe with WAL mode):
     -l app.kubernetes.io/instance={{ .Release.Name }} -o jsonpath='{.items[0].metadata.name}'):/tmp/articles.db.bak \
     ./articles.db.bak
 
-WARNING: The PVC is bound to the node — do not delete it when redeploying.
+WARNING: The PVC is bound to the node - do not delete it when redeploying.
 {{- else }}
 WARNING: Persistence is disabled. All data will be lost on pod restart.
          Enable persistence.enabled=true for production workloads.
@@ -100,9 +100,9 @@ WARNING: Persistence is disabled. All data will be lost on pod restart.
 
 replicaCount is set to {{ .Values.replicaCount }}.
 
-⚠  Do NOT scale beyond 1 replica while using SQLite — concurrent writes will
+⚠  Do NOT scale beyond 1 replica while using SQLite - concurrent writes will
    corrupt the database. Migrate to PostgreSQL or MySQL first, then enable HPA.
 
-HPA is currently: {{ if .Values.autoscaling.enabled }}ENABLED — make sure you are NOT using SQLite{{ else }}disabled (safe){{ end }}
+HPA is currently: {{ if .Values.autoscaling.enabled }}ENABLED - make sure you are NOT using SQLite{{ else }}disabled (safe){{ end }}
 
 ====================================================================

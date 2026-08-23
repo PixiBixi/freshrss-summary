@@ -38,7 +38,7 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # HTTPS — outbound to FreshRSS and any external service
+    # HTTPS - outbound to FreshRSS and any external service
     - ports:
         - protocol: TCP
           port: 443

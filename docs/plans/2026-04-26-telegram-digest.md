@@ -14,14 +14,14 @@
 
 | File | Change |
 |---|---|
-| `telegram_digest.py` | **Create** — build_digest, _split_message, send_message, send_digest, _register_webhook |
-| `tests/test_telegram_digest.py` | **Create** — unit tests for all functions |
-| `app.py` | **Modify** — load_config (telegram env vars), lifespan (scheduler job + webhook registration + app.state), new endpoint |
-| `config.example.yaml` | **Modify** — add telegram section |
+| `telegram_digest.py` | **Create** - build_digest, _split_message, send_message, send_digest, _register_webhook |
+| `tests/test_telegram_digest.py` | **Create** - unit tests for all functions |
+| `app.py` | **Modify** - load_config (telegram env vars), lifespan (scheduler job + webhook registration + app.state), new endpoint |
+| `config.example.yaml` | **Modify** - add telegram section |
 
 ---
 
-## Task 1: `build_digest` and `_split_message` — pure functions, TDD
+## Task 1: `build_digest` and `_split_message` - pure functions, TDD
 
 **Files:**
 - Create: `telegram_digest.py`
@@ -128,7 +128,7 @@ class TestBuildDigest:
         assert "1 article" in result
 ```
 
-- [ ] **Step 2: Run tests — verify they all fail**
+- [ ] **Step 2: Run tests - verify they all fail**
 
 ```bash
 cd /Users/jeremy/Documents/perso/git/freshrss-summary
@@ -211,7 +211,7 @@ def build_digest(articles: list[dict]) -> str:
     weekday = _WEEKDAYS_FR[dt.tm_wday]
     date_str = f"{weekday} {dt.tm_mday} {_MONTHS_FR[dt.tm_mon]}"
 
-    lines: list[str] = [f"📡 <b>FreshRSS Digest</b> — {date_str}", ""]
+    lines: list[str] = [f"📡 <b>FreshRSS Digest</b> - {date_str}", ""]
     for a in top:
         title = _html_escape(a["title"])
         feed = _html_escape(a["feed_title"])
@@ -224,7 +224,7 @@ def build_digest(articles: list[dict]) -> str:
     return "\n".join(lines)
 ```
 
-- [ ] **Step 4: Run tests — verify they pass**
+- [ ] **Step 4: Run tests - verify they pass**
 
 ```bash
 uv run pytest tests/test_telegram_digest.py::TestSplitMessage tests/test_telegram_digest.py::TestBuildDigest -v
@@ -241,7 +241,7 @@ git commit -m "feat(telegram): add build_digest and _split_message with tests"
 
 ---
 
-## Task 2: `send_message` — async HTTP, TDD with monkeypatch
+## Task 2: `send_message` - async HTTP, TDD with monkeypatch
 
 **Files:**
 - Modify: `telegram_digest.py` (add `send_message`)
@@ -257,7 +257,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class TestSendMessage:
-    """Tests for send_message — mocks httpx.AsyncClient."""
+    """Tests for send_message - mocks httpx.AsyncClient."""
 
     def _make_fake_client(self, calls: list):
         """Returns a context-manager-compatible fake httpx client."""
@@ -295,13 +295,13 @@ class TestSendMessage:
         assert len(calls) == 2  # split into 2 chunks
 ```
 
-- [ ] **Step 2: Run the new tests — verify they fail**
+- [ ] **Step 2: Run the new tests - verify they fail**
 
 ```bash
 uv run pytest tests/test_telegram_digest.py::TestSendMessage -v
 ```
 
-Expected: `ImportError` or `AttributeError` — `send_message` not defined yet
+Expected: `ImportError` or `AttributeError` - `send_message` not defined yet
 
 - [ ] **Step 3: Add `send_message` to `telegram_digest.py`**
 
@@ -323,7 +323,7 @@ async def send_message(bot_token: str, chat_id: str, text: str) -> None:
             r.raise_for_status()
 ```
 
-- [ ] **Step 4: Run all telegram tests — verify they pass**
+- [ ] **Step 4: Run all telegram tests - verify they pass**
 
 ```bash
 uv run pytest tests/test_telegram_digest.py -v
@@ -452,13 +452,13 @@ class TestRegisterWebhook:
         mock_client.assert_not_called()
 ```
 
-- [ ] **Step 2: Run new tests — verify they fail**
+- [ ] **Step 2: Run new tests - verify they fail**
 
 ```bash
 uv run pytest tests/test_telegram_digest.py::TestSendDigest tests/test_telegram_digest.py::TestRegisterWebhook -v
 ```
 
-Expected: `ImportError` — `send_digest`/`_register_webhook` not defined yet
+Expected: `ImportError` - `send_digest`/`_register_webhook` not defined yet
 
 - [ ] **Step 3: Add `send_digest` and `_register_webhook` to `telegram_digest.py`**
 
@@ -504,7 +504,7 @@ async def _register_webhook(tg_cfg: dict, public_url: str) -> None:
         logger.error("Telegram webhook registration failed: %s", exc)
 ```
 
-- [ ] **Step 4: Run all telegram tests — verify they pass**
+- [ ] **Step 4: Run all telegram tests - verify they pass**
 
 ```bash
 uv run pytest tests/test_telegram_digest.py -v
@@ -521,7 +521,7 @@ git commit -m "feat(telegram): add send_digest and _register_webhook"
 
 ---
 
-## Task 4: `app.py` — telegram config in `load_config`
+## Task 4: `app.py` - telegram config in `load_config`
 
 **Files:**
 - Modify: `app.py` (lines ~120-175, `load_config` function)
@@ -565,17 +565,17 @@ class TestTelegramConfig:
         importlib.reload(app_module)
 
         cfg = app_module.load_config()
-        # No telegram section in yaml, no env vars — should have empty dict, no crash
+        # No telegram section in yaml, no env vars - should have empty dict, no crash
         assert cfg.get("telegram", {}) == {}
 ```
 
-- [ ] **Step 2: Run new tests — verify they fail**
+- [ ] **Step 2: Run new tests - verify they fail**
 
 ```bash
 uv run pytest tests/test_app.py::TestTelegramConfig -v
 ```
 
-Expected: assertions fail — telegram keys not in cfg yet
+Expected: assertions fail - telegram keys not in cfg yet
 
 - [ ] **Step 3: Add telegram env vars to `load_config` in `app.py`**
 
@@ -612,7 +612,7 @@ Actually, use the same pattern as the rest of load_config (simpler):
 
 Place this block right after the `db` block (before the `# Validate required FreshRSS fields` comment).
 
-- [ ] **Step 4: Run tests — verify they pass**
+- [ ] **Step 4: Run tests - verify they pass**
 
 ```bash
 uv run pytest tests/test_app.py::TestTelegramConfig -v
@@ -620,7 +620,7 @@ uv run pytest tests/test_app.py::TestTelegramConfig -v
 
 Expected: green
 
-- [ ] **Step 5: Run full test suite — no regressions**
+- [ ] **Step 5: Run full test suite - no regressions**
 
 ```bash
 uv run pytest tests/ -v --tb=short
@@ -637,7 +637,7 @@ git commit -m "feat(telegram): add telegram env vars to load_config"
 
 ---
 
-## Task 5: `app.py` — lifespan scheduler job + `app.state`
+## Task 5: `app.py` - lifespan scheduler job + `app.state`
 
 **Files:**
 - Modify: `app.py` (lifespan function, around lines 287-322)
@@ -687,7 +687,7 @@ Find the lifespan function. After the existing scheduler block (the `if interval
     app.state.tg_cfg = tg_cfg
 ```
 
-The `app.state.tg_cfg = tg_cfg` line must be **before** the `yield` — it stores config for the webhook endpoint to use.
+The `app.state.tg_cfg = tg_cfg` line must be **before** the `yield` - it stores config for the webhook endpoint to use.
 
 - [ ] **Step 3: Verify the app starts without telegram config (no crash)**
 
@@ -779,7 +779,7 @@ class TestTelegramWebhook:
         assert dispatched  # task was created
 ```
 
-- [ ] **Step 2: Run new tests — verify they fail**
+- [ ] **Step 2: Run new tests - verify they fail**
 
 ```bash
 uv run pytest tests/test_app.py::TestTelegramWebhook -v
@@ -812,7 +812,7 @@ async def telegram_webhook(request: Request) -> dict:
     return {}
 ```
 
-- [ ] **Step 4: Run all tests — verify they pass**
+- [ ] **Step 4: Run all tests - verify they pass**
 
 ```bash
 uv run pytest tests/ -v --tb=short
@@ -856,7 +856,7 @@ telegram:
   bot_token: ""          # TELEGRAM_BOT_TOKEN
   chat_id: ""            # TELEGRAM_CHAT_ID
   digest_hour: 21        # Hour in Europe/Paris timezone (0-23)
-  webhook_secret: ""     # TELEGRAM_WEBHOOK_SECRET — any random string, e.g.:
+  webhook_secret: ""     # TELEGRAM_WEBHOOK_SECRET - any random string, e.g.:
                          # python3 -c "import secrets; print(secrets.token_hex(16))"
 ```
 
@@ -872,22 +872,22 @@ git commit -m "docs(config): add telegram digest section to config.example.yaml"
 ## Self-Review
 
 **Spec coverage check:**
-- ✅ Daily digest at 21h Europe/Paris — Task 5 (CronTrigger)
-- ✅ On-demand `/digest` — Task 6 (webhook endpoint)
-- ✅ Top 20% by score, last 24h — Task 1 (build_digest)
-- ✅ Minimalist format: title + score + link — Task 1
-- ✅ Message splitting at 4096 chars — Task 1 + 2
-- ✅ Webhook secret verification — Task 6
-- ✅ Auto-register webhook on startup — Task 5 (_register_webhook)
-- ✅ Silently disabled if no config — Task 4 + 5
-- ✅ Error handling: log, don't crash — Task 3 (send_digest)
-- ✅ Config via yaml + env vars — Task 4
-- ✅ config.example.yaml updated — Task 7
+- ✅ Daily digest at 21h Europe/Paris - Task 5 (CronTrigger)
+- ✅ On-demand `/digest` - Task 6 (webhook endpoint)
+- ✅ Top 20% by score, last 24h - Task 1 (build_digest)
+- ✅ Minimalist format: title + score + link - Task 1
+- ✅ Message splitting at 4096 chars - Task 1 + 2
+- ✅ Webhook secret verification - Task 6
+- ✅ Auto-register webhook on startup - Task 5 (_register_webhook)
+- ✅ Silently disabled if no config - Task 4 + 5
+- ✅ Error handling: log, don't crash - Task 3 (send_digest)
+- ✅ Config via yaml + env vars - Task 4
+- ✅ config.example.yaml updated - Task 7
 
 **Type consistency:**
-- `send_digest(tg_cfg: dict, cache)` — consistent across Task 3, 5, 6
-- `_register_webhook(tg_cfg: dict, public_url: str)` — consistent across Task 3, 5
-- `build_digest(articles: list[dict])` — consistent with `cache.articles: list[dict]`
-- `send_message(bot_token: str, chat_id: str, text: str)` — consistent across Task 2, 3
+- `send_digest(tg_cfg: dict, cache)` - consistent across Task 3, 5, 6
+- `_register_webhook(tg_cfg: dict, public_url: str)` - consistent across Task 3, 5
+- `build_digest(articles: list[dict])` - consistent with `cache.articles: list[dict]`
+- `send_message(bot_token: str, chat_id: str, text: str)` - consistent across Task 2, 3
 
-**No placeholders:** confirmed — all steps have concrete code.
+**No placeholders:** confirmed - all steps have concrete code.

@@ -1,4 +1,4 @@
-"""Unit tests for db.py — async SQLAlchemy, in-memory SQLite."""
+"""Unit tests for db.py - async SQLAlchemy, in-memory SQLite."""
 
 import time
 
@@ -110,7 +110,7 @@ class TestSoftDelete:
     async def test_read_articles_survive_next_save(self, db):
         await save_articles([_article(id="1")], total_fetched=1)
         await set_articles_read(["1"])
-        # New refresh — should not wipe soft-deleted article
+        # New refresh - should not wipe soft-deleted article
         await save_articles([_article(id="2")], total_fetched=1)
         # load_articles only returns unread
         loaded, _, _ = await load_articles()

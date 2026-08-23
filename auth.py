@@ -54,7 +54,7 @@ async def init_admin_user() -> None:
         await upsert_user(admin_username, hash_password(admin_password))
         sep = "=" * 56
         logger.warning(sep)
-        logger.warning("  FIRST RUN — admin account created")
+        logger.warning("  FIRST RUN - admin account created")
         logger.warning("  Username : %s", admin_username)
         logger.warning("  Password : %s", admin_password)
         logger.warning("  Set ADMIN_PASSWORD env var to set initial password")
@@ -75,7 +75,7 @@ async def resolve_secret_key() -> str:
     if sk := get_secret_key_from_config():
         return sk
     logger.warning(
-        "No SECRET_KEY configured — using a random key persisted in the database. "
+        "No SECRET_KEY configured - using a random key persisted in the database. "
         "Set SECRET_KEY or auth.secret_key to control it explicitly."
     )
     return await get_or_create_secret_key()

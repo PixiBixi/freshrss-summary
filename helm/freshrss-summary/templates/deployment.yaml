@@ -6,7 +6,7 @@ metadata:
   labels:
     {{- include "freshrss-summary.labels" . | nindent 4 }}
 spec:
-  # Single replica enforced — SQLite does not support concurrent writers.
+  # Single replica enforced - SQLite does not support concurrent writers.
   # Scale horizontally only after migrating to PostgreSQL/MySQL.
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -61,7 +61,7 @@ spec:
               value: {{ .Values.app.serverPort | quote }}
             - name: ADMIN_USERNAME
               value: {{ .Values.app.adminUsername | quote }}
-            # Sensitive configuration — sourced from Secret
+            # Sensitive configuration - sourced from Secret
             - name: FRESHRSS_API_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -82,7 +82,7 @@ spec:
                 secretKeyRef:
                   name: {{ include "freshrss-summary.secretName" . }}
                   key: DATABASE_URL
-                  # Optional — app falls back to SQLite if the key is absent
+                  # Optional - app falls back to SQLite if the key is absent
                   optional: true
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}

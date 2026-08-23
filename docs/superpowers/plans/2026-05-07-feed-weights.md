@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Per-feed score multiplier configurable from the scoring config UI — articles from noisy feeds score lower, trusted feeds score higher.
+**Goal:** Per-feed score multiplier configurable from the scoring config UI - articles from noisy feeds score lower, trusted feeds score higher.
 
-**Architecture:** Feed weights stored as a separate key in the `meta` DB table. The scorer applies the multiplier (`score_final = base_score × feed_weight`) after computing the keyword-based score. The existing scoring config modal gains a second "Feeds" tab alongside "Topics". No new endpoints — `GET/PUT /api/config/scoring` is extended.
+**Architecture:** Feed weights stored as a separate key in the `meta` DB table. The scorer applies the multiplier (`score_final = base_score × feed_weight`) after computing the keyword-based score. The existing scoring config modal gains a second "Feeds" tab alongside "Topics". No new endpoints - `GET/PUT /api/config/scoring` is extended.
 
 **Tech Stack:** Python/FastAPI, SQLAlchemy async Core, vanilla JS, Jinja2
 
@@ -28,7 +28,7 @@
 
 ---
 
-## Task 1 — Scorer: add `feed_weights` parameter
+## Task 1 - Scorer: add `feed_weights` parameter
 
 **Files:**
 - Modify: `scorer.py`
@@ -103,7 +103,7 @@ source .venv/bin/activate
 pytest tests/test_scorer.py::TestFeedWeights -v
 ```
 
-Expected: `ERROR` — `score_article() got unexpected keyword argument 'feed_weights'`
+Expected: `ERROR` - `score_article() got unexpected keyword argument 'feed_weights'`
 
 - [ ] **Step 1.3: Implement in `scorer.py`**
 
@@ -141,7 +141,7 @@ Add `feed_weight` to `to_dict()` (after `"matched_keywords"`):
         }
 ```
 
-Update `score_article()` signature and body — add `feed_weights` param and apply multiplier:
+Update `score_article()` signature and body - add `feed_weights` param and apply multiplier:
 
 ```python
 def score_article(
@@ -181,7 +181,7 @@ def score_article(
     )
 ```
 
-Update `score_articles()` signature — add `feed_weights` param and forward it:
+Update `score_articles()` signature - add `feed_weights` param and forward it:
 
 ```python
 def score_articles(
@@ -218,7 +218,7 @@ git commit -m "feat(scorer): add per-feed score multiplier"
 
 ---
 
-## Task 2 — DB: `get_feed_weights` / `set_feed_weights`
+## Task 2 - DB: `get_feed_weights` / `set_feed_weights`
 
 **Files:**
 - Modify: `db.py`
@@ -261,7 +261,7 @@ class TestFeedWeights:
 pytest tests/test_db.py::TestFeedWeights -v
 ```
 
-Expected: `ImportError` — `cannot import name 'get_feed_weights'`
+Expected: `ImportError` - `cannot import name 'get_feed_weights'`
 
 - [ ] **Step 2.3: Implement in `db.py`**
 
@@ -302,7 +302,7 @@ git commit -m "feat(db): add get/set feed_weights to meta store"
 
 ---
 
-## Task 3 — App: API + pipelines
+## Task 3 - App: API + pipelines
 
 **Files:**
 - Modify: `app.py`
@@ -415,7 +415,7 @@ In `_blocking_fetch_and_score` (line ~544), add `feed_weights` param and forward
 def _blocking_fetch_and_score(
     cfg: dict, topics_cfg: dict, feed_weights: dict[str, float] | None = None
 ) -> tuple[list[dict], int]:
-    """Blocking fetch + score — runs in a thread pool via asyncio.to_thread."""
+    """Blocking fetch + score - runs in a thread pool via asyncio.to_thread."""
     all_articles: list[dict] = []
     total_fetched = 0
 
@@ -424,7 +424,7 @@ def _blocking_fetch_and_score(
         all_articles.extend(scored_batch)
 
     if total_fetched == 0:
-        logger.warning("No articles fetched from FreshRSS — DB not modified")
+        logger.warning("No articles fetched from FreshRSS - DB not modified")
 
     return all_articles, total_fetched
 ```
@@ -486,7 +486,7 @@ In `refresh_stream`, the `_worker` nested function takes `topics_cfg`. Add `feed
 
 ```python
     def _worker(topics_cfg: dict, feed_weights: dict[str, float]) -> None:
-        # Runs in a thread pool — survives SSE client disconnections.
+        # Runs in a thread pool - survives SSE client disconnections.
         cfg = load_config()
         all_articles: list[dict] = []
         total_fetched = 0
@@ -501,7 +501,7 @@ In `refresh_stream`, the `_worker` nested function takes `topics_cfg`. Add `feed
                     _put({"type": "article", "article": d})
 
             if total_fetched == 0:
-                logger.warning("Stream refresh: 0 articles fetched — DB not modified")
+                logger.warning("Stream refresh: 0 articles fetched - DB not modified")
             else:
                 cache.load_progress = "Sauvegarde..."
                 asyncio.run_coroutine_threadsafe(
@@ -581,7 +581,7 @@ git commit -m "feat(api): extend /api/config/scoring with feed_weights, wire int
 
 ---
 
-## Task 4 — i18n: new keys
+## Task 4 - i18n: new keys
 
 **Files:**
 - Modify: `static/js/i18n.js`
@@ -594,32 +594,32 @@ In `i18n.js`, add to each language block (after the `'cfg.ph.keywords'` line):
 // French (fr)
 'cfg.tabTopics':    'Topics',
 'cfg.tabFeeds':     'Feeds',
-'cfg.noFeeds':      'Aucun feed — rafraîchis pour charger tes articles.',
+'cfg.noFeeds':      'Aucun feed - rafraîchis pour charger tes articles.',
 
 // English (en)
 'cfg.tabTopics':    'Topics',
 'cfg.tabFeeds':     'Feeds',
-'cfg.noFeeds':      'No feeds yet — refresh to load your articles.',
+'cfg.noFeeds':      'No feeds yet - refresh to load your articles.',
 
 // German (de)
 'cfg.tabTopics':    'Topics',
 'cfg.tabFeeds':     'Feeds',
-'cfg.noFeeds':      'Keine Feeds — lade Artikel, um Feeds anzuzeigen.',
+'cfg.noFeeds':      'Keine Feeds - lade Artikel, um Feeds anzuzeigen.',
 
 // Spanish (es)
 'cfg.tabTopics':    'Topics',
 'cfg.tabFeeds':     'Feeds',
-'cfg.noFeeds':      'Sin feeds — actualiza para cargar tus artículos.',
+'cfg.noFeeds':      'Sin feeds - actualiza para cargar tus artículos.',
 
 // Italian (it)
 'cfg.tabTopics':    'Topics',
 'cfg.tabFeeds':     'Feeds',
-'cfg.noFeeds':      'Nessun feed — aggiorna per caricare i tuoi articoli.',
+'cfg.noFeeds':      'Nessun feed - aggiorna per caricare i tuoi articoli.',
 
 // Portuguese (pt)
 'cfg.tabTopics':    'Topics',
 'cfg.tabFeeds':     'Feeds',
-'cfg.noFeeds':      'Nenhum feed — atualize para carregar seus artigos.',
+'cfg.noFeeds':      'Nenhum feed - atualize para carregar seus artigos.',
 ```
 
 - [ ] **Step 4.2: Commit**
@@ -631,7 +631,7 @@ git commit -m "feat(i18n): add cfg.tabTopics, cfg.tabFeeds, cfg.noFeeds keys"
 
 ---
 
-## Task 5 — UI: Feeds tab in scoring modal
+## Task 5 - UI: Feeds tab in scoring modal
 
 **Files:**
 - Modify: `templates/index.html`
@@ -845,7 +845,7 @@ git commit -m "feat(ui): add Feeds tab to scoring config modal"
 
 ---
 
-## Task 6 — Render: feed weight in score tooltip
+## Task 6 - Render: feed weight in score tooltip
 
 **Files:**
 - Modify: `static/js/render.js`
@@ -866,7 +866,7 @@ In `renderRow()`, replace the `const tooltip = ...` line:
 
 - [ ] **Step 6.2: Update tooltip in `renderCompactRow()`**
 
-Same change in `renderCompactRow()` — replace its `const tooltip = ...` line:
+Same change in `renderCompactRow()` - replace its `const tooltip = ...` line:
 
 ```js
   const feedLine = (a.feed_weight && Math.abs(a.feed_weight - 1.0) > 0.001)
