@@ -3,6 +3,10 @@ tag_prefix = "v"
 
 [commit_types]
 desloppify = { changelog_title = "Code Health" }
+# Dependency bumps change the image that ships, and nothing here publishes without a
+# tag: both the image and the Helm chart are gated on a bump. Patch rather than minor,
+# since no feature ships in a dependency bump.
+chore = { bump_patch = true }
 # Out of the box cog only bumps on feat and fix, so a release made only of perf
 # work produced no tag and therefore no Docker image - the improvement sat on
 # master until some unrelated fix happened to carry it out.
