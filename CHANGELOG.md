@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.7](https://github.com/PixiBixi/freshrss-summary/compare/22e7500ad037cd44dc4f8563ccda20c78a66b69c..v1.9.7) - 2026-08-29
+#### Bug Fixes
+- (**deps**) update dependency pydantic to v2.13.5 (#61) - ([22e7500](https://github.com/PixiBixi/freshrss-summary/commit/22e7500ad037cd44dc4f8563ccda20c78a66b69c)) - renovate[bot]
+
+- - -
+
 ## [v1.9.6](https://github.com/PixiBixi/freshrss-summary/compare/408f37d0fd936a664d9471e7c5de4782229f8481..v1.9.6) - 2026-08-23
 #### Continuous Integration
 - (**cog**) let a chore cut its own patch release - ([947c756](https://github.com/PixiBixi/freshrss-summary/commit/947c756faa13ce796ca020c109174a82df8a478e)) - Jeremy Delgado
