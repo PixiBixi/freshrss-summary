@@ -4,9 +4,7 @@ on:
   push:
     branches: [master]
 
-permissions:
-  contents: write
-  packages: write
+permissions: {}
 
 env:
   REGISTRY: ghcr.io
@@ -14,17 +12,23 @@ env:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # creates the tag and the GitHub release
     outputs:
       bumped: ${{ steps.bump.outputs.bumped }}
       tag_name: ${{ steps.bump.outputs.tag_name }}
     steps:
-      - uses: actions/checkout@v7
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: cocogitto/cocogitto-action@v4
+      - uses: cocogitto/cocogitto-action@390bda87a19bf627e03ad075c67a11e9ddbb7547 # v4
         with:
           git-user: github-actions[bot]
           git-user-email: github-actions[bot]@users.noreply.github.com
@@ -63,26 +67,30 @@ jobs:
   build-push:
     needs: release
     if: needs.release.outputs.bumped == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.release.outputs.tag_name }}
 
-      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/metadata-action@v6
+      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         id: meta
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -92,7 +100,7 @@ jobs:
             type=raw,value=latest
             type=sha,prefix=sha-
 
-      - uses: docker/build-push-action@v7
+      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           push: true
@@ -105,12 +113,16 @@ jobs:
   push-helm:
     needs: release
     if: needs.release.outputs.bumped == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.release.outputs.tag_name }}
 
@@ -120,7 +132,7 @@ jobs:
           sed -i "s/^version: .*/version: ${VERSION#v}/" helm/freshrss-summary/Chart.yaml
           echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
-      - uses: bsord/helm-push@v4.2.0
+      - uses: bsord/helm-push@51f937208fed71540ab5ec5215cf9b3ecae9c7b7 # v4.2.0
         with:
           useOCIRegistry: true
           registry-url: oci://ghcr.io/${{ env.OWNER }}/charts
