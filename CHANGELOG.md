@@ -1,6 +1,17 @@
 # Changelog
 
 - - -
+## [v1.9.8](https://github.com/PixiBixi/freshrss-summary/compare/47e6e2b6ed087d52417a8caa5bad2929c163f471..v1.9.8) - 2026-09-02
+#### Documentation
+- (**license**) add the MIT license - ([10e2c5d](https://github.com/PixiBixi/freshrss-summary/commit/10e2c5dcf89c1e0163d4888ea8082307bb41fc6d)) - Jeremy Delgado
+- (**security**) add a security policy - ([98f8ce7](https://github.com/PixiBixi/freshrss-summary/commit/98f8ce728f1c58252746da97511ea7f8789f1f6e)) - Jeremy Delgado
+#### Continuous Integration
+- (**hardening**) pin actions by SHA, harden the runner, scope permissions - ([47e6e2b](https://github.com/PixiBixi/freshrss-summary/commit/47e6e2b6ed087d52417a8caa5bad2929c163f471)) - Jeremy Delgado
+#### Miscellaneous Chores
+- (**codeowners**) declare a single owner for every path - ([ecbe7b7](https://github.com/PixiBixi/freshrss-summary/commit/ecbe7b701ec97acccedfb250740867f9dae8c374)) - Jeremy Delgado
+
+- - -
+
 ## [v1.9.7](https://github.com/PixiBixi/freshrss-summary/compare/22e7500ad037cd44dc4f8563ccda20c78a66b69c..v1.9.7) - 2026-08-29
 #### Bug Fixes
 - (**deps**) update dependency pydantic to v2.13.5 (#61) - ([22e7500](https://github.com/PixiBixi/freshrss-summary/commit/22e7500ad037cd44dc4f8563ccda20c78a66b69c)) - renovate[bot]
