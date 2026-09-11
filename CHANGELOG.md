@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.9](https://github.com/PixiBixi/freshrss-summary/compare/b7a1b27bf0ce07920f9afc87eb600613a7a86eb1..v1.9.9) - 2026-09-11
+#### Miscellaneous Chores
+- (**deps**) update astral-sh/setup-uv action to v10.1.0 (#64) - ([b7a1b27](https://github.com/PixiBixi/freshrss-summary/commit/b7a1b27bf0ce07920f9afc87eb600613a7a86eb1)) - renovate[bot]
+
+- - -
+
 ## [v1.9.8](https://github.com/PixiBixi/freshrss-summary/compare/47e6e2b6ed087d52417a8caa5bad2929c163f471..v1.9.8) - 2026-09-02
 #### Documentation
 - (**license**) add the MIT license - ([10e2c5d](https://github.com/PixiBixi/freshrss-summary/commit/10e2c5dcf89c1e0163d4888ea8082307bb41fc6d)) - Jeremy Delgado
