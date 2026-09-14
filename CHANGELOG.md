@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.11](https://github.com/PixiBixi/freshrss-summary/compare/53d77dafb9a53ab320e5c8c6604dfe161178d612..v1.9.11) - 2026-09-14
+#### Miscellaneous Chores
+- (**deps**) update dependency greenlet to v3.5.6 (#66) - ([53d77da](https://github.com/PixiBixi/freshrss-summary/commit/53d77dafb9a53ab320e5c8c6604dfe161178d612)) - renovate[bot]
+
+- - -
+
 ## [v1.9.10](https://github.com/PixiBixi/freshrss-summary/compare/3ecdb6ff42ea837e4f258a9cce1780984b7f7531..v1.9.10) - 2026-09-14
 #### Bug Fixes
 - (**deps**) update dependency uvicorn to v0.53.0 - ([3ecdb6f](https://github.com/PixiBixi/freshrss-summary/commit/3ecdb6ff42ea837e4f258a9cce1780984b7f7531)) - renovate[bot]
