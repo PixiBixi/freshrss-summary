@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.10](https://github.com/PixiBixi/freshrss-summary/compare/3ecdb6ff42ea837e4f258a9cce1780984b7f7531..v1.9.10) - 2026-09-14
+#### Bug Fixes
+- (**deps**) update dependency uvicorn to v0.53.0 - ([3ecdb6f](https://github.com/PixiBixi/freshrss-summary/commit/3ecdb6ff42ea837e4f258a9cce1780984b7f7531)) - renovate[bot]
+
+- - -
+
 ## [v1.9.9](https://github.com/PixiBixi/freshrss-summary/compare/b7a1b27bf0ce07920f9afc87eb600613a7a86eb1..v1.9.9) - 2026-09-11
 #### Miscellaneous Chores
 - (**deps**) update astral-sh/setup-uv action to v10.1.0 (#64) - ([b7a1b27](https://github.com/PixiBixi/freshrss-summary/commit/b7a1b27bf0ce07920f9afc87eb600613a7a86eb1)) - renovate[bot]
