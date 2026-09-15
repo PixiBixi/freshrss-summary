@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.13](https://github.com/PixiBixi/freshrss-summary/compare/e3308d4f3d8bae8ea992fdfde441bdf981b9adff..v1.9.13) - 2026-09-15
+#### Miscellaneous Chores
+- (**deps**) update docker github actions (#68) - ([e3308d4](https://github.com/PixiBixi/freshrss-summary/commit/e3308d4f3d8bae8ea992fdfde441bdf981b9adff)) - renovate[bot]
+
+- - -
+
 ## [v1.9.12](https://github.com/PixiBixi/freshrss-summary/compare/dd60c8b0e5d9af231e4f2ccb918190a9ed501e29..v1.9.12) - 2026-09-15
 #### Bug Fixes
 - (**deps**) update dependency sqlalchemy to v2.0.53 (#67) - ([dd60c8b](https://github.com/PixiBixi/freshrss-summary/commit/dd60c8b0e5d9af231e4f2ccb918190a9ed501e29)) - renovate[bot]
