@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.12](https://github.com/PixiBixi/freshrss-summary/compare/dd60c8b0e5d9af231e4f2ccb918190a9ed501e29..v1.9.12) - 2026-09-15
+#### Bug Fixes
+- (**deps**) update dependency sqlalchemy to v2.0.53 (#67) - ([dd60c8b](https://github.com/PixiBixi/freshrss-summary/commit/dd60c8b0e5d9af231e4f2ccb918190a9ed501e29)) - renovate[bot]
+
+- - -
+
 ## [v1.9.11](https://github.com/PixiBixi/freshrss-summary/compare/53d77dafb9a53ab320e5c8c6604dfe161178d612..v1.9.11) - 2026-09-14
 #### Miscellaneous Chores
 - (**deps**) update dependency greenlet to v3.5.6 (#66) - ([53d77da](https://github.com/PixiBixi/freshrss-summary/commit/53d77dafb9a53ab320e5c8c6604dfe161178d612)) - renovate[bot]
