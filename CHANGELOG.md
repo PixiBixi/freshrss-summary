@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.15](https://github.com/PixiBixi/freshrss-summary/compare/0f8c8f86b4cf9e63f293d58111c7859659de6a48..v1.9.15) - 2026-09-16
+#### Miscellaneous Chores
+- (**deps**) update docker/setup-buildx-action digest to f87e599 (#70) - ([0f8c8f8](https://github.com/PixiBixi/freshrss-summary/commit/0f8c8f86b4cf9e63f293d58111c7859659de6a48)) - renovate[bot]
+
+- - -
+
 ## [v1.9.14](https://github.com/PixiBixi/freshrss-summary/compare/ef9c64b69eba4a257b1f59d6953ce9c0f4e5b27f..v1.9.14) - 2026-09-16
 #### Bug Fixes
 - (**deps**) update dependency sqlalchemy to v2.0.54 (#69) - ([ef9c64b](https://github.com/PixiBixi/freshrss-summary/commit/ef9c64b69eba4a257b1f59d6953ce9c0f4e5b27f)) - renovate[bot]
