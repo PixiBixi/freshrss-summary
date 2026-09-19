@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.16](https://github.com/PixiBixi/freshrss-summary/compare/74c224b8eef919010cf0280abac8d1c7e1334e47..v1.9.16) - 2026-09-19
+#### Miscellaneous Chores
+- (**deps**) update dependency ubuntu to v26 (#71) - ([74c224b](https://github.com/PixiBixi/freshrss-summary/commit/74c224b8eef919010cf0280abac8d1c7e1334e47)) - renovate[bot]
+
+- - -
+
 ## [v1.9.15](https://github.com/PixiBixi/freshrss-summary/compare/0f8c8f86b4cf9e63f293d58111c7859659de6a48..v1.9.15) - 2026-09-16
 #### Miscellaneous Chores
 - (**deps**) update docker/setup-buildx-action digest to f87e599 (#70) - ([0f8c8f8](https://github.com/PixiBixi/freshrss-summary/commit/0f8c8f86b4cf9e63f293d58111c7859659de6a48)) - renovate[bot]
