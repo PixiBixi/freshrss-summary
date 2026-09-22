@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.17](https://github.com/PixiBixi/freshrss-summary/compare/33d0a7d82898183f759c900b41c29c23376aaea9..v1.9.17) - 2026-09-22
+#### Miscellaneous Chores
+- (**deps**) update astral-sh/setup-uv action to v10.2.0 (#72) - ([33d0a7d](https://github.com/PixiBixi/freshrss-summary/commit/33d0a7d82898183f759c900b41c29c23376aaea9)) - renovate[bot]
+
+- - -
+
 ## [v1.9.16](https://github.com/PixiBixi/freshrss-summary/compare/74c224b8eef919010cf0280abac8d1c7e1334e47..v1.9.16) - 2026-09-19
 #### Miscellaneous Chores
 - (**deps**) update dependency ubuntu to v26 (#71) - ([74c224b](https://github.com/PixiBixi/freshrss-summary/commit/74c224b8eef919010cf0280abac8d1c7e1334e47)) - renovate[bot]
