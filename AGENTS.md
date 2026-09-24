@@ -1,4 +1,4 @@
-# FreshRSS Summary - Claude Context
+# AGENTS.md - FreshRSS Summary
 
 ## What this project is
 
@@ -33,13 +33,7 @@ L'utilisateur est SRE/Platform Engineer - les topics prioritaires sont SRE, GKE,
 - SQLite path : `data/articles.db` (gitignored)
 - Cache in-memory rechargé depuis SQLite au démarrage (lifespan FastAPI)
 - Topics et keywords entièrement configurables dans `config.yaml`
-
-## Règle MD obligatoire (note : CLAUDE/ n'existe pas encore)
-
-À chaque modification technique, mettre à jour **sans attendre d'être demandé** :
-- `CLAUDE/progress.md` - ligne dans le tableau de changements (créer si absent)
-- `CLAUDE/architecture.md` - si la structure ou une décision technique change (créer si absent)
-- `README.md` - si une feature, un flag ou un comportement change
+- Mettre à jour `README.md` quand une feature, un flag ou un comportement change
 
 ## Auth model
 
@@ -51,8 +45,3 @@ L'utilisateur est SRE/Platform Engineer - les topics prioritaires sont SRE, GKE,
 ## Pre-commit hooks
 
 - `ruff-format` auto-modifie `app.py` lors du premier commit → re-stager le fichier et recommiter
-
-## Detailed docs
-
-- `CLAUDE/architecture.md` - décisions techniques (créer si absent)
-- `CLAUDE/progress.md` - historique des changements (créer si absent)
