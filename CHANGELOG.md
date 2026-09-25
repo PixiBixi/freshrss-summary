@@ -1,6 +1,15 @@
 # Changelog
 
 - - -
+## [v1.9.18](https://github.com/PixiBixi/freshrss-summary/compare/47bd7d3dc4ea7dddbc878a36de440d2c8a840654..v1.9.18) - 2026-09-25
+#### Bug Fixes
+- (**deps**) update dependency sqlalchemy to v2.1.0 (#73) - ([f3cbd29](https://github.com/PixiBixi/freshrss-summary/commit/f3cbd29817af8610fecc5708f2c4f88da17280f8)) - renovate[bot]
+#### Documentation
+- (**agents**) refresh AGENTS.md against the code - ([32baa1a](https://github.com/PixiBixi/freshrss-summary/commit/32baa1ac4483007708868c3f35ce982f66660fd3)) - Jeremy Delgado
+- (**agents**) rename CLAUDE.md to AGENTS.md - ([47bd7d3](https://github.com/PixiBixi/freshrss-summary/commit/47bd7d3dc4ea7dddbc878a36de440d2c8a840654)) - Jeremy Delgado
+
+- - -
+
 ## [v1.9.17](https://github.com/PixiBixi/freshrss-summary/compare/33d0a7d82898183f759c900b41c29c23376aaea9..v1.9.17) - 2026-09-22
 #### Miscellaneous Chores
 - (**deps**) update astral-sh/setup-uv action to v10.2.0 (#72) - ([33d0a7d](https://github.com/PixiBixi/freshrss-summary/commit/33d0a7d82898183f759c900b41c29c23376aaea9)) - renovate[bot]
