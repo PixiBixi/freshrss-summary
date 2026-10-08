@@ -3,7 +3,7 @@ name = "freshrss-summary"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi==0.142.2",
+    "fastapi==0.142.4",
     "itsdangerous==2.2.0",
     "python-multipart==0.0.32",
     "pydantic==2.13.5",
