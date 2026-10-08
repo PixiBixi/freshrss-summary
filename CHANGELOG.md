@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.28](https://github.com/PixiBixi/freshrss-summary/compare/7f2fc7eb55f592f317dde3e766361dd04094b2eb..v1.9.28) - 2026-10-08
+#### Bug Fixes
+- (**deps**) update dependency sqlalchemy to v2.1.4 (#82) - ([7f2fc7e](https://github.com/PixiBixi/freshrss-summary/commit/7f2fc7eb55f592f317dde3e766361dd04094b2eb)) - renovate[bot]
+
+- - -
+
 ## [v1.9.27](https://github.com/PixiBixi/freshrss-summary/compare/f8d2253683dc9706bd2cf9cddddf3e4521c07283..v1.9.27) - 2026-10-08
 #### Miscellaneous Chores
 - (**deps**) update step-security/harden-runner action to v2.22.1 (#83) - ([f8d2253](https://github.com/PixiBixi/freshrss-summary/commit/f8d2253683dc9706bd2cf9cddddf3e4521c07283)) - renovate[bot]
