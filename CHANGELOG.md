@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.30](https://github.com/PixiBixi/freshrss-summary/compare/27084c1743f72606bed350b80117ebfc320bf4e8..v1.9.30) - 2026-10-09
+#### Bug Fixes
+- (**deps**) update dependency pydantic to v2.14.0 (#85) - ([27084c1](https://github.com/PixiBixi/freshrss-summary/commit/27084c1743f72606bed350b80117ebfc320bf4e8)) - renovate[bot]
+
+- - -
+
 ## [v1.9.29](https://github.com/PixiBixi/freshrss-summary/compare/8157bdb83653e405cf567f98c359fe69b1b6b4ce..v1.9.29) - 2026-10-09
 #### Bug Fixes
 - (**deps**) update dependency fastapi to v0.143.0 (#84) - ([8157bdb](https://github.com/PixiBixi/freshrss-summary/commit/8157bdb83653e405cf567f98c359fe69b1b6b4ce)) - renovate[bot]
