@@ -6,7 +6,7 @@ dependencies = [
     "fastapi==0.143.0",
     "itsdangerous==2.2.0",
     "python-multipart==0.0.32",
-    "pydantic==2.13.5",
+    "pydantic==2.14.0",
     "uvicorn[standard]==0.54.0",
     "httpx==0.28.1",
     "pyyaml==6.0.3",
