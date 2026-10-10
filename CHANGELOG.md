@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.31](https://github.com/PixiBixi/freshrss-summary/compare/9901a7c3e522d442bb7cb620352e10daf3d7fec6..v1.9.31) - 2026-10-10
+#### Miscellaneous Chores
+- (**deps**) update astral-sh/setup-uv action to v10.3.0 (#86) - ([9901a7c](https://github.com/PixiBixi/freshrss-summary/commit/9901a7c3e522d442bb7cb620352e10daf3d7fec6)) - renovate[bot]
+
+- - -
+
 ## [v1.9.30](https://github.com/PixiBixi/freshrss-summary/compare/27084c1743f72606bed350b80117ebfc320bf4e8..v1.9.30) - 2026-10-09
 #### Bug Fixes
 - (**deps**) update dependency pydantic to v2.14.0 (#85) - ([27084c1](https://github.com/PixiBixi/freshrss-summary/commit/27084c1743f72606bed350b80117ebfc320bf4e8)) - renovate[bot]
