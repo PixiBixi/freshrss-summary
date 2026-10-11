@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.32](https://github.com/PixiBixi/freshrss-summary/compare/ec73541573dc511d36887f1190f6548d20c95501..v1.9.32) - 2026-10-11
+#### Miscellaneous Chores
+- (**deps**) update dependency python to 3.15 (#87) - ([ec73541](https://github.com/PixiBixi/freshrss-summary/commit/ec73541573dc511d36887f1190f6548d20c95501)) - renovate[bot]
+
+- - -
+
 ## [v1.9.31](https://github.com/PixiBixi/freshrss-summary/compare/9901a7c3e522d442bb7cb620352e10daf3d7fec6..v1.9.31) - 2026-10-10
 #### Miscellaneous Chores
 - (**deps**) update astral-sh/setup-uv action to v10.3.0 (#86) - ([9901a7c](https://github.com/PixiBixi/freshrss-summary/commit/9901a7c3e522d442bb7cb620352e10daf3d7fec6)) - renovate[bot]
