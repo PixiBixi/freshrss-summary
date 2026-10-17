@@ -30,25 +30,30 @@ function saveReadIds() {
   try { localStorage.setItem(LS_KEY, JSON.stringify([..._markedIds])); } catch {}
 }
 const _readQueue = new Set();
+const _readInflight = new Set();
 let _readFlushTimer = null;
 let _lastScrollY = 0;
+let _scrollTicking = false;
+
+function _scanScrolledPast() {
+  _scrollTicking = false;
+  // Rows are in DOM order: stop at the first one still on screen.
+  for (const el of document.querySelectorAll('.feed-row[data-id], .compact-row[data-id]')) {
+    const id = el.dataset.id;
+    if (!id || _markedIds.has(id) || _readQueue.has(id) || _readInflight.has(id) || el.dataset.alreadyRead) continue;
+    if (el.getBoundingClientRect().bottom >= 0) break;
+    _readQueue.add(id);
+    scheduleReadFlush();
+  }
+}
 
 window.addEventListener('scroll', () => {
   const currentY = window.scrollY;
-  if (currentY <= _lastScrollY) { _lastScrollY = currentY; return; }
+  const down = currentY > _lastScrollY;
   _lastScrollY = currentY;
-
-  document.querySelectorAll('.feed-row[data-id], .compact-row[data-id]').forEach(el => {
-    const rect = el.getBoundingClientRect();
-    if (rect.bottom < 0) {
-      const id = el.dataset.id;
-      if (id && !_markedIds.has(id) && !el.dataset.alreadyRead) {
-        _markedIds.add(id);
-        _readQueue.add(id);
-        scheduleReadFlush();
-      }
-    }
-  });
+  if (!down || _scrollTicking) return;
+  _scrollTicking = true;
+  requestAnimationFrame(_scanScrolledPast);
 }, { passive: true });
 
 function scheduleReadFlush() {
@@ -61,19 +66,19 @@ async function flushReadQueue() {
   if (!_readQueue.size) return;
   if (!state.authenticated) { _readQueue.clear(); return; }
   const ids = [..._readQueue]; _readQueue.clear();
+  ids.forEach(id => _readInflight.add(id));
   try {
-    await fetch('/api/mark-read', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ article_ids: ids }),
-    });
+    await postMarkRead(ids);
     for (const id of ids) {
+      _markedIds.add(id);
       document.querySelector(`.feed-row[data-id="${CSS.escape(id)}"], .compact-row[data-id="${CSS.escape(id)}"]`)?.classList.add('read');
     }
     saveReadIds();
-    applyFilters();
   } catch (e) {
-    ids.forEach(id => { _markedIds.delete(id); _readQueue.add(id); });
+    ids.forEach(id => _readQueue.add(id));
     scheduleReadFlush();
+  } finally {
+    ids.forEach(id => _readInflight.delete(id));
   }
 }
 
