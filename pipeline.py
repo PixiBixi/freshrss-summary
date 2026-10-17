@@ -1,11 +1,11 @@
-"""Shared fetch-score-rescore pipeline logic for app.py and cli.py.
+"""Shared fetch-score-rescore pipeline logic for refresh_service.py and cli.py.
 
 Both the web app and CLI perform the same core operations:
   1. Fetch unread articles from FreshRSS in batches and score each batch.
   2. Re-score previously saved articles from DB with updated topic weights.
 
 This module extracts those pure operations, keeping them free of HTTP/cache
-side effects. Callers (app.py, cli.py) own progress reporting and persistence.
+side effects. Callers (refresh_service.py, cli.py) own progress reporting and persistence.
 """
 
 from __future__ import annotations
@@ -28,9 +28,9 @@ def rescore_chunk(
     """
     Re-score one chunk of DB rows, building the topics locally.
 
-    Lives here rather than in app.py on purpose: it is the entry point submitted to
-    a ProcessPoolExecutor, and a spawned worker re-imports the module that defines
-    it. Importing app.py would build the whole FastAPI application in every worker.
+    Lives here rather than in refresh_service.py on purpose: it is the entry point
+    submitted to a ProcessPoolExecutor, and a spawned worker re-imports the module
+    that defines it. That one would drag the DB, metrics and config into every worker.
     Arguments and the return value are plain dicts and lists, hence picklable.
     """
     return rescore_articles(raw, build_topics(topics_cfg), title_weight, min_score, feed_weights)

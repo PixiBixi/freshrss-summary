@@ -9,11 +9,12 @@ L'utilisateur est SRE/Platform Engineer - les topics prioritaires sont SRE, GKE,
 
 | File | Role |
 |------|------|
-| `app.py` | FastAPI app, endpoints, cache in-memory, lifespan (DB init, admin user, scheduler, Telegram) |
+| `app.py` | FastAPI app : routes, slot de refresh (`_start_in_slot`), lifespan (DB init, admin user, scheduler, Telegram) |
+| `refresh_service.py` | Orchestration refresh/rescore (fetch, score, persist, cache, metrics) partagée par POST, SSE, scheduler et CLI ; `Cache` in-memory |
 | `auth.py` | Hash de mot de passe, `require_auth`, résolution de la clé de session, rate limit login |
 | `config.py` | Chargement de `config.yaml` + surcharge par env vars, defaults |
 | `models.py` | `Article` (dataclass) et les TypedDicts partagés (`ArticleDict`, `DbArticleRow`, ...) |
-| `pipeline.py` | Logique fetch-score-rescore partagée entre `app.py` et `cli.py` |
+| `pipeline.py` | Fetch + scoring purs (sans persistance), utilisés par `refresh_service.py` et `cli.py` |
 | `freshrss_client.py` | Client API Google Reader (FreshRSS) |
 | `scorer.py` | Scoring keyword-based par topic |
 | `db.py` | Persistance async SQLAlchemy Core (SQLite/MySQL/PostgreSQL) |

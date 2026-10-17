@@ -1,17 +1,14 @@
 """FreshRSS Summary - FastAPI backend."""
 
 import asyncio
-import concurrent.futures
 import datetime
 import json
 import logging
 import logging.config
-import math
 import os
 import secrets
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine
-from concurrent.futures.process import BrokenProcessPool
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -46,38 +43,30 @@ from db import (
     DEFAULT_DB_URL,
     add_pending_sync,
     add_snooze,
-    clear_pending_sync,
     delete_snooze,
     get_all_feed_titles,
-    get_bookmarked_ids,
     get_due_snoozes,
     get_engine,
     get_feed_weights,
-    get_meta,
     get_or_seed_scoring_config,
-    get_pending_sync,
     get_scoring_config,
-    get_seen_ids,
     get_user_hash,
     init_db,
     load_articles,
     load_for_rescore,
     load_read_articles,
-    save_articles,
     set_articles_read,
     set_feed_weights,
     set_scoring_config,
     set_user_password,
-    sync_articles,
     toggle_bookmark,
 )
 from freshrss_client import FreshRSSClient, close_shared_client, get_shared_client
 from logging_config import LOGGING_CONFIG
-from metrics import CONTENT_TYPE_LATEST, _get_metrics, _update_prom_cache, generate_latest
-from models import ArticleDict, strip_content
-from pipeline import fetch_and_score_incremental_iter, rescore_chunk
+from metrics import CONTENT_TYPE_LATEST, _update_prom_cache, generate_latest
+from refresh_service import Cache, refresh_job, rescore_job
 from scheduler import run_daily_at, run_every
-from scorer import DEFAULT_TOPICS, build_topics
+from scorer import DEFAULT_TOPICS
 from telegram_digest import (
     TelegramConfig,
     check_trending,
@@ -90,64 +79,8 @@ logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Config
+# In-memory cache (process-local: the app must run as a single replica)
 # ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# In-memory cache
-# ---------------------------------------------------------------------------
-
-
-class Cache:
-    def __init__(self):
-        self.articles: list[ArticleDict] = []
-        self.all_topics: list[str] = []
-        self.total_fetched: int = 0
-        self.last_refresh: float | None = None
-        self.is_loading: bool = False
-        self.initialized: bool = False  # True after first populate() completes post-lifespan
-        self.load_progress: str = ""
-        self.error: str | None = None
-        self.refresh_task: asyncio.Task | None = None
-        self.trending_alerted: set[tuple[str, int]] = set()
-
-    def try_begin_loading(self) -> bool:
-        """
-        Claim the refresh slot, or return False if one is already running.
-
-        Test and set happen with no `await` in between, which makes them atomic on
-        the single-threaded event loop. Checking `is_loading` in a handler and
-        letting the worker set it later left a window several awaits wide: a
-        double-click, or the scheduler firing during a manual refresh, started two
-        concurrent fetches writing the same rows.
-
-        Only _start_in_slot() calls this: it ties the release to the job's task, so
-        no early return or exception between claim and release can leak the slot.
-        """
-        if self.is_loading:
-            return False
-        self.is_loading = True
-        self.error = None
-        self.load_progress = "Démarrage..."
-        return True
-
-    def end_loading(self) -> None:
-        """Release the refresh slot."""
-        self.is_loading = False
-
-    def populate(
-        self, articles: list[ArticleDict], last_refresh: float | None, total_fetched: int
-    ) -> None:
-        # Single choke point for the cache: `_content` holds the full article text
-        # (~10 kB each) and is only needed on the way to the DB. Keeping it here
-        # would both bloat memory and leak it through the public /api/articles.
-        self.articles = [strip_content(a) for a in articles]
-        self.last_refresh = last_refresh
-        self.total_fetched = total_fetched
-        self.all_topics = sorted({t for a in self.articles for t in a["matched_topics"]})
-        self.initialized = True
-
 
 cache = Cache()
 
@@ -305,12 +238,6 @@ def _safe_next_url(raw: str) -> str:
     if raw.startswith("/") and not raw.startswith(("//", "/\\")):
         return raw
     return "/"
-
-
-def _make_freshrss_client(cfg: ConfigDict) -> FreshRSSClient:
-    """Build a FreshRSSClient from the freshrss section of the config."""
-    fr = cfg["freshrss"]  # type: ignore[typeddict-item]
-    return FreshRSSClient(fr["url"], fr["username"], fr["api_password"])
 
 
 def _shared_freshrss_client(cfg: ConfigDict) -> FreshRSSClient:
@@ -492,124 +419,14 @@ async def _auto_refresh() -> None:
     await task
 
 
-async def _persist_and_populate(
-    article_dicts: list[dict[str, Any]],
-    total_fetched: int,
-    elapsed: float | None = None,
-    refresh_time: float | None = None,
-) -> None:
-    """Save articles to DB, reconcile bookmarks, populate cache, update Prometheus.
-    Used by the rescore path (full replace semantics).
-    """
-    read_meanwhile = await save_articles(article_dicts, total_fetched)
-    if read_meanwhile:
-        article_dicts = [a for a in article_dicts if a["id"] not in read_meanwhile]
-    bookmarked = await get_bookmarked_ids()
-    for a in article_dicts:
-        a["bookmarked"] = a["id"] in bookmarked
-    cache.populate(
-        article_dicts, refresh_time if refresh_time is not None else time.time(), total_fetched
-    )
-    if elapsed is not None:
-        m = _get_metrics()
-        m.refreshes.inc()
-        m.refresh_dur.observe(elapsed)
-    _update_prom_cache(cache.articles, cache.last_refresh)
-
-
-async def _incremental_persist_and_populate(
-    new_articles: list[dict[str, Any]],
-    removed_ids: set[str],
-    processed_ids: list[str],
-    total_fetched: int,
-    elapsed: float,
-) -> None:
-    """Incremental sync to DB, refresh the cache, update Prometheus.
-
-    Runs on every successful refresh, changes or not: a no-op refresh is still a
-    refresh, and skipping it froze last_refresh and the refresh metrics.
-    """
-    # Processed IDs are recorded whatever their score: articles below min_score are
-    # never stored in `articles`, so seen_ids is all that keeps them out of the
-    # next diff. Same transaction as the articles, or a failed write loses them.
-    refreshed_at = await sync_articles(new_articles, removed_ids, total_fetched, processed_ids)
-    if new_articles or removed_ids:
-        articles, _, _ = await load_articles()
-    else:
-        articles = cache.articles  # nothing changed: skip reloading the table
-    cache.populate(articles, float(refreshed_at), total_fetched)
-    m = _get_metrics()
-    m.refreshes.inc()
-    m.refresh_dur.observe(elapsed)
-    _update_prom_cache(cache.articles, cache.last_refresh)
-
-
 async def _do_fetch_and_score() -> None:
-    """Background task: incremental fetch → score → sync DB → populate cache.
+    """Refresh job for POST /api/refresh and the scheduler. Run through _start_in_slot()."""
+    await refresh_job(cache)
 
-    Run through _start_in_slot(), which owns the refresh slot.
-    """
-    _t0 = time.perf_counter()
 
-    try:
-        cfg = load_config()
-        topics_cfg = await get_or_seed_scoring_config(cfg, DEFAULT_TOPICS)
-        feed_weights = await get_feed_weights()
-
-        # Drain outbox: replay mark-as-read calls that failed when FreshRSS was offline
-        pending = await get_pending_sync()
-        if pending:
-            try:
-
-                def _sync_pending() -> None:
-                    _shared_freshrss_client(cfg).mark_as_read(pending)
-
-                await asyncio.to_thread(_sync_pending)
-                await clear_pending_sync(pending)
-                logger.info("Flushed %d pending read sync(s) to FreshRSS", len(pending))
-            except Exception:
-                logger.exception("Pending sync flush failed, will retry on next refresh")
-
-        seen_ids = await get_seen_ids()
-
-        def _blocking_incremental() -> tuple[list[dict[str, Any]], set[str], int, list[str]]:
-            all_new: list[dict[str, Any]] = []
-            removed: set[str] = set()
-            total = 0
-            processed: list[str] = []
-            topics = build_topics(topics_cfg)
-            for b in fetch_and_score_incremental_iter(cfg, topics, seen_ids, feed_weights):
-                cache.load_progress = f"Récupération : {len(all_new) + len(b.scored)} nouveaux..."
-                all_new.extend(b.scored)
-                removed = b.removed_ids
-                total = b.total_fetched
-                processed.extend(b.processed_ids)
-            return all_new, removed, total, processed
-
-        new_articles, removed_ids, total_fetched, processed_ids = await asyncio.to_thread(
-            _blocking_incremental
-        )
-
-        cache.load_progress = "Sauvegarde..."
-        await _incremental_persist_and_populate(
-            new_articles, removed_ids, processed_ids, total_fetched, time.perf_counter() - _t0
-        )
-        if not new_articles and not removed_ids:
-            cache.load_progress = "Aucun changement"
-            logger.info("Incremental refresh: no changes (0 new, 0 removed)")
-        else:
-            cache.load_progress = "Terminé"
-            logger.info(
-                "Incremental refresh: %d total unread, +%d new, -%d removed, %d relevant",
-                total_fetched,
-                len(new_articles),
-                len(removed_ids),
-                len(cache.articles),
-            )
-    except Exception as e:
-        cache.error = f"{type(e).__name__}: {e}"
-        cache.load_progress = "Erreur"
-        logger.exception("Refresh failed")
+async def _do_rescore_from_db() -> None:
+    """Rescore job for POST /api/rescore. Run through _start_in_slot()."""
+    await rescore_job(cache)
 
 
 @app.post("/api/refresh", dependencies=[Depends(require_auth)])
@@ -626,122 +443,10 @@ async def refresh() -> dict[str, Any]:
 @app.get("/api/refresh/stream", dependencies=[Depends(require_auth)])
 async def refresh_stream() -> StreamingResponse:
     """SSE: fetch → score per batch → stream each scored article as it arrives."""
-    loop = asyncio.get_running_loop()
     q: asyncio.Queue = asyncio.Queue()
-
-    def _deliver(event: dict[str, Any]) -> None:
-        # Cache state is applied here, on the loop, not by the SSE generator: it must
-        # keep tracking the job after the client disconnects.
-        if "_load_progress" in event:
-            cache.load_progress = event["_load_progress"]
-        if "_cache_error" in event:
-            cache.error = event["_cache_error"]
-        q.put_nowait(event)
-
-    def _put(event: dict[str, Any]) -> None:
-        loop.call_soon_threadsafe(_deliver, event)
-
-    def _sse_refresh_worker(
-        topics_cfg: dict[str, Any],
-        feed_weights: dict[str, float],
-        seen_ids: set[str],
-        cfg: ConfigDict,
-    ) -> None:
-        # Runs in a thread pool - survives SSE client disconnections.
-        all_new_articles: list[dict[str, Any]] = []
-        removed_ids: set[str] = set()
-        total_fetched = 0
-        _t0 = time.perf_counter()
-
-        try:
-            topics = build_topics(topics_cfg)
-            first_batch = True
-            processed_ids: list[str] = []
-            for b in fetch_and_score_incremental_iter(cfg, topics, seen_ids, feed_weights):
-                scored_batch = b.scored
-                removed_ids = b.removed_ids
-                total_fetched = b.total_fetched
-                processed_ids.extend(b.processed_ids)
-
-                # Emit removed IDs before the first article batch so the UI can drop them
-                if first_batch:
-                    first_batch = False
-                    if removed_ids:
-                        _put({"type": "removed", "ids": list(removed_ids)})
-
-                if scored_batch:
-                    msg = f"Récupération : {len(all_new_articles) + len(scored_batch)} nouveaux..."
-                    _put({"type": "progress", "message": msg, "_load_progress": msg})
-                    for d in scored_batch:
-                        all_new_articles.append(d)
-                        # `d` still carries `_content` for the DB write below; the
-                        # client gets a stripped copy. The filter applied to the
-                        # event itself only covers its top-level keys.
-                        _put({"type": "article", "article": strip_content(d)})
-
-            # Handle case where generator yielded nothing (e.g. network error before first yield)
-            if first_batch and removed_ids:
-                _put({"type": "removed", "ids": list(removed_ids)})
-
-            _put({"type": "state", "_load_progress": "Sauvegarde..."})
-            asyncio.run_coroutine_threadsafe(
-                _incremental_persist_and_populate(
-                    all_new_articles,
-                    removed_ids,
-                    processed_ids,
-                    total_fetched,
-                    time.perf_counter() - _t0,
-                ),
-                loop,
-            ).result()
-            if not all_new_articles and not removed_ids:
-                logger.info("Stream refresh: no changes")
-            else:
-                logger.info(
-                    "Stream refresh done: %d total unread, +%d new, -%d removed, %d relevant",
-                    total_fetched,
-                    len(all_new_articles),
-                    len(removed_ids),
-                    len(cache.articles),
-                )
-
-            _put(
-                {
-                    "type": "done",
-                    "total_fetched": total_fetched,
-                    "count": len(cache.articles),
-                    "new_count": len(all_new_articles),
-                    "incremental": True,
-                    "_load_progress": "Terminé",
-                }
-            )
-        except Exception as e:
-            logger.exception("refresh-stream worker failed")
-            _put(_error_event(e))
-
-    def _error_event(e: Exception) -> dict[str, Any]:
-        return {
-            "type": "error",
-            "message": str(e),
-            "_cache_error": f"{type(e).__name__}: {e}",
-            "_load_progress": "Erreur",
-        }
-
-    async def _job() -> None:
-        # Init runs here rather than in the SSE generator: Starlette never starts
-        # the generator when the client leaves first, and nothing would then run.
-        try:
-            cfg = load_config()
-            topics_cfg = await get_or_seed_scoring_config(cfg, DEFAULT_TOPICS)
-            feed_weights = await get_feed_weights()
-            seen_ids = await get_seen_ids()
-        except Exception as e:
-            logger.exception("refresh-stream init failed")
-            _deliver(_error_event(e))
-            return
-        await asyncio.to_thread(_sse_refresh_worker, topics_cfg, feed_weights, seen_ids, cfg)
-
-    task = _start_in_slot(_job)
+    # The job does all the work, not the SSE generator: Starlette never starts the
+    # generator when the client leaves first, and the refresh must still run.
+    task = _start_in_slot(lambda: refresh_job(cache, q.put_nowait))
     if task is None:
 
         async def _busy():
@@ -773,121 +478,6 @@ async def refresh_stream() -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
-
-
-def _available_cpus() -> int:
-    """
-    CPU budget usable by this process, honouring container limits.
-
-    os.cpu_count() reports the host's CPUs: under `docker --cpus=2` on a 16-core
-    box it returns 16 and we would oversubscribe by 8x. cgroup v2 publishes the
-    real quota in cpu.max ("<quota> <period>", or "max" when uncapped).
-    """
-    try:
-        quota, period = Path("/sys/fs/cgroup/cpu.max").read_text().split()
-        if quota != "max":
-            return max(1, round(int(quota) / int(period)))
-    except (OSError, ValueError):
-        pass
-    # process_cpu_count() honours CPU affinity; it is 3.13+, hence the getattr.
-    counter = getattr(os, "process_cpu_count", None) or os.cpu_count
-    return counter() or 2
-
-
-_RESCORE_CPUS = _available_cpus()
-# Leave one CPU to the event loop so the UI stays responsive during a rescore.
-_RESCORE_WORKERS = max(1, _RESCORE_CPUS - 1)
-_RESCORE_MIN_CHUNK = 500  # below this, spawning processes costs more than it saves
-
-
-async def _rescore_compute(
-    raw: list[dict[str, Any]],
-    cfg: ConfigDict,
-    topics_cfg: dict[str, Any],
-    feed_weights: dict[str, float] | None = None,
-) -> list[dict[str, Any]]:
-    """
-    Re-score articles across worker processes.
-
-    Scoring is regex-bound and CPython's `re` never releases the GIL, so running
-    this through asyncio.to_thread still stalled the event loop for the whole job
-    (~4 ms per article, measured). Processes move the work off the loop entirely
-    and split it across cores. Falls back to a thread when spawning is impossible
-    (restricted container, no /dev/shm) - degraded, but still correct.
-    """
-    scoring_cfg = cfg.get("scoring", {})
-    title_weight = int(scoring_cfg.get("title_weight", 3))
-    min_score = float(scoring_cfg.get("min_score", 1.0))
-    if not raw:
-        return []  # every article was read meanwhile; chunking below needs one
-
-    # One worker still means one *process*: even without parallelism that keeps the
-    # regex work off the event loop, which a thread cannot do.
-    workers = max(1, min(_RESCORE_WORKERS, math.ceil(len(raw) / _RESCORE_MIN_CHUNK)))
-    size = math.ceil(len(raw) / workers)
-    chunks = [raw[i : i + size] for i in range(0, len(raw), size)]
-    loop = asyncio.get_running_loop()
-    _t0 = time.perf_counter()
-    try:
-        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as pool:
-            results = await asyncio.gather(
-                *(
-                    loop.run_in_executor(
-                        pool, rescore_chunk, c, topics_cfg, title_weight, min_score, feed_weights
-                    )
-                    for c in chunks
-                )
-            )
-    # BrokenProcessPool (a worker killed, e.g. OOM) is a RuntimeError, not an OSError.
-    except (OSError, BrokenProcessPool):
-        logger.warning("Process pool unavailable - falling back to a single thread")
-        return await asyncio.to_thread(
-            rescore_chunk, raw, topics_cfg, title_weight, min_score, feed_weights
-        )
-    elapsed = time.perf_counter() - _t0
-    logger.info(
-        "Rescored %d articles in %.1fs using %d worker process(es) (%d CPUs visible, %.0f articles/s)",
-        len(raw),
-        elapsed,
-        workers,
-        _RESCORE_CPUS,
-        len(raw) / elapsed if elapsed else 0,
-    )
-    m = _get_metrics()
-    m.rescores.inc()
-    m.rescore_dur.observe(elapsed)
-    m.rescore_articles.observe(len(raw))
-    m.rescore_workers.set(workers)
-
-    merged = [a for chunk in results for a in chunk]
-    merged.sort(key=lambda a: a["score"], reverse=True)
-    return merged
-
-
-async def _do_rescore_from_db() -> None:
-    """Background task: rescore from DB → persist → populate cache.
-
-    Run through _start_in_slot(), which owns the refresh slot.
-    """
-    cache.load_progress = "Démarrage du re-scoring..."
-
-    try:
-        raw = await load_for_rescore()
-        cfg = load_config()
-        topics_cfg = await get_or_seed_scoring_config(load_config(), DEFAULT_TOPICS)
-        feed_weights = await get_feed_weights()
-        article_dicts = await _rescore_compute(raw, cfg, topics_cfg, feed_weights)
-        total_fetched = int(await get_meta("total_fetched", "0"))
-        cache.load_progress = "Sauvegarde..."
-        await _persist_and_populate(
-            article_dicts, total_fetched, elapsed=None, refresh_time=cache.last_refresh
-        )
-        cache.load_progress = "Terminé"
-        logger.info("Rescore complete: %d relevant articles", len(article_dicts))
-    except Exception as e:
-        cache.error = f"{type(e).__name__}: {e}"
-        cache.load_progress = "Erreur"
-        logger.exception("Rescore failed")
 
 
 @app.post("/api/rescore", dependencies=[Depends(require_auth)])

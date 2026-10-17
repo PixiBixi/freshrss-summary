@@ -315,22 +315,26 @@ class TestRefreshStream:
         article = dict(_ARTICLE)
 
         with (
-            patch("app.build_topics", return_value={}),
+            patch("refresh_service.build_topics", return_value={}),
             patch(
-                "app.fetch_and_score_incremental_iter",
+                "refresh_service.fetch_and_score_incremental_iter",
                 # yields IncrementalBatch(scored, removed_ids, total_fetched, processed_ids)
                 return_value=iter([IncrementalBatch([article], set(), 1, [article["id"]])]),
             ),
             patch(
-                "app.load_config",
+                "refresh_service.load_config",
                 return_value={
                     "freshrss": {"url": "http://x", "username": "u", "api_password": "p"}
                 },
             ),
-            patch("app.get_or_seed_scoring_config", new_callable=AsyncMock, return_value={}),
-            patch("app.get_feed_weights", new_callable=AsyncMock, return_value={}),
-            patch("app.get_seen_ids", new_callable=AsyncMock, return_value=set()),
-            patch("app._incremental_persist_and_populate", new_callable=AsyncMock),
+            patch(
+                "refresh_service.get_or_seed_scoring_config",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch("refresh_service.get_feed_weights", new_callable=AsyncMock, return_value={}),
+            patch("refresh_service.get_seen_ids", new_callable=AsyncMock, return_value=set()),
+            patch("refresh_service.persist_refresh", new_callable=AsyncMock),
         ):
             events = []
             async with authed_client.stream("GET", "/api/refresh/stream") as resp:
@@ -352,20 +356,24 @@ class TestRefreshStream:
         from unittest.mock import AsyncMock, patch
 
         with (
-            patch("app.build_topics", return_value={}),
+            patch("refresh_service.build_topics", return_value={}),
             patch(
-                "app.fetch_and_score_incremental_iter",
+                "refresh_service.fetch_and_score_incremental_iter",
                 side_effect=RuntimeError("fetch failed"),
             ),
             patch(
-                "app.load_config",
+                "refresh_service.load_config",
                 return_value={
                     "freshrss": {"url": "http://x", "username": "u", "api_password": "p"}
                 },
             ),
-            patch("app.get_or_seed_scoring_config", new_callable=AsyncMock, return_value={}),
-            patch("app.get_feed_weights", new_callable=AsyncMock, return_value={}),
-            patch("app.get_seen_ids", new_callable=AsyncMock, return_value=set()),
+            patch(
+                "refresh_service.get_or_seed_scoring_config",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch("refresh_service.get_feed_weights", new_callable=AsyncMock, return_value={}),
+            patch("refresh_service.get_seen_ids", new_callable=AsyncMock, return_value=set()),
         ):
             events = []
             async with authed_client.stream("GET", "/api/refresh/stream") as resp:
@@ -634,16 +642,18 @@ def _refresh_patches(batches):
     from unittest.mock import AsyncMock, patch
 
     stack = ExitStack()
-    stack.enter_context(patch("app.build_topics", return_value={}))
-    stack.enter_context(patch("app.fetch_and_score_incremental_iter", return_value=iter(batches)))
+    stack.enter_context(patch("refresh_service.build_topics", return_value={}))
+    stack.enter_context(
+        patch("refresh_service.fetch_and_score_incremental_iter", return_value=iter(batches))
+    )
     stack.enter_context(
         patch(
-            "app.load_config",
+            "refresh_service.load_config",
             return_value={"freshrss": {"url": "http://x", "username": "u", "api_password": "p"}},
         )
     )
     stack.enter_context(
-        patch("app.get_or_seed_scoring_config", new_callable=AsyncMock, return_value={})
+        patch("refresh_service.get_or_seed_scoring_config", new_callable=AsyncMock, return_value={})
     )
     return stack
 
@@ -677,7 +687,7 @@ class TestRescoreCompute:
         from concurrent.futures.process import BrokenProcessPool
         from unittest.mock import patch
 
-        import app as app_module
+        import refresh_service
 
         class _CrashedPool:
             def __init__(self, *a, **kw):
@@ -694,27 +704,27 @@ class TestRescoreCompute:
 
         rescored = [dict(_ARTICLE)]
         with (
-            patch("app.concurrent.futures.ProcessPoolExecutor", _CrashedPool),
-            patch("app.rescore_chunk", return_value=rescored) as chunk,
+            patch("refresh_service.concurrent.futures.ProcessPoolExecutor", _CrashedPool),
+            patch("refresh_service.rescore_chunk", return_value=rescored) as chunk,
         ):
-            result = await app_module._rescore_compute([{"id": "tag:a"}], {}, {})
+            result = await refresh_service.rescore_compute([{"id": "tag:a"}], {}, {})
 
         assert result == rescored
         chunk.assert_called_once()
 
     async def test_empty_input_returns_empty(self):
-        import app as app_module
+        import refresh_service
 
-        assert await app_module._rescore_compute([], {}, {}) == []
+        assert await refresh_service.rescore_compute([], {}, {}) == []
 
     async def test_article_read_during_rescore_stays_out_of_cache(self, db_engine):
-        import app as app_module
+        import refresh_service
         from db import save_articles, set_articles_read
 
         await save_articles([dict(_ARTICLE)], total_fetched=1)
         await set_articles_read([_ARTICLE["id"]])
 
-        await app_module._persist_and_populate([dict(_ARTICLE)], 1)
+        await refresh_service.persist_rescore(cache, [dict(_ARTICLE)], 1)
 
         assert cache.articles == []
 
