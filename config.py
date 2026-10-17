@@ -62,12 +62,23 @@ class ConfigDict(TypedDict, total=False):
     scoring: _ScoringSection
 
 
+def _read_yaml() -> dict[str, Any]:
+    """
+    Parse config.yaml, mapping sections left empty to {}.
+
+    A section holding only comments (`database:` in config.example.yaml) parses as
+    null, and every caller does `cfg.get(section, {}).get(...)` on it.
+    """
+    with CONFIG_PATH.open() as f:
+        raw = yaml.safe_load(f) or {}
+    return {k: ({} if v is None else v) for k, v in raw.items()}
+
+
 def load_raw_config() -> ConfigDict:
     """Load config.yaml as-is, without env-var overrides or validation. Used during early startup."""
     if not CONFIG_PATH.exists():
         return cast(ConfigDict, {})
-    with CONFIG_PATH.open() as f:
-        return cast(ConfigDict, yaml.safe_load(f) or {})
+    return cast(ConfigDict, _read_yaml())
 
 
 def session_https_only() -> bool:
@@ -101,8 +112,7 @@ def load_config() -> ConfigDict:
     """
     cfg: dict[str, Any] = {}
     if CONFIG_PATH.exists():
-        with CONFIG_PATH.open() as f:
-            cfg = yaml.safe_load(f) or {}
+        cfg = _read_yaml()
     else:
         logger.warning("config.yaml not found - relying entirely on environment variables")
 
