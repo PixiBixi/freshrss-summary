@@ -338,17 +338,6 @@ async def load_articles() -> tuple[list[ArticleDict], float | None, int]:
     return articles, last_refresh, total_fetched
 
 
-async def get_unread_ids() -> set[str]:
-    """Return all unread article IDs from DB (for incremental diff with FreshRSS)."""
-    async with get_engine().connect() as conn:
-        rows = (
-            await conn.execute(
-                select(articles_table.c.id).where(articles_table.c.read_at.is_(None))
-            )
-        ).all()
-    return {r[0] for r in rows}
-
-
 async def sync_articles(
     new_articles: list[ArticleDict],
     removed_ids: set[str],
