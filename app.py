@@ -11,11 +11,11 @@ import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 import itsdangerous
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
@@ -64,9 +64,10 @@ from db import (
 from freshrss_client import FreshRSSClient, close_shared_client, get_shared_client
 from logging_config import LOGGING_CONFIG
 from metrics import CONTENT_TYPE_LATEST, _update_prom_cache, generate_latest
+from models import ArticleDict
 from refresh_service import Cache, refresh_job, rescore_job
 from scheduler import run_daily_at, run_every
-from scorer import DEFAULT_TOPICS
+from scorer import DEFAULT_TOPICS, _strip_html
 from telegram_digest import (
     TelegramConfig,
     check_trending,
@@ -328,26 +329,46 @@ async def get_articles(
     offset: int = 0,
     days: int = 7,
     show_read: bool = False,
+    feeds: str | None = None,
+    exclude_feeds: str | None = None,
+    fields: str | None = None,
+    summary_chars: int | None = Query(None, ge=0),
+    dedupe: Literal["title"] | None = None,
 ) -> dict[str, Any]:
     if not cache.initialized:
         raise HTTPException(status_code=503, detail="Cache initializing - try again shortly")
     if show_read and not request.session.get("authenticated"):
         show_read = False
+    field_list = _csv(fields)
+    if unknown := [f for f in field_list if f not in _ARTICLE_FIELDS]:
+        raise HTTPException(status_code=400, detail=f"Unknown fields: {', '.join(unknown)}")
     articles = cache.articles
     # Read articles join before filtering: appended after, they ignored every
     # filter and inflated `total`.
     if show_read:
         articles = articles + await load_read_articles(days=days)
 
-    if days > 0:
-        cutoff = int(time.time()) - days * 86400
-        articles = [a for a in articles if (a["published"] or 0) >= cutoff]
+    # Single pass over the cache (~30k articles): one comprehension, no chained lists.
+    cutoff = int(time.time()) - days * 86400 if days > 0 else None
+    only_feeds = set(_csv(feeds)) or None
+    skip_feeds = set(_csv(exclude_feeds))
+    articles = [
+        a
+        for a in articles
+        if (cutoff is None or (a["published"] or 0) >= cutoff)
+        and (not topic or topic in a.get("matched_topics", {}))
+        and (min_score is None or a["score"] >= min_score)
+        and (only_feeds is None or a["feed_title"] in only_feeds)
+        and a["feed_title"] not in skip_feeds
+    ]
 
-    if topic:
-        articles = [a for a in articles if topic in a.get("matched_topics", {})]
-
-    if min_score is not None:
-        articles = [a for a in articles if a["score"] >= min_score]
+    if dedupe == "title":
+        best: dict[str, ArticleDict] = {}
+        for a in articles:
+            key = a["title"].strip()
+            if key not in best or a["score"] > best[key]["score"]:
+                best[key] = a
+        articles = list(best.values())
 
     if sort == "score":
         articles = sorted(articles, key=lambda a: a["score"], reverse=True)
@@ -359,7 +380,28 @@ async def get_articles(
     total = len(articles)
     page = articles[offset:] if limit <= 0 else articles[offset : offset + limit]
 
+    # Shaping only touches the returned page, and copies: the cache dicts are shared.
+    if field_list or summary_chars is not None:
+        page = [_shape_article(a, field_list, summary_chars) for a in page]
+
     return {"total": total, "articles": page}
+
+
+# Public article keys; `_content` never leaves the DB path (see Cache.populate).
+_ARTICLE_FIELDS = frozenset(ArticleDict.__annotations__) - {"_content"}
+
+
+def _csv(raw: str | None) -> list[str]:
+    return [s.strip() for s in raw.split(",") if s.strip()] if raw else []
+
+
+def _shape_article(
+    a: ArticleDict, field_list: list[str], summary_chars: int | None
+) -> dict[str, Any]:
+    out: dict[str, Any] = {k: a[k] for k in field_list if k in a} if field_list else dict(a)
+    if summary_chars is not None and "summary" in out:
+        out["summary"] = " ".join(_strip_html(out["summary"] or "").split())[:summary_chars]
+    return out
 
 
 class MarkReadRequest(BaseModel):

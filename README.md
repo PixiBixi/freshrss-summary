@@ -307,6 +307,35 @@ The **Feeds** tab in the scoring modal (⚙ Topics → Feeds) lets you set a sco
 - **Password change** (🔑 Password): change the current user's password directly from the UI - no restart required
 - **i18n**: French, English, German, Spanish, Italian, Portuguese - auto-detected from browser, override persisted in localStorage
 
+## API
+
+### `GET /api/articles`
+
+Public (no session needed, except `show_read`). Returns `{"total": <int>, "articles": [...]}`; `total` counts every match before pagination. All parameters are optional.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `days` | `7` | Only articles published in the last N days; `0` = no limit |
+| `topic` | | Only articles matching this topic |
+| `min_score` | | Only articles with `score >= min_score` |
+| `feeds` | | Comma-separated `feed_title` list to keep (exact match) |
+| `exclude_feeds` | | Comma-separated `feed_title` list to drop (exact match) |
+| `dedupe` | | `title`: one article per title, the best-scored one |
+| `sort` | `score` | `score`, `date` or `feed` |
+| `limit` | `1000` | Page size; `0` = everything |
+| `offset` | `0` | Pagination offset |
+| `fields` | | Comma-separated keys to return per article (`id`, `title`, `url`, `feed_title`, `published`, `score`, `top_topic`, `matched_topics`, `matched_keywords`, `feed_weight`, `summary`, `bookmarked`, `_read`); unknown key = 400 |
+| `summary_chars` | | Summary as plain text (tags stripped, whitespace collapsed), truncated to N characters |
+| `show_read` | `false` | Include read articles (authenticated only, ignored otherwise) |
+
+Feed titles containing a comma cannot be passed to `feeds` / `exclude_feeds`.
+
+Compact listing for an agent:
+
+```bash
+curl -s 'https://summary.example.com/api/articles?days=30&limit=0&min_score=5&exclude_feeds=DEV.to&dedupe=title&fields=id,title,url,feed_title,score,top_topic,summary&summary_chars=200'
+```
+
 ## Observability
 
 ### Health check
