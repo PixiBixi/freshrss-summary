@@ -1,6 +1,23 @@
 # Changelog
 
 - - -
+## [v1.9.39](https://github.com/PixiBixi/freshrss-summary/compare/72807c04f562d6e8869013d6d1fe2e184f8a2ceb..v1.9.39) - 2026-10-17
+#### Bug Fixes
+- (**api**) apply article filters to read articles too - ([1b65c84](https://github.com/PixiBixi/freshrss-summary/commit/1b65c8464375d08374873cf1e199cd89b2470774)) - Jeremy Delgado
+- (**auth**) url-encode next parameter on the login form - ([4ba420c](https://github.com/PixiBixi/freshrss-summary/commit/4ba420ca7d5625fe8eaade2e96b8c7c20270effb)) - Jeremy Delgado
+- (**db**) keep rescore and seen_ids consistent - ([72807c0](https://github.com/PixiBixi/freshrss-summary/commit/72807c04f562d6e8869013d6d1fe2e184f8a2ceb)) - Jeremy Delgado
+- (**i18n**) add missing keys, locale per language, drop unused cfg keys - ([e05c681](https://github.com/PixiBixi/freshrss-summary/commit/e05c6817949a46d0bada085c6b3d1e815c7396e7)) - Jeremy Delgado
+- (**metrics**) drop per-topic series of topics with no article left - ([c52cb0b](https://github.com/PixiBixi/freshrss-summary/commit/c52cb0bb9fa5177df02362b6b6ea3bfd42bcae96)) - Jeremy Delgado
+- (**refresh**) tie the refresh slot to its job and persist no-op refreshes - ([88e70ed](https://github.com/PixiBixi/freshrss-summary/commit/88e70edbc3b9ad08f4ab82495e823b447c19b104)) - Jeremy Delgado
+- (**rescore**) fall back on a crashed pool and drop articles read meanwhile - ([d0d068b](https://github.com/PixiBixi/freshrss-summary/commit/d0d068b39ffb539e222dadf53efcc46c1a43fee2)) - Jeremy Delgado
+- (**ui**) harden API calls, races and inline handlers - ([3e386ee](https://github.com/PixiBixi/freshrss-summary/commit/3e386ee2453c36ae5bfa1f1df11b58f80ccfc57f)) - Jeremy Delgado
+#### Documentation
+- align README with seen_ids and feed weight behavior - ([a005d3b](https://github.com/PixiBixi/freshrss-summary/commit/a005d3b0a2e3f20d4fc03f1a81c95d382710e6de)) - Jeremy Delgado
+#### Refactoring
+- (**db**) remove unused get_unread_ids - ([7300154](https://github.com/PixiBixi/freshrss-summary/commit/73001540db161bd45186c6489dd7638eb9b03dde)) - Jeremy Delgado
+
+- - -
+
 ## [v1.9.38](https://github.com/PixiBixi/freshrss-summary/compare/dd5239e86e457fda0b30e5898845403c3e3066c2..v1.9.38) - 2026-10-17
 #### Bug Fixes
 - (**auth**) bound the login rate limiter memory - ([dd5239e](https://github.com/PixiBixi/freshrss-summary/commit/dd5239e86e457fda0b30e5898845403c3e3066c2)) - Jeremy Delgado
