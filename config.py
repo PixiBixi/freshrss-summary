@@ -22,6 +22,7 @@ class _ServerConfig(TypedDict, total=False):
     host: str
     port: int
     public_url: str
+    https_only: bool
 
 
 class _SchedulerConfig(TypedDict, total=False):
@@ -69,6 +70,13 @@ def load_raw_config() -> ConfigDict:
         return cast(ConfigDict, yaml.safe_load(f) or {})
 
 
+def session_https_only() -> bool:
+    """Whether the session cookie gets the Secure flag (env override, no credentials needed)."""
+    if v := os.environ.get("SESSION_HTTPS_ONLY"):
+        return v.strip().lower() in ("1", "true", "yes", "on")
+    return bool(load_raw_config().get("server", {}).get("https_only", False))
+
+
 def load_config() -> ConfigDict:
     """
     Load config from config.yaml (if present), then apply env var overrides.
@@ -85,6 +93,7 @@ def load_config() -> ConfigDict:
       TELEGRAM_CHAT_ID       → telegram.chat_id
       TELEGRAM_WEBHOOK_SECRET → telegram.webhook_secret
       PUBLIC_URL             → server.public_url
+      SESSION_HTTPS_ONLY     → server.https_only
 
     Raises:
         RuntimeError: if FRESHRSS_URL, FRESHRSS_USERNAME, or FRESHRSS_API_PASSWORD
@@ -112,6 +121,8 @@ def load_config() -> ConfigDict:
         srv["port"] = int(v)
     if v := os.environ.get("PUBLIC_URL"):
         srv["public_url"] = v
+    if v := os.environ.get("SESSION_HTTPS_ONLY"):
+        srv["https_only"] = v.strip().lower() in ("1", "true", "yes", "on")
 
     sched = cfg.setdefault("scheduler", {})
     if v := os.environ.get("REFRESH_INTERVAL_MINUTES"):

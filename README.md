@@ -147,6 +147,7 @@ All config values can be overridden by environment variables:
 | `DATABASE_URL` | `database.url` |
 | `SERVER_HOST` | `server.host` |
 | `SERVER_PORT` | `server.port` |
+| `SESSION_HTTPS_ONLY` | `server.https_only` (default `false`; `true` adds the `Secure` flag to the session cookie, set it behind HTTPS) |
 | `ADMIN_USERNAME` | *(admin user, default: `admin`)* |
 | `ADMIN_PASSWORD` | *(reset/init admin password)* |
 | `SECRET_KEY` | `auth.secret_key` |
