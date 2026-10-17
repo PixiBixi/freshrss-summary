@@ -194,11 +194,26 @@ def _article_to_row(a: dict[str, Any], now: int) -> dict[str, Any]:
     }
 
 
-async def save_articles(articles: list[ArticleDict], total_fetched: int) -> None:
-    """Replace unread articles with a fresh scored set; purge read articles older than 7 days."""
+async def save_articles(articles: list[ArticleDict], total_fetched: int) -> set[str]:
+    """
+    Replace unread articles with a fresh scored set; purge read articles older than 7 days.
+
+    Returns the IDs left out because they were marked read since the caller loaded
+    them: mark-read is not serialised with a rescore, and re-inserting them would
+    hit the primary key of their read row and roll the whole rescore back.
+    """
     now = int(time.time())
     cutoff_read = now - 7 * 86400
+    incoming = [a["id"] for a in articles]
     async with get_engine().begin() as conn:
+        previous_unread = {
+            r[0]
+            for r in (
+                await conn.execute(
+                    select(articles_table.c.id).where(articles_table.c.read_at.is_(None))
+                )
+            ).all()
+        }
         # Replace only unread articles (read_at IS NULL)
         await conn.execute(delete(articles_table).where(articles_table.c.read_at.is_(None)))
         # Purge read articles older than 7 days
@@ -208,14 +223,28 @@ async def save_articles(articles: list[ArticleDict], total_fetched: int) -> None
                 articles_table.c.read_at < cutoff_read,
             )
         )
-        if articles:
-            await conn.execute(
-                insert(articles_table),
-                [_article_to_row(a, now) for a in articles],
+        # Every unread row is gone, so any incoming ID still present is a read one.
+        already_read: set[str] = set()
+        for i in range(0, len(incoming), DB_CHUNK_SIZE):
+            chunk = incoming[i : i + DB_CHUNK_SIZE]
+            already_read.update(
+                r[0]
+                for r in (
+                    await conn.execute(
+                        select(articles_table.c.id).where(articles_table.c.id.in_(chunk))
+                    )
+                ).all()
             )
+        rows = [_article_to_row(a, now) for a in articles if a["id"] not in already_read]
+        if rows:
+            await conn.execute(insert(articles_table), rows)
+        # Dropped below min_score: forgotten so a later refresh can bring them back
+        # once the weights change, instead of skipping them forever.
+        await _forget_seen_ids(conn, previous_unread - set(incoming))
         await _set_meta(conn, "last_refresh", str(now))
         await _set_meta(conn, "total_fetched", str(total_fetched))
-    logger.info("Saved %d articles to DB", len(articles))
+    logger.info("Saved %d articles to DB", len(rows))
+    return already_read
 
 
 async def upsert_articles(articles: list[ArticleDict]) -> None:
@@ -324,12 +353,21 @@ async def sync_articles(
     new_articles: list[ArticleDict],
     removed_ids: set[str],
     total_fetched: int,
-) -> None:
-    """Incremental sync: insert new articles, mark removed as read, purge stale."""
+    processed_ids: list[str] | None = None,
+) -> int:
+    """
+    Incremental sync: insert new articles, mark removed as read, purge stale.
+
+    Also records `processed_ids` and forgets `removed_ids` in seen_ids, in the same
+    transaction: recording an ID whose article then failed to persist would hide
+    it from every later refresh. Returns the refresh timestamp written to meta.
+    """
     now = int(time.time())
     cutoff_read = now - 7 * 86400
 
     async with get_engine().begin() as conn:
+        await _record_seen_ids(conn, processed_ids or [], now)
+        await _forget_seen_ids(conn, removed_ids)
         if removed_ids:
             removed_list = list(removed_ids)
             for i in range(0, len(removed_list), DB_CHUNK_SIZE):
@@ -369,6 +407,7 @@ async def sync_articles(
         len(removed_ids),
         total_fetched,
     )
+    return now
 
 
 async def load_for_rescore() -> list[DbArticleRow]:
@@ -470,21 +509,25 @@ async def record_seen_ids(ids: list[str]) -> None:
     """Mark article IDs as processed, whatever their score."""
     if not ids:
         return
-    now = int(time.time())
     async with get_engine().begin() as conn:
-        for i in range(0, len(ids), DB_CHUNK_SIZE):
-            chunk = ids[i : i + DB_CHUNK_SIZE]
-            existing = {
-                r[0]
-                for r in (
-                    await conn.execute(
-                        select(seen_ids_table.c.id).where(seen_ids_table.c.id.in_(chunk))
-                    )
-                ).all()
-            }
-            fresh = [{"id": i_, "seen_at": now} for i_ in chunk if i_ not in existing]
-            if fresh:
-                await conn.execute(insert(seen_ids_table), fresh)
+        await _record_seen_ids(conn, ids, int(time.time()))
+
+
+async def _record_seen_ids(conn: AsyncConnection, ids: list[str], now: int) -> None:
+    unique = list(dict.fromkeys(ids))
+    for i in range(0, len(unique), DB_CHUNK_SIZE):
+        chunk = unique[i : i + DB_CHUNK_SIZE]
+        existing = {
+            r[0]
+            for r in (
+                await conn.execute(
+                    select(seen_ids_table.c.id).where(seen_ids_table.c.id.in_(chunk))
+                )
+            ).all()
+        }
+        fresh = [{"id": i_, "seen_at": now} for i_ in chunk if i_ not in existing]
+        if fresh:
+            await conn.execute(insert(seen_ids_table), fresh)
 
 
 async def forget_seen_ids(ids: set[str]) -> None:
@@ -496,11 +539,15 @@ async def forget_seen_ids(ids: set[str]) -> None:
     """
     if not ids:
         return
-    stale = list(ids)
     async with get_engine().begin() as conn:
-        for i in range(0, len(stale), DB_CHUNK_SIZE):
-            chunk = stale[i : i + DB_CHUNK_SIZE]
-            await conn.execute(delete(seen_ids_table).where(seen_ids_table.c.id.in_(chunk)))
+        await _forget_seen_ids(conn, ids)
+
+
+async def _forget_seen_ids(conn: AsyncConnection, ids: set[str]) -> None:
+    stale = list(ids)
+    for i in range(0, len(stale), DB_CHUNK_SIZE):
+        chunk = stale[i : i + DB_CHUNK_SIZE]
+        await conn.execute(delete(seen_ids_table).where(seen_ids_table.c.id.in_(chunk)))
 
 
 async def _seed_seen_ids(conn: AsyncConnection) -> None:

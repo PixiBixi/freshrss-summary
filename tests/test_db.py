@@ -2,6 +2,9 @@
 
 import time
 
+import pytest
+from sqlalchemy.exc import IntegrityError
+
 from db import (
     add_pending_sync,
     add_snooze,
@@ -10,17 +13,21 @@ from db import (
     get_bookmarked_ids,
     get_due_snoozes,
     get_feed_weights,
+    get_meta,
     get_pending_sync,
     get_scoring_config,
+    get_seen_ids,
     get_user_hash,
     has_users,
     load_articles,
     load_for_rescore,
     load_read_articles,
+    record_seen_ids,
     save_articles,
     set_articles_read,
     set_feed_weights,
     set_scoring_config,
+    sync_articles,
     toggle_bookmark,
     upsert_user,
 )
@@ -346,3 +353,53 @@ class TestSnooze:
         await add_snooze("art-1", "42", future, "New Title", "https://new.com")
         due = await get_due_snoozes()
         assert due == []  # now in the future, not due
+
+
+# ── rescore / refresh consistency ─────────────────────────────────────────────
+
+
+class TestSaveArticlesConcurrentRead:
+    async def test_article_read_during_rescore_does_not_abort_it(self, db):
+        await save_articles([_article(id="1"), _article(id="2")], total_fetched=2)
+        # mark-read is not serialised with the rescore: "1" is read between
+        # load_for_rescore() and save_articles().
+        await set_articles_read(["1"])
+
+        skipped = await save_articles([_article(id="1"), _article(id="2")], total_fetched=2)
+
+        assert skipped == {"1"}
+        unread, _, _ = await load_articles()
+        assert [a["id"] for a in unread] == ["2"]
+        assert [a["id"] for a in await load_read_articles()] == ["1"]
+
+
+class TestSeenIdsConsistency:
+    async def test_rescore_forgets_seen_ids_of_dropped_articles(self, db):
+        await save_articles([_article(id="1"), _article(id="2")], total_fetched=2)
+        await record_seen_ids(["1", "2", "below-min"])
+
+        await save_articles([_article(id="2")], total_fetched=2)
+
+        # "1" fell under min_score: forgotten so the next refresh re-fetches it.
+        # "below-min" was never stored, so the rescore must not touch it.
+        assert await get_seen_ids() == {"2", "below-min"}
+
+    async def test_sync_records_and_forgets_seen_ids(self, db):
+        await record_seen_ids(["gone"])
+        await sync_articles([_article(id="new")], {"gone"}, 1, processed_ids=["new", "below-min"])
+        assert await get_seen_ids() == {"new", "below-min"}
+
+    async def test_sync_failure_does_not_record_seen_ids(self, db):
+        bad = _article(id="bad")
+        bad["title"] = None  # NOT NULL column: the insert fails
+        with pytest.raises(IntegrityError):
+            await sync_articles([bad], set(), 1, processed_ids=["bad", "below-min"])
+
+        # Recording them would have hidden "bad" from every future refresh.
+        assert await get_seen_ids() == set()
+
+    async def test_sync_without_changes_updates_last_refresh(self, db):
+        refreshed_at = await sync_articles([], set(), 7)
+
+        assert int(await get_meta("last_refresh")) == refreshed_at
+        assert await get_meta("total_fetched") == "7"
