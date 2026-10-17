@@ -43,6 +43,7 @@ from db import (
     DEFAULT_DB_URL,
     add_pending_sync,
     add_snooze,
+    clear_pending_sync,
     delete_snooze,
     get_all_feed_titles,
     get_due_snoozes,
@@ -52,10 +53,13 @@ from db import (
     get_scoring_config,
     get_user_hash,
     init_db,
+    list_snoozes,
     load_articles,
+    load_articles_by_ids,
     load_for_rescore,
     load_read_articles,
     set_articles_read,
+    set_articles_unread,
     set_feed_weights,
     set_scoring_config,
     set_user_password,
@@ -451,6 +455,45 @@ async def mark_read(req: MarkReadRequest) -> dict[str, Any]:
     return {"status": "ok", "marked": len(req.article_ids)}
 
 
+@app.post("/api/mark-unread", dependencies=[Depends(require_auth)])
+async def mark_unread(req: MarkReadRequest) -> dict[str, Any]:
+    """Inverse of /api/mark-read: restore articles to the unread cache and FreshRSS."""
+    if not req.article_ids:
+        raise HTTPException(status_code=400, detail="No article IDs provided")
+
+    await set_articles_unread(req.article_ids)
+    # Drop any queued mark-read so a later flush does not re-mark them read upstream
+    await clear_pending_sync(req.article_ids)
+
+    restored = await load_articles_by_ids(req.article_ids)
+    restored_ids = {a["id"] for a in restored}
+    cache.articles = [a for a in cache.articles if a["id"] not in restored_ids] + restored
+
+    try:
+        cfg = load_config()
+    except RuntimeError:
+        logger.error(
+            "FreshRSS is not configured - %d article(s) marked unread locally only",
+            len(req.article_ids),
+        )
+        return {"status": "not_configured", "unmarked": len(req.article_ids)}
+
+    # Best-effort upstream sync; unlike mark-read there is no retry queue for unread
+    try:
+
+        def _sync_mark_unread() -> None:
+            _shared_freshrss_client(cfg).mark_as_unread(req.article_ids)
+
+        await asyncio.to_thread(_sync_mark_unread)
+    except (httpx.HTTPError, RuntimeError):
+        logger.exception(
+            "FreshRSS unreachable - %d article(s) marked unread locally only", len(req.article_ids)
+        )
+        return {"status": "queued", "unmarked": len(req.article_ids)}
+
+    return {"status": "ok", "unmarked": len(req.article_ids)}
+
+
 async def _auto_refresh() -> None:
     """Scheduled job: runs _do_fetch_and_score unless a refresh is already in progress."""
     task = _start_in_slot(_do_fetch_and_score)
@@ -593,6 +636,19 @@ async def snooze_article(req: SnoozeRequest, request: Request) -> dict[str, Any]
         article["url"],
     )
     return {"status": "ok", "snooze_until": snooze_until}
+
+
+@app.get("/api/snoozes", dependencies=[Depends(require_auth)])
+async def get_snoozes() -> dict[str, Any]:
+    """Return all pending snoozes, soonest first."""
+    return {"snoozes": await list_snoozes()}
+
+
+@app.delete("/api/snooze/{article_id:path}", dependencies=[Depends(require_auth)])
+async def cancel_snooze(article_id: str) -> dict[str, str]:
+    """Cancel the pending snooze of an article."""
+    await delete_snooze(article_id)
+    return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------

@@ -50,7 +50,7 @@ L'utilisateur est SRE/Platform Engineer - les topics prioritaires sont SRE, GKE,
 ## Auth model
 
 - Endpoints publics : `/`, `/login` (GET/POST), `/logout`, `/api/articles` (sans `show_read`), `/api/status`, `/health`
-- Endpoints protégés (`require_auth`, session cookie) : `/api/refresh`, `/api/refresh/stream`, `/api/mark-read`, `/api/rescore`, `/api/bookmark`, `/api/snooze`, `/api/feeds`, `/api/config/scoring` (GET et PUT), `/api/change-password`, `/metrics`
+- Endpoints protégés (`require_auth`, session cookie) : `/api/refresh`, `/api/refresh/stream`, `/api/mark-read`, `/api/mark-unread`, `/api/rescore`, `/api/bookmark`, `/api/snooze` (POST et `DELETE /api/snooze/{id}`), `/api/snoozes`, `/api/feeds`, `/api/config/scoring` (GET et PUT), `/api/change-password`, `/metrics`
 - `show_read=True` sur `/api/articles` est silencieusement ignoré pour les anonymes
 - Auth state côté client : `window._AUTH` (bool) et `window._USER` (string) injectés par Jinja2 - pas de fetch `/api/me`
 - `/telegram/webhook` a son propre modèle d'auth, indépendant de `require_auth` : header `X-Telegram-Bot-Api-Secret-Token` comparé (`secrets.compare_digest`) à `telegram.webhook_secret` ; 404 si Telegram n'est pas configuré, 403 si le secret est invalide

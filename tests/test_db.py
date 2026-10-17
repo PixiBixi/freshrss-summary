@@ -19,12 +19,15 @@ from db import (
     get_seen_ids,
     get_user_hash,
     has_users,
+    list_snoozes,
     load_articles,
+    load_articles_by_ids,
     load_for_rescore,
     load_read_articles,
     record_seen_ids,
     save_articles,
     set_articles_read,
+    set_articles_unread,
     set_feed_weights,
     set_scoring_config,
     sync_articles,
@@ -113,6 +116,22 @@ class TestSoftDelete:
         ids = {a["id"] for a in loaded}
         assert "1" not in ids
         assert "2" in ids
+
+    async def test_set_unread_restores_article(self, db):
+        await save_articles([_article(id="1"), _article(id="2")], total_fetched=2)
+        await set_articles_read(["1", "2"])
+        await set_articles_unread(["1"])
+        loaded, _, _ = await load_articles()
+        assert [a["id"] for a in loaded] == ["1"]
+        assert [a["id"] for a in await load_articles_by_ids(["1", "2"])] == ["1"]
+        assert await load_articles_by_ids([]) == []
+
+    async def test_list_snoozes_ordered(self, db):
+        from db import add_snooze
+
+        await add_snooze("b", "1", 20, "B", "u")
+        await add_snooze("a", "1", 10, "A", "u")
+        assert [s["article_id"] for s in await list_snoozes()] == ["a", "b"]
 
     async def test_read_articles_survive_next_save(self, db):
         await save_articles([_article(id="1")], total_fetched=1)
