@@ -90,11 +90,25 @@ def require_auth(request: Request) -> None:
 _login_attempts: dict[str, collections.deque] = {}
 _LOGIN_MAX = 10
 _LOGIN_WINDOW = 60  # seconds
+_LOGIN_MAX_TRACKED = 10_000  # hard cap on tracked IPs (X-Forwarded-For is spoofable)
+
+
+def _evict_login_attempts(now: float) -> None:
+    """Drop expired entries; if still at the cap, drop the oldest half."""
+    for k in [k for k, q in _login_attempts.items() if not q or q[-1] < now - _LOGIN_WINDOW]:
+        del _login_attempts[k]
+    if len(_login_attempts) >= _LOGIN_MAX_TRACKED:
+        for k in sorted(_login_attempts, key=lambda k: _login_attempts[k][-1])[
+            : _LOGIN_MAX_TRACKED // 2
+        ]:
+            del _login_attempts[k]
 
 
 def login_rate_limit(ip: str) -> bool:
     """Return True if the IP is within the rate limit, False if blocked."""
     now = time.time()
+    if ip not in _login_attempts and len(_login_attempts) >= _LOGIN_MAX_TRACKED:
+        _evict_login_attempts(now)
     q = _login_attempts.setdefault(ip, collections.deque())
     while q and q[0] < now - _LOGIN_WINDOW:
         q.popleft()
