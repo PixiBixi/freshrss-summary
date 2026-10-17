@@ -10,7 +10,7 @@ import math
 import os
 import secrets
 import time
-from collections.abc import AsyncGenerator, Coroutine
+from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -47,7 +47,6 @@ from db import (
     add_snooze,
     clear_pending_sync,
     delete_snooze,
-    forget_seen_ids,
     get_all_feed_titles,
     get_bookmarked_ids,
     get_due_snoozes,
@@ -63,7 +62,6 @@ from db import (
     load_articles,
     load_for_rescore,
     load_read_articles,
-    record_seen_ids,
     save_articles,
     set_articles_read,
     set_feed_weights,
@@ -123,7 +121,8 @@ class Cache:
         double-click, or the scheduler firing during a manual refresh, started two
         concurrent fetches writing the same rows.
 
-        Every caller must pair this with end_loading() in a finally.
+        Only _start_in_slot() calls this: it ties the release to the job's task, so
+        no early return or exception between claim and release can leak the slot.
         """
         if self.is_loading:
             return False
@@ -273,6 +272,26 @@ def _spawn(coro: Coroutine[Any, Any, Any]) -> asyncio.Task:
     _inflight_tasks.add(task)
     task.add_done_callback(_inflight_tasks.discard)
     return task
+
+
+def _start_in_slot(job: Callable[[], Awaitable[None]]) -> asyncio.Task | None:
+    """
+    Claim the refresh slot and run `job` in the background, or return None if busy.
+
+    The claim is synchronous, hence atomic on the event loop, and the job's task is
+    the slot's only owner: it releases it however the job ends, even when the HTTP
+    client that started it is long gone.
+    """
+    if not cache.try_begin_loading():
+        return None
+
+    async def _owned() -> None:
+        try:
+            await job()
+        finally:
+            cache.end_loading()
+
+    return _spawn(_owned())
 
 
 def _safe_next_url(raw: str) -> str:
@@ -464,11 +483,12 @@ async def mark_read(req: MarkReadRequest) -> dict[str, Any]:
 
 async def _auto_refresh() -> None:
     """Scheduled job: runs _do_fetch_and_score unless a refresh is already in progress."""
-    if not cache.try_begin_loading():
+    task = _start_in_slot(_do_fetch_and_score)
+    if task is None:
         logger.info("Scheduled refresh skipped - already in progress")
         return
     logger.info("Scheduled refresh starting")
-    await _do_fetch_and_score()
+    await task
 
 
 async def _persist_and_populate(
@@ -494,34 +514,37 @@ async def _persist_and_populate(
     _update_prom_cache(cache.articles, cache.last_refresh)
 
 
-async def _record_refresh_ids(processed: list[str], removed: set[str]) -> None:
-    """Record processed IDs and forget the ones FreshRSS no longer lists as unread."""
-    await record_seen_ids(processed)
-    await forget_seen_ids(removed)
-
-
 async def _incremental_persist_and_populate(
     new_articles: list[dict[str, Any]],
     removed_ids: set[str],
+    processed_ids: list[str],
     total_fetched: int,
-    elapsed: float | None = None,
+    elapsed: float,
 ) -> None:
-    """Incremental sync to DB, reload full cache from DB, update Prometheus."""
-    await sync_articles(new_articles, removed_ids, total_fetched)
-    articles, last_refresh, _ = await load_articles()
-    cache.populate(articles, last_refresh or time.time(), total_fetched)
-    if elapsed is not None:
-        m = _get_metrics()
-        m.refreshes.inc()
-        m.refresh_dur.observe(elapsed)
+    """Incremental sync to DB, refresh the cache, update Prometheus.
+
+    Runs on every successful refresh, changes or not: a no-op refresh is still a
+    refresh, and skipping it froze last_refresh and the refresh metrics.
+    """
+    # Processed IDs are recorded whatever their score: articles below min_score are
+    # never stored in `articles`, so seen_ids is all that keeps them out of the
+    # next diff. Same transaction as the articles, or a failed write loses them.
+    refreshed_at = await sync_articles(new_articles, removed_ids, total_fetched, processed_ids)
+    if new_articles or removed_ids:
+        articles, _, _ = await load_articles()
+    else:
+        articles = cache.articles  # nothing changed: skip reloading the table
+    cache.populate(articles, float(refreshed_at), total_fetched)
+    m = _get_metrics()
+    m.refreshes.inc()
+    m.refresh_dur.observe(elapsed)
     _update_prom_cache(cache.articles, cache.last_refresh)
 
 
 async def _do_fetch_and_score() -> None:
     """Background task: incremental fetch → score → sync DB → populate cache.
 
-    The refresh slot is claimed by the caller via cache.try_begin_loading(); this
-    only owns releasing it.
+    Run through _start_in_slot(), which owns the refresh slot.
     """
     _t0 = time.perf_counter()
 
@@ -563,18 +586,15 @@ async def _do_fetch_and_score() -> None:
         new_articles, removed_ids, total_fetched, processed_ids = await asyncio.to_thread(
             _blocking_incremental
         )
-        # Recorded whatever their score: articles below min_score are never stored
-        # in `articles`, so this is the only thing keeping them out of the next diff.
-        await _record_refresh_ids(processed_ids, removed_ids)
 
+        cache.load_progress = "Sauvegarde..."
+        await _incremental_persist_and_populate(
+            new_articles, removed_ids, processed_ids, total_fetched, time.perf_counter() - _t0
+        )
         if not new_articles and not removed_ids:
             cache.load_progress = "Aucun changement"
             logger.info("Incremental refresh: no changes (0 new, 0 removed)")
         else:
-            cache.load_progress = "Sauvegarde..."
-            await _incremental_persist_and_populate(
-                new_articles, removed_ids, total_fetched, elapsed=time.perf_counter() - _t0
-            )
             cache.load_progress = "Terminé"
             logger.info(
                 "Incremental refresh: %d total unread, +%d new, -%d removed, %d relevant",
@@ -587,39 +607,36 @@ async def _do_fetch_and_score() -> None:
         cache.error = f"{type(e).__name__}: {e}"
         cache.load_progress = "Erreur"
         logger.exception("Refresh failed")
-    finally:
-        cache.end_loading()
 
 
 @app.post("/api/refresh", dependencies=[Depends(require_auth)])
 async def refresh() -> dict[str, Any]:
     """Start async refresh. Returns immediately; poll /api/status for progress."""
-    if not cache.try_begin_loading():
+    task = _start_in_slot(_do_fetch_and_score)
+    if task is None:
         return {"status": "already_loading", "progress": cache.load_progress}
 
-    cache.refresh_task = _spawn(_do_fetch_and_score())
+    cache.refresh_task = task
     return {"status": "started"}
 
 
 @app.get("/api/refresh/stream", dependencies=[Depends(require_auth)])
 async def refresh_stream() -> StreamingResponse:
     """SSE: fetch → score per batch → stream each scored article as it arrives."""
-    if not cache.try_begin_loading():
-
-        async def _busy():
-            yield f"data: {json.dumps({'type': 'busy'})}\n\n"
-
-        return StreamingResponse(
-            _busy(),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-        )
-
     loop = asyncio.get_running_loop()
     q: asyncio.Queue = asyncio.Queue()
 
+    def _deliver(event: dict[str, Any]) -> None:
+        # Cache state is applied here, on the loop, not by the SSE generator: it must
+        # keep tracking the job after the client disconnects.
+        if "_load_progress" in event:
+            cache.load_progress = event["_load_progress"]
+        if "_cache_error" in event:
+            cache.error = event["_cache_error"]
+        q.put_nowait(event)
+
     def _put(event: dict[str, Any]) -> None:
-        loop.call_soon_threadsafe(q.put_nowait, event)
+        loop.call_soon_threadsafe(_deliver, event)
 
     def _sse_refresh_worker(
         topics_cfg: dict[str, Any],
@@ -628,7 +645,6 @@ async def refresh_stream() -> StreamingResponse:
         cfg: ConfigDict,
     ) -> None:
         # Runs in a thread pool - survives SSE client disconnections.
-        # The slot was already claimed by the handler; this owns releasing it.
         all_new_articles: list[dict[str, Any]] = []
         removed_ids: set[str] = set()
         total_fetched = 0
@@ -664,25 +680,20 @@ async def refresh_stream() -> StreamingResponse:
             if first_batch and removed_ids:
                 _put({"type": "removed", "ids": list(removed_ids)})
 
-            # Before the early return below: a batch where every article scored under
-            # min_score yields nothing to store, yet those IDs must still be recorded
-            # or the next refresh re-downloads them.
-            if processed_ids or removed_ids:
-                asyncio.run_coroutine_threadsafe(
-                    _record_refresh_ids(processed_ids, removed_ids), loop
-                ).result()
-
+            _put({"type": "state", "_load_progress": "Sauvegarde..."})
+            asyncio.run_coroutine_threadsafe(
+                _incremental_persist_and_populate(
+                    all_new_articles,
+                    removed_ids,
+                    processed_ids,
+                    total_fetched,
+                    time.perf_counter() - _t0,
+                ),
+                loop,
+            ).result()
             if not all_new_articles and not removed_ids:
                 logger.info("Stream refresh: no changes")
             else:
-                _put({"type": "state", "_load_progress": "Sauvegarde..."})
-                elapsed = time.perf_counter() - _t0
-                asyncio.run_coroutine_threadsafe(
-                    _incremental_persist_and_populate(
-                        all_new_articles, removed_ids, total_fetched, elapsed=elapsed
-                    ),
-                    loop,
-                ).result()
                 logger.info(
                     "Stream refresh done: %d total unread, +%d new, -%d removed, %d relevant",
                     total_fetched,
@@ -699,24 +710,23 @@ async def refresh_stream() -> StreamingResponse:
                     "new_count": len(all_new_articles),
                     "incremental": True,
                     "_load_progress": "Terminé",
-                    "_is_loading": False,
                 }
             )
         except Exception as e:
             logger.exception("refresh-stream worker failed")
-            _put(
-                {
-                    "type": "error",
-                    "message": str(e),
-                    "_cache_error": f"{type(e).__name__}: {e}",
-                    "_load_progress": "Erreur",
-                    "_is_loading": False,
-                }
-            )
-        finally:
-            cache.end_loading()
+            _put(_error_event(e))
 
-    async def _event_gen():
+    def _error_event(e: Exception) -> dict[str, Any]:
+        return {
+            "type": "error",
+            "message": str(e),
+            "_cache_error": f"{type(e).__name__}: {e}",
+            "_load_progress": "Erreur",
+        }
+
+    async def _job() -> None:
+        # Init runs here rather than in the SSE generator: Starlette never starts
+        # the generator when the client leaves first, and nothing would then run.
         try:
             cfg = load_config()
             topics_cfg = await get_or_seed_scoring_config(cfg, DEFAULT_TOPICS)
@@ -724,33 +734,36 @@ async def refresh_stream() -> StreamingResponse:
             seen_ids = await get_seen_ids()
         except Exception as e:
             logger.exception("refresh-stream init failed")
-            cache.error = f"{type(e).__name__}: {e}"
-            cache.load_progress = "Erreur"
-            # The worker never starts, so nothing downstream would release the slot.
-            cache.end_loading()
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            _deliver(_error_event(e))
             return
+        await asyncio.to_thread(_sse_refresh_worker, topics_cfg, feed_weights, seen_ids, cfg)
 
-        _spawn(asyncio.to_thread(_sse_refresh_worker, topics_cfg, feed_weights, seen_ids, cfg))
-        try:
-            while True:
-                event = await q.get()
-                # Apply cache state mutations sent by the worker through the queue
-                if "_load_progress" in event:
-                    cache.load_progress = event["_load_progress"]
-                if "_cache_error" in event:
-                    cache.error = event["_cache_error"]
-                if "_is_loading" in event:
-                    cache.is_loading = event["_is_loading"]
-                if event["type"] == "state":
-                    continue  # pure state update - not forwarded to SSE client
-                # Strip private fields before forwarding to the SSE client
-                public_event = {k: v for k, v in event.items() if not k.startswith("_")}
-                yield f"data: {json.dumps(public_event)}\n\n"
-                if event["type"] in ("done", "error"):
-                    break
-        except asyncio.CancelledError:
-            raise
+    task = _start_in_slot(_job)
+    if task is None:
+
+        async def _busy():
+            yield f"data: {json.dumps({'type': 'busy'})}\n\n"
+
+        return StreamingResponse(
+            _busy(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    async def _event_gen():
+        while True:
+            event = await q.get()
+            if event["type"] == "state":
+                continue  # pure state update - not forwarded to SSE client
+            if event["type"] in ("done", "error"):
+                # Forwarded once the job has released the slot, so a client that
+                # sees "done" can start the next refresh straight away.
+                await asyncio.wait({task})
+            # Strip private fields before forwarding to the SSE client
+            public_event = {k: v for k, v in event.items() if not k.startswith("_")}
+            yield f"data: {json.dumps(public_event)}\n\n"
+            if event["type"] in ("done", "error"):
+                break
 
     return StreamingResponse(
         _event_gen(),
@@ -848,8 +861,7 @@ async def _rescore_compute(
 async def _do_rescore_from_db() -> None:
     """Background task: rescore from DB → persist → populate cache.
 
-    The refresh slot is claimed by the caller via cache.try_begin_loading(); this
-    only owns releasing it.
+    Run through _start_in_slot(), which owns the refresh slot.
     """
     cache.load_progress = "Démarrage du re-scoring..."
 
@@ -870,14 +882,13 @@ async def _do_rescore_from_db() -> None:
         cache.error = f"{type(e).__name__}: {e}"
         cache.load_progress = "Erreur"
         logger.exception("Rescore failed")
-    finally:
-        cache.end_loading()
 
 
 @app.post("/api/rescore", dependencies=[Depends(require_auth)])
 async def rescore() -> dict[str, Any]:
     """Re-score cached articles with current config. No FreshRSS fetch."""
-    if not cache.try_begin_loading():
+    # Not the guard (_start_in_slot is): only keeps "busy" ahead of the 400 below.
+    if cache.is_loading:
         return {"status": "already_loading", "progress": cache.load_progress}
 
     if not cache.articles and not await load_for_rescore():
@@ -885,7 +896,10 @@ async def rescore() -> dict[str, Any]:
             status_code=400, detail="Aucun article en DB. Lance d'abord un Rafraîchir."
         )
 
-    cache.refresh_task = asyncio.create_task(_do_rescore_from_db())
+    task = _start_in_slot(_do_rescore_from_db)
+    if task is None:
+        return {"status": "already_loading", "progress": cache.load_progress}
+    cache.refresh_task = task
     return {"status": "started"}
 
 

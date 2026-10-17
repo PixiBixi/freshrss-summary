@@ -1,8 +1,10 @@
 """Route handler tests using httpx AsyncClient + ASGITransport."""
 
+import asyncio
 import json
 import time
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -307,7 +309,6 @@ class TestRefreshStream:
             patch("app.get_or_seed_scoring_config", new_callable=AsyncMock, return_value={}),
             patch("app.get_feed_weights", new_callable=AsyncMock, return_value={}),
             patch("app.get_seen_ids", new_callable=AsyncMock, return_value=set()),
-            patch("app._record_refresh_ids", new_callable=AsyncMock),
             patch("app._incremental_persist_and_populate", new_callable=AsyncMock),
         ):
             events = []
@@ -344,7 +345,6 @@ class TestRefreshStream:
             patch("app.get_or_seed_scoring_config", new_callable=AsyncMock, return_value={}),
             patch("app.get_feed_weights", new_callable=AsyncMock, return_value={}),
             patch("app.get_seen_ids", new_callable=AsyncMock, return_value=set()),
-            patch("app._record_refresh_ids", new_callable=AsyncMock),
         ):
             events = []
             async with authed_client.stream("GET", "/api/refresh/stream") as resp:
@@ -605,3 +605,82 @@ class TestRefreshConcurrency:
         await asyncio.sleep(0.15)
         assert started == 1, "exactly one refresh job ran"
         assert not cache.is_loading, "slot released once the job finished"
+
+
+def _refresh_patches(batches):
+    """Patch everything a refresh touches upstream; the DB stays real."""
+    from contextlib import ExitStack
+    from unittest.mock import AsyncMock, patch
+
+    stack = ExitStack()
+    stack.enter_context(patch("app.build_topics", return_value={}))
+    stack.enter_context(patch("app.fetch_and_score_incremental_iter", return_value=iter(batches)))
+    stack.enter_context(
+        patch(
+            "app.load_config",
+            return_value={"freshrss": {"url": "http://x", "username": "u", "api_password": "p"}},
+        )
+    )
+    stack.enter_context(
+        patch("app.get_or_seed_scoring_config", new_callable=AsyncMock, return_value={})
+    )
+    return stack
+
+
+class TestRefreshSlotRelease:
+    async def test_rescore_without_articles_releases_slot(
+        self, authed_client_no_ratelimit, db_engine
+    ):
+        cache.articles = []
+        resp = await authed_client_no_ratelimit.post("/api/rescore")
+        assert resp.status_code == 400
+        assert not cache.is_loading, "a 400 must not leave the slot claimed"
+
+    async def test_stream_releases_slot_when_client_leaves_before_first_byte(self, db_engine):
+        import app as app_module
+
+        cache.end_loading()
+        with _refresh_patches([IncrementalBatch([], set(), 0, [])]):
+            resp = await app_module.refresh_stream()
+            assert cache.is_loading
+            # Starlette never iterates the body when the client disconnects first.
+            await resp.body_iterator.aclose()
+            async with asyncio.timeout(2):
+                await asyncio.gather(*app_module._inflight_tasks)
+
+        assert not cache.is_loading
+
+
+class TestRefreshPersistence:
+    async def test_noop_refresh_updates_last_refresh_and_metrics(self, db_engine):
+        from prometheus_client import REGISTRY
+
+        import app as app_module
+        from db import get_meta, get_seen_ids
+
+        cache.last_refresh = None
+        before = REGISTRY.get_sample_value("freshrss_refreshes_total") or 0.0
+        with _refresh_patches([IncrementalBatch([], set(), 5, ["below-min"])]):
+            await app_module._do_fetch_and_score()
+
+        assert cache.error is None
+        assert cache.last_refresh is not None
+        assert int(await get_meta("last_refresh")) == int(cache.last_refresh)
+        assert cache.total_fetched == 5
+        assert REGISTRY.get_sample_value("freshrss_refreshes_total") == before + 1
+        assert REGISTRY.get_sample_value(
+            "freshrss_last_refresh_timestamp_seconds"
+        ) == pytest.approx(cache.last_refresh)
+        assert await get_seen_ids() == {"below-min"}
+
+    async def test_failed_persist_does_not_record_seen_ids(self, db_engine):
+        import app as app_module
+        from db import get_seen_ids
+
+        bad = dict(_ARTICLE, title=None)  # NOT NULL column: the insert fails
+        with _refresh_patches([IncrementalBatch([bad], set(), 1, [bad["id"]])]):
+            await app_module._do_fetch_and_score()
+
+        assert cache.error is not None
+        assert await get_seen_ids() == set(), "the next refresh must retry the article"
+        cache.error = None
