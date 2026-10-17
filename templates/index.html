@@ -1,229 +1,102 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="light" data-density="scan">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
   <title>FreshRSS Summary</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script>
+    // Theme, density and accent applied before first paint (no flash). Same keys as the login page.
+    (function () {
+      var r = document.documentElement;
+      function get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+      try {
+        var old = localStorage.getItem('freshrss-accent');
+        if (old !== null) {
+          if (old !== '#5c98a0' && !localStorage.getItem('accent')) localStorage.setItem('accent', old);
+          localStorage.removeItem('freshrss-accent');
+        }
+      } catch (e) {}
+      r.dataset.theme = get('theme') === 'dark' ? 'dark' : 'light';
+      r.dataset.density = get('freshrss-density') === 'read' ? 'read' : 'scan';
+      var a = get('accent');
+      if (a && /^#[0-9a-fA-F]{6}$/.test(a)) {
+        var n = parseInt(a.slice(1), 16), lum = (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255;
+        r.style.setProperty('--accent', a);
+        r.style.setProperty('--on-accent', lum > 0.6 ? '#111' : '#fff');
+      }
+    })();
+  </script>
+  <link rel="preload" href="/static/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/static/css/fonts.css" />
   <link rel="stylesheet" href="/static/css/app.css" />
 </head>
 <body>
-  <a href="#articles-grid" class="skip-link">Aller au contenu</a>
+  <a class="skip" href="#list" data-i18n="a11y.skip">Aller aux articles</a>
+  <div class="sync-line" id="sync-line" aria-hidden="true"></div>
 
-  <header>
-    <!-- Row 1: identity + search + primary actions -->
-    <div class="header-row-1">
-      <div class="logo">📡 FreshRSS Summary</div>
-
-      <div class="search-wrap">
-        <input id="search-input" class="search-input" type="text" placeholder="Rechercher…" data-i18n="search.placeholder"
-          autocomplete="off" aria-label="Rechercher des articles" />
-        <button class="search-palette-hint" onclick="openPalette()" tabindex="-1"
-          aria-label="Ouvrir la palette de commandes">⌘K</button>
+  <div class="shell" id="shell">
+    <aside class="side" id="side" aria-label="Navigation" data-i18n-aria="nav.label">
+      <div class="brand"><span class="logo" aria-hidden="true">fr</span>FreshRSS Summary</div>
+      <nav class="nav" id="nav" aria-label="Vues" data-i18n-aria="nav.views"></nav>
+      <div class="topics">
+        <h4><span data-i18n="side.topics">Topics</span><button type="button" data-cmd="cfg" data-auth data-i18n="side.manage">Gérer</button></h4>
+        <div id="topic-list"></div>
       </div>
-
-      <button id="search-read-btn" class="btn btn-ghost" onclick="markSearchAsRead()"
-        style="display:none" data-i18n="btn.markSearch" aria-label="Marquer les résultats comme lus">✓ Tout lire</button>
-
-      <button id="refresh-btn" class="btn btn-primary" onclick="triggerRefresh()"
-        data-i18n="btn.refresh" aria-label="Rafraîchir les articles">⟳ Rafraîchir</button>
-
-      <div class="overflow-wrap">
-        <button class="overflow-btn" id="overflow-btn" onclick="toggleOverflowMenu()"
-          aria-label="Plus d'options" aria-haspopup="true" aria-expanded="false">···</button>
-        <div id="overflow-menu" class="overflow-menu" role="menu">
-
-          <!-- Compact toggle -->
-          <button class="overflow-item" id="compact-overflow-item" onclick="toggleCompact()" role="menuitem">
-            ⊟ <span id="compact-label" data-i18n="palette.compact">Mode compact</span>
-          </button>
-
-          <!-- Rescore -->
-          <button class="overflow-item" onclick="triggerRescore(); closeOverflowMenu()" role="menuitem">⇄ Re-scorer</button>
-
-          <!-- Topics config -->
-          <button class="overflow-item" onclick="openScoringModal(); closeOverflowMenu()" role="menuitem">⚙ Topics</button>
-
-          <div class="overflow-sep"></div>
-
-          <!-- Accent color picker -->
-          <div class="overflow-color-row">
-            <label for="accent-picker">🎨 Couleur d'accent</label>
-            <input type="color" id="accent-picker" class="accent-picker" value="#5c98a0"
-              oninput="setAccentColor(this.value)" aria-label="Couleur d'accent" />
-            <button class="overflow-reset" onclick="resetAccentColor(event)">Reset</button>
+      <div class="filters">
+        <label>
+          <span class="rowl"><span data-i18n="side.minBurn">Burn rate minimum</span><span class="mono" id="min-val"></span></span>
+          <input type="range" id="min-score" min="0" max="800" step="5" value="0" data-i18n-aria="side.minBurn" />
+        </label>
+        <div class="grp">
+          <span data-i18n="side.period">Période</span>
+          <div class="seg" role="group" id="days-seg" data-i18n-aria="side.period">
+            <button type="button" data-days="7" data-i18n="period.7">7j</button>
+            <button type="button" data-days="14" data-i18n="period.14">14j</button>
+            <button type="button" data-days="30" data-i18n="period.30">30j</button>
+            <button type="button" data-days="0" data-i18n="period.all">Tout</button>
           </div>
-
-          <div class="overflow-sep"></div>
-
-          <!-- Language list (populated by JS) -->
-          <div id="overflow-lang"></div>
-
-          <div class="overflow-sep"></div>
-
-          <!-- Auth: shown when authenticated -->
-          <div id="overflow-auth" style="display:none">
-            <div class="overflow-username" id="auth-username"></div>
-            <button class="overflow-item" onclick="openPwdModal(); closeOverflowMenu()" role="menuitem">🔑 Mot de passe</button>
-            <button class="overflow-item" onclick="doLogout()" role="menuitem" data-i18n="btn.logout">Déconnexion</button>
-          </div>
-
-          <!-- Auth: shown when not authenticated -->
-          <div id="overflow-login" style="display:none">
-            <a href="/login" class="overflow-item" style="text-decoration:none" data-i18n="btn.login">Connexion</a>
-          </div>
-
         </div>
       </div>
-    </div>
+      <div class="user" id="user-block"></div>
+    </aside>
+    <div class="scrim" id="scrim" data-side></div>
 
-    <!-- Row 2: filters + stats -->
-    <div class="header-row-2">
-      <select id="sort-select">
-        <option value="score" data-i18n="sort.score">Score</option>
-        <option value="date"  data-i18n="sort.date" selected>Date</option>
-        <option value="feed"  data-i18n="sort.feed">Source</option>
-      </select>
-      <label class="score-label">
-        <span data-i18n="label.minScore">Score min</span>
-        <input id="min-score" type="range" value="1" min="0" max="200" step="5" />
-        <span id="min-score-val">1</span>
-      </label>
-      <label class="score-label">
-        <span data-i18n="label.period">Période</span>
-        <select id="days-select">
-          <option value="7"  selected data-i18n="period.7">7 j</option>
-          <option value="14" data-i18n="period.14">14 j</option>
-          <option value="30" data-i18n="period.30">30 j</option>
-          <option value="0"  data-i18n="period.all">Tout</option>
-        </select>
-      </label>
-      <button id="show-old-btn" class="btn btn-ghost" onclick="toggleShowRead()"
-        data-i18n="btn.showRead" aria-label="Afficher les articles lus">⏪ Lu</button>
-      <span class="filter-sep"></span>
-      <div class="header-stats">
-        <span id="last-refresh-label" class="last-refresh"></span>
-        <span id="stats-badge" style="display:none">
-          · <span id="showing-count">0</span>/<span id="total-count">0</span>
-        </span>
-      </div>
-    </div>
-
-    <!-- Topic pills -->
-    <div id="topic-bar" class="topic-bar">
-      <button class="pill active" id="pill-all" onclick="filterTopic(null)">Tous</button>
-    </div>
-  </header>
-
-  <main>
-    <div id="error-state" class="state-error"></div>
-
-    <div id="loading-state" class="state-loading">
-      <div class="loading-spinner"></div>
-    </div>
-
-    <div id="empty-state" class="state-empty" style="display:none">
-      <div class="state-empty-icon">📭</div>
-      <p data-i18n="empty.title">Aucun article chargé.</p>
-      <p data-i18n-html="empty.hint">Clique sur <strong>Rafraîchir</strong> pour fetcher tes flux.</p>
-    </div>
-
-    <div id="allread-state" class="state-allread" style="display:none">
-      <div class="allread-icon">
-        <div class="allread-ring"></div>
-        <div class="allread-ring allread-ring-2"></div>
-        <div class="allread-check">✓</div>
-      </div>
-      <p class="allread-title" data-i18n="allread.title">Tout lu !</p>
-      <p class="allread-sub" data-i18n="allread.sub">Bravo, tu as tout rattrapé.</p>
-    </div>
-
-    <div id="articles-grid" tabindex="-1"></div>
-
-    <div id="load-more-bar" class="load-more">
-      <button class="btn btn-ghost" onclick="loadMore()" data-i18n="btn.loadMore">Charger plus</button>
-    </div>
-  </main>
-
-  <div id="toast" class="hidden" role="status" aria-live="polite" aria-atomic="true">
-    <div id="toast-spinner" class="spinner"></div>
-    <span id="toast-text">Rafraîchissement...</span>
-    <button id="toast-close" onclick="dismissToast()" aria-label="Fermer la notification"
-      style="display:none;background:none;border:none;color:inherit;cursor:pointer;font-size:12px;margin-left:2px;padding:4px 6px;min-width:28px;min-height:28px">✕</button>
-  </div>
-
-  <!-- Hidden mark-read-btn for palette/keyboard compat -->
-  <button id="mark-read-btn" style="display:none" disabled></button>
-
-  <!-- ⌘K Command Palette -->
-  <div id="cmd-palette" class="palette-overlay" style="display:none"
-    role="dialog" aria-modal="true" aria-label="Palette de commandes">
-    <div class="palette-modal" onclick="event.stopPropagation()">
-      <div class="palette-search-bar">
-        <span class="palette-key-hint">⌘K</span>
-        <input id="palette-input" class="palette-input" type="text"
-          placeholder="Rechercher une commande…" autocomplete="off" />
-      </div>
-      <div id="palette-list" class="palette-list"></div>
-    </div>
-  </div>
-
-  <!-- Password change modal -->
-  <div id="pwd-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="pwd-modal-title">
-    <div class="modal" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h2 id="pwd-modal-title" data-i18n="pwd.title">Changer le mot de passe</h2>
-        <button class="modal-close btn btn-ghost btn-icon" onclick="closePwdModal()" aria-label="Fermer">✕</button>
-      </div>
-      <div class="modal-body">
-        <div style="display:flex;flex-direction:column;gap:12px">
-          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
-            <span data-i18n="pwd.current">Mot de passe actuel</span>
-            <input id="pwd-current" type="password" class="search-input" autocomplete="current-password" />
-          </label>
-          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
-            <span data-i18n="pwd.new">Nouveau mot de passe</span>
-            <input id="pwd-new" type="password" class="search-input" autocomplete="new-password" />
-          </label>
-          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
-            <span data-i18n="pwd.confirm">Confirmer</span>
-            <input id="pwd-confirm" type="password" class="search-input" autocomplete="new-password" />
-          </label>
-          <p id="pwd-error" style="color:#dc2626;font-size:13px;min-height:18px;margin:0"></p>
+    <main class="main" id="main">
+      <div class="bar">
+        <button type="button" class="btn ico menu-btn" data-side data-i18n-aria="bar.openNav"><span data-ic="side"></span></button>
+        <button type="button" class="btn ico desk" id="collapse-btn" data-cmd="collapse" data-i18n-aria="bar.sidebar" data-i18n-title="bar.sidebar"><span data-ic="side"></span></button>
+        <h1><span id="view-title">Triage</span><span id="view-count"></span></h1>
+        <label class="search">
+          <span data-ic="search"></span>
+          <span class="sr" data-i18n="search.label">Filtrer les articles</span>
+          <input id="q" type="search" data-i18n="search.placeholder" autocomplete="off" />
+          <button type="button" class="x" id="q-clear" data-cmd="clearq" data-i18n-aria="search.clear" hidden><span data-ic="x"></span></button>
+          <kbd id="q-kbd">/</kbd>
+        </label>
+        <button type="button" class="btn" id="ack-visible" data-cmd="ackvisible" hidden></button>
+        <div class="seg desk" role="group" data-i18n-aria="dens.label">
+          <button type="button" data-dens="scan" data-i18n="dens.scan">Scan</button>
+          <button type="button" data-dens="read" data-i18n="dens.read">Lecture</button>
         </div>
+        <button type="button" class="btn desk" id="pin-btn" data-cmd="pin" data-i18n-title="bar.previewTitle"><span data-ic="pane"></span><span class="lbl-t" data-i18n="bar.preview">Aperçu</span></button>
+        <button type="button" class="btn ico desk" data-cmd="palette" data-i18n-aria="bar.palette" data-i18n-title="bar.palette"><span data-ic="cmd"></span></button>
+        <button type="button" class="btn primary" id="sync-btn" data-cmd="sync" data-auth></button>
+        <a class="btn primary" href="/login" data-anon data-i18n="btn.login">Connexion</a>
+        <button type="button" class="btn ico" id="menu-btn" data-cmd="menu" aria-haspopup="menu" aria-expanded="false" data-i18n-aria="bar.more"><span data-ic="more"></span></button>
+        <div class="pop" id="menu-pop" role="menu" hidden></div>
       </div>
-      <div class="modal-footer">
-        <span style="flex:1"></span>
-        <button class="btn btn-ghost" onclick="closePwdModal()" data-i18n="pwd.cancel">Annuler</button>
-        <button class="btn btn-primary" id="pwd-save-btn" onclick="savePwd()" data-i18n="pwd.save">Enregistrer</button>
-      </div>
-    </div>
+      <div class="err-banner" id="err-banner" role="alert" hidden></div>
+      <div class="sum" id="sum" role="group" data-i18n-aria="sum.label"></div>
+      <section class="list" id="list" tabindex="-1" role="listbox" data-i18n-aria="list.label"></section>
+    </main>
+
+    <aside class="panel" id="panel" data-i18n-aria="reader.label"></aside>
   </div>
 
-  <!-- Scoring config modal -->
-  <div id="scoring-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="scoring-modal-title">
-    <div class="modal" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h2 id="scoring-modal-title" data-i18n="cfg.title">Configuration du scoring</h2>
-        <button class="modal-close btn btn-ghost btn-icon" onclick="closeScoringModal()" aria-label="Fermer">✕</button>
-      </div>
-      <div class="modal-tabs">
-        <button class="modal-tab active" id="tab-topics" onclick="switchScoringTab('topics')" data-i18n="cfg.tabTopics">Topics</button>
-        <button class="modal-tab" id="tab-feeds" onclick="switchScoringTab('feeds')" data-i18n="cfg.tabFeeds">Feeds</button>
-      </div>
-      <div class="modal-body" id="scoring-topics"></div>
-      <div class="modal-body" id="scoring-feeds" style="display:none"></div>
-      <div class="modal-footer">
-        <button class="btn btn-ghost" id="scoring-add-topic" onclick="addTopicRow()" data-i18n="cfg.addTopic">+ Ajouter un topic</button>
-        <span style="flex:1"></span>
-        <button class="btn btn-ghost" onclick="closeScoringModal()" data-i18n="cfg.cancel">Annuler</button>
-        <button class="btn btn-primary" id="scoring-save-btn" onclick="saveScoringConfig()" data-i18n="cfg.save">⇄ Enregistrer & re-scorer</button>
-      </div>
-    </div>
-  </div>
+  <div id="layer"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script>window._AUTH = {{ authenticated | tojson }}; window._USER = {{ username | tojson }};</script>
   <script src="/static/js/i18n.js"></script>
