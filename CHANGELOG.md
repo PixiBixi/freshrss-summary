@@ -1,6 +1,22 @@
 # Changelog
 
 - - -
+## [v1.9.40](https://github.com/PixiBixi/freshrss-summary/compare/90db9a2fcbca17da25b47727ba501da94612432b..v1.9.40) - 2026-10-17
+#### Bug Fixes
+- (**cli**) make tune use the DB scoring config - ([ef8cbf2](https://github.com/PixiBixi/freshrss-summary/commit/ef8cbf244ab26f9bc475ee0f4ef9bafde99f0196)) - Jeremy Delgado
+- (**cli**) rescore with DB feed weights and keep total_fetched - ([1d3f807](https://github.com/PixiBixi/freshrss-summary/commit/1d3f80708ec7c64a7f6c0704dde4915d15a9b65a)) - Jeremy Delgado
+- (**cli**) run fetch through the app's incremental refresh - ([3de1b22](https://github.com/PixiBixi/freshrss-summary/commit/3de1b2207b8f52634ecfe08a462bf9b048336e50)) - Jeremy Delgado
+- (**config**) treat empty YAML sections as empty mappings - ([90db9a2](https://github.com/PixiBixi/freshrss-summary/commit/90db9a2fcbca17da25b47727ba501da94612432b)) - Jeremy Delgado
+- (**db**) keep read rows read and record seen_ids on upsert - ([b50c3d9](https://github.com/PixiBixi/freshrss-summary/commit/b50c3d975449bae2f5b81b4b390cba590460287d)) - Jeremy Delgado
+#### Documentation
+- (**helm**) state the single-replica constraint independent of the DB - ([0d28a49](https://github.com/PixiBixi/freshrss-summary/commit/0d28a49c7c3cc25e49f0f52e51463edb79528b13)) - Jeremy Delgado
+#### Tests
+- isolate CLI tests from the real database - ([1e8af20](https://github.com/PixiBixi/freshrss-summary/commit/1e8af209107de792b03fa52d4b9fcb24cf1b784e)) - Jeremy Delgado
+#### Refactoring
+- (**refresh**) extract refresh and rescore orchestration - ([d8b1636](https://github.com/PixiBixi/freshrss-summary/commit/d8b1636c704f8c158cbcc044800e8a6c8f55857c)) - Jeremy Delgado
+
+- - -
+
 ## [v1.9.39](https://github.com/PixiBixi/freshrss-summary/compare/72807c04f562d6e8869013d6d1fe2e184f8a2ceb..v1.9.39) - 2026-10-17
 #### Bug Fixes
 - (**api**) apply article filters to read articles too - ([1b65c84](https://github.com/PixiBixi/freshrss-summary/commit/1b65c8464375d08374873cf1e199cd89b2470774)) - Jeremy Delgado
