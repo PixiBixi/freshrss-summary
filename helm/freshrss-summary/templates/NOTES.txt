@@ -100,9 +100,10 @@ WARNING: Persistence is disabled. All data will be lost on pod restart.
 
 replicaCount is set to {{ .Values.replicaCount }}.
 
-⚠  Do NOT scale beyond 1 replica while using SQLite - concurrent writes will
-   corrupt the database. Migrate to PostgreSQL or MySQL first, then enable HPA.
+⚠  Do NOT scale beyond 1 replica, whatever the database: the cache, refresh
+   slot, scheduler (refresh + Telegram digest) and login rate limit are
+   per-process. A second replica runs every job twice and serves stale data.
 
-HPA is currently: {{ if .Values.autoscaling.enabled }}ENABLED - make sure you are NOT using SQLite{{ else }}disabled (safe){{ end }}
+HPA is currently: {{ if .Values.autoscaling.enabled }}ENABLED - disable it, the app must run as a single replica{{ else }}disabled (safe){{ end }}
 
 ====================================================================
