@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import time
+from unittest.mock import patch
 
 import pytest
 
@@ -17,6 +18,7 @@ from db import (
     set_articles_read,
     set_engine_for_testing,
 )
+from pipeline import IncrementalBatch
 
 _TOPICS = {"Kubernetes": {"weight": 1.0, "keywords": ["kubernetes"]}}
 
@@ -64,6 +66,40 @@ def _article(aid: str, score: float = 5.0) -> dict:
 
 def _unread_ids(cfg) -> list[str]:
     return sorted(a["id"] for a in _db(cfg, load_articles)[0])
+
+
+# -- fetch -------------------------------------------------------------------
+
+
+def test_fetch_records_seen_ids_so_articles_get_reconciled(cfg):
+    from cli import cmd_fetch
+
+    args = argparse.Namespace(dry_run=False)
+    first = [IncrementalBatch([_article("a")], set(), 2, ["a", "low"])]
+    with patch("refresh_service.fetch_and_score_incremental_iter", return_value=iter(first)):
+        assert cmd_fetch(args, cfg) == 0
+
+    assert _db(cfg, get_seen_ids) == {"a", "low"}
+    assert _unread_ids(cfg) == ["a"]
+
+    # Read upstream since: the next fetch must mark it read, not keep it forever.
+    second = [IncrementalBatch([], {"a", "low"}, 0, [])]
+    with patch("refresh_service.fetch_and_score_incremental_iter", return_value=iter(second)):
+        assert cmd_fetch(args, cfg) == 0
+
+    assert _unread_ids(cfg) == []
+    assert _db(cfg, get_seen_ids) == set()
+
+
+def test_fetch_dry_run_writes_nothing(cfg):
+    from cli import cmd_fetch
+
+    batches = [IncrementalBatch([_article("a")], set(), 1, ["a"])]
+    with patch("refresh_service.fetch_and_score_incremental_iter", return_value=iter(batches)):
+        assert cmd_fetch(argparse.Namespace(dry_run=True), cfg) == 0
+
+    assert _db(cfg, get_seen_ids) == set()
+    assert _unread_ids(cfg) == []
 
 
 # -- import ------------------------------------------------------------------
