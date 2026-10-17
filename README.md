@@ -1,71 +1,120 @@
+<div align="center">
+
 # FreshRSS Summary
 
-Web UI to sort and score unread FreshRSS articles by topic relevance (SRE, Kubernetes, ArgoCD, Terraform...).
+**Triage your unread FreshRSS articles by relevance, not by date.**
 
-## Setup
+[![CI](https://github.com/PixiBixi/freshrss-summary/actions/workflows/ci.yml/badge.svg)](https://github.com/PixiBixi/freshrss-summary/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/PixiBixi/freshrss-summary)](LICENSE)
+[![Python 3.14](https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white)](Dockerfile)
+[![Docker image](https://img.shields.io/badge/ghcr.io-pixibixi%2Ffreshrss--summary-2496ED?logo=docker&logoColor=white)](https://github.com/PixiBixi/freshrss-summary/pkgs/container/freshrss-summary)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/triage-dark.png">
+  <img alt="FreshRSS Summary triage view with the reader preview open" src="docs/screenshots/triage-light.png" width="100%">
+</picture>
+
+</div>
+
+## Features
+
+- **Scored**: keyword-based relevance per topic, shown as a burn rate (`score / 100`) with P1, P2, P3 severities
+- **Tunable**: topics, keywords and per-feed multipliers editable live from the UI, no restart
+- **Fast triage**: views for Triage, Bookmarks, Snoozed and Read, burn-rate slider, period and topic filters, full-text search, open or ack a whole day at once
+- **Two densities**: Scan for skimming, Lecture for reading, plus a reader preview you can pin
+- **Keyboard first**: vim-style navigation and a `Cmd+K` command palette
+- **Hands-off**: scroll auto-read with undo, background auto-refresh, Telegram digest
+- **Polished**: light and dark themes, accent colour, 6 languages (fr, en, de, es, it, pt)
+- **Safe to expose**: anonymous visitors get a read-only view, everything else needs a login
+- **Self-hosted**: SQLite, MySQL or PostgreSQL, Docker image, Helm chart, Prometheus metrics
+
+<details>
+<summary>Command palette</summary>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/palette-dark.png">
+  <img alt="Command palette" src="docs/screenshots/palette-light.png" width="100%">
+</picture>
+
+</details>
+
+## Contents
+
+- [Quick start](#quick-start)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Configuration](#configuration)
+- [Authentication](#authentication)
+- [Scoring](#scoring)
+- [Database](#database)
+- [Deployment](#deployment)
+- [API](#api)
+- [Telegram digest](#telegram-digest)
+- [Observability](#observability)
+- [CLI](#cli)
+- [Development](#development)
+
+## Quick start
+
+### Docker
 
 ```bash
-# 1. Install uv (if not already installed)
-curl -LsSf https://astral.sh/uv/install.sh | sh
+docker run -d --name freshrss-summary -p 8123:8123 \
+  -e FRESHRSS_URL=https://rss.example.com \
+  -e FRESHRSS_USERNAME=user \
+  -e FRESHRSS_API_PASSWORD=pass \
+  -e ADMIN_PASSWORD=mypass \
+  -v "$(pwd)/data:/app/data" \
+  ghcr.io/pixibixi/freshrss-summary:latest
+```
 
-# 2. Create virtualenv and install dependencies
-uv venv
-source .venv/bin/activate
+Open [http://localhost:8123](http://localhost:8123), log in as `admin` and click **Sync**. `FRESHRSS_API_PASSWORD` is the FreshRSS API password (FreshRSS Settings, Authentication), not your login password.
+
+### Local
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh   # skip if uv is installed
+uv venv && source .venv/bin/activate
 uv pip install -r requirements.txt
-
-# 3. Config
-cp config.example.yaml config.yaml
-# Edit config.yaml with your FreshRSS URL, username and API password
+cp config.example.yaml config.yaml                # set FreshRSS url, username, api_password
+python app.py                                     # or: uvicorn app:app --host 0.0.0.0 --port 8123 --reload
 ```
 
-## Running
+## Keyboard shortcuts
 
-```bash
-python app.py
-# or
-uvicorn app:app --host 0.0.0.0 --port 8123 --reload
-```
+Press `?` in the app to list them. Shortcuts are ignored while typing in an input.
 
-Open [http://localhost:8123](http://localhost:8123) and click **Refresh**.
+| Key | Action |
+|-----|--------|
+| `Cmd+K` / `Ctrl+K` | Open the command palette |
+| `j` / `ArrowDown` | Next article |
+| `k` / `ArrowUp` | Previous article |
+| `Enter` | Open the article in the reader preview |
+| `o` | Open the article source in a new tab |
+| `m` | Mark the article as read (Triage view, login required) |
+| `M` | Mark all shown articles as read (Triage view, login required) |
+| `u` | Undo the last mark as read (login required) |
+| `s` | Snooze the article (Triage view, login required) |
+| `b` | Toggle bookmark (login required) |
+| `v` | Toggle density (Scan / Lecture) |
+| `p` | Pin or unpin the reader preview |
+| `[` | Collapse or expand the sidebar |
+| `r` | Sync (refresh) |
+| `/` | Focus the search box |
+| `1` / `2` / `3` | Filter on P1 / P2 / P3 (press again to clear) |
+| `0` | Reset filters |
+| `?` | Show the help |
+| `Esc` | Close the menu, reader preview or sidebar |
 
-## Authentication
+## Configuration
 
-On first start, an admin account is created automatically with a random password printed in the logs:
-
-```
-========================================================
-  FIRST RUN - admin account created
-  Username : admin
-  Password : xK9mP2rT...
-  Set ADMIN_PASSWORD env var to override on restart
-========================================================
-```
-
-To change the password:
-
-- **From the UI**: click the **🔑 Password** button in the header filters bar (requires login). Enter the current password, then the new one (min. 8 characters) with confirmation.
-- **Via env var on restart** (e.g. Docker / Kubernetes):
-
-```bash
-ADMIN_PASSWORD=newpassword python app.py
-# or with Docker:
-docker run -e ADMIN_USERNAME=jeremy -e ADMIN_PASSWORD=mypass ...
-```
-
-Only **Refresh**, **Rescore**, and **Show read** require authentication. Reading unread articles is public.
-
-Login attempts are rate-limited to **10 per minute per IP**.
-
-## Config
-
-`config.yaml` (not versioned - contains credentials):
+`config.yaml` (gitignored, contains credentials) is loaded first, then overridden by environment variables. Start from `config.example.yaml`.
 
 ```yaml
 freshrss:
   url: https://rss.example.com
   username: your_user
-  api_password: your_api_password    # ≠ login password
-  # Set it in FreshRSS → Settings → Authentication → API password
+  api_password: your_api_password    # not the login password
+  # Set it in FreshRSS: Settings > Authentication > API password
 
 database:
   # SQLAlchemy async URL (SQLite by default)
@@ -94,53 +143,9 @@ scheduler:
 #   secret_key: ""    # generate: python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-Topics and their keywords are editable live from the UI (⚙ **Topics** button in the header) - changes are persisted in the database, no restart required. The initial topic list is seeded from `config.yaml` on first startup.
+Topics and keywords are seeded from `config.yaml` on first startup, then edited live from the UI (persisted in the database).
 
-## Auto-refresh
-
-Set `scheduler.interval_minutes` (or `REFRESH_INTERVAL_MINUTES` env var) to fetch articles automatically on a schedule - no manual click required.
-
-```bash
-# Docker / docker-compose
-REFRESH_INTERVAL_MINUTES=60   # fetch every hour (0 = disabled, default)
-```
-
-- If a manual refresh is already in progress when the scheduler fires, it is skipped silently.
-- The scheduler starts at app boot and shuts down cleanly on exit.
-
-## Database
-
-Default: SQLite at `data/articles.db` (created automatically).
-
-To use MySQL or PostgreSQL, install the corresponding async driver and set the URL:
-
-```bash
-# MySQL
-uv pip install aiomysql
-# config.yaml → database.url: mysql+aiomysql://user:pass@host/db
-
-# PostgreSQL
-uv pip install asyncpg
-# config.yaml → database.url: postgresql+asyncpg://user:pass@host/db
-```
-
-The URL can also be set via the `DATABASE_URL` environment variable.
-
-DB schema migrations are applied automatically on startup (additive only).
-
-The `seen_ids` table tracks every article ID the incremental refresh has already
-processed, including the ones scored below `min_score` that are never stored in
-`articles`. Without it the refresh diff would re-list them every time, so they
-would be downloaded and re-scored on every run. It is seeded from the articles
-already present on first startup and pruned as FreshRSS drops IDs from its unread
-set, so it stays roughly the size of that set. A rescore forgets the IDs of the
-articles it drops below `min_score`, so the next refresh fetches them again if they
-are still unread upstream and scores them with the current weights. IDs are
-recorded in the same transaction as the articles they belong to.
-
-## Environment variables
-
-All config values can be overridden by environment variables:
+### Environment variables
 
 | Env var | Config equivalent |
 |---------|-------------------|
@@ -155,18 +160,102 @@ All config values can be overridden by environment variables:
 | `ADMIN_PASSWORD` | *(reset/init admin password)* |
 | `SECRET_KEY` | `auth.secret_key` |
 | `REFRESH_INTERVAL_MINUTES` | `scheduler.interval_minutes` |
+| `TELEGRAM_BOT_TOKEN` | `telegram.bot_token` |
+| `TELEGRAM_CHAT_ID` | `telegram.chat_id` |
+| `TELEGRAM_WEBHOOK_SECRET` | `telegram.webhook_secret` |
+| `PUBLIC_URL` | `server.public_url` |
+
+### Auto-refresh
+
+Set `scheduler.interval_minutes` (or `REFRESH_INTERVAL_MINUTES`) to fetch on a schedule (`0` = disabled, the default in env form).
+
+- A scheduled run is skipped silently if a manual refresh is already in progress.
+- The scheduler starts at app boot and shuts down cleanly on exit.
 
 ### Session key
 
-Sessions are signed with, in order of precedence: `SECRET_KEY`, then `auth.secret_key`
-in `config.yaml`, then a random key generated on first run and stored in the database.
+Sessions are signed with, in order of precedence: `SECRET_KEY`, then `auth.secret_key` in `config.yaml`, then a random key generated on first run and stored in the database. The generated key survives restarts and is shared by every replica pointing at the same database. Setting `SECRET_KEY` explicitly is recommended: it keeps the key out of the database and lets you rotate it, which invalidates all active sessions.
 
-The generated key is persisted, so sessions survive restarts, and it is shared by every
-replica pointing at the same database. Setting `SECRET_KEY` explicitly is still
-recommended - it keeps the key out of the database and lets you rotate it, which
-invalidates all active sessions.
+## Authentication
 
-## Docker
+On first start, an admin account is created with a random password printed in the logs:
+
+```
+========================================================
+  FIRST RUN - admin account created
+  Username : admin
+  Password : xK9mP2rT...
+  Set ADMIN_PASSWORD env var to override on restart
+========================================================
+```
+
+To change the password:
+
+- **From the UI**: open the `...` menu, then **Password** (requires login). Enter the current password, then the new one (min. 8 characters) with confirmation.
+- **Via env var on restart**: `ADMIN_PASSWORD=newpassword python app.py`, or `docker run -e ADMIN_USERNAME=jeremy -e ADMIN_PASSWORD=mypass ...`
+
+Login attempts are rate-limited to **10 per minute per IP**.
+
+| Access | Endpoints |
+|--------|-----------|
+| Public (read-only) | `/`, `/login`, `/logout`, `/api/articles` (`show_read` ignored), `/api/status`, `/health` |
+| Login required (session cookie) | `/api/refresh`, `/api/refresh/stream`, `/api/mark-read`, `/api/mark-unread`, `/api/rescore`, `/api/bookmark`, `/api/snooze`, `/api/snoozes`, `/api/feeds`, `/api/config/scoring` (GET, PUT), `/api/change-password`, `/metrics` |
+| Own secret | `/telegram/webhook` (see [Telegram digest](#telegram-digest)) |
+
+## Scoring
+
+```
+score = sum(title_occurrences * title_weight + body_occurrences) * topic_weight * feed_weight
+```
+
+The UI shows the score as a burn rate (`score / 100`). Hover or open an article to see the per-topic breakdown, plus the feed multiplier when it is not the default.
+
+### Topics (default config)
+
+12 topics, each with a tunable weight and keyword list:
+
+| Topic | Default weight |
+|-------|---------------|
+| SRE | 1.5 |
+| Kubernetes | 1.5 |
+| GKE | 2.0 |
+| GitOps (ArgoCD, Flux...) | 1.5 |
+| Terraform / IaC | 1.3 |
+| Immutable OS | 1.4 |
+| Platform Engineering | 1.2 |
+| Observability | 1.1 |
+| Security | 1.1 |
+| CI/CD | 1.0 |
+| Networking | 1.0 |
+| FinOps | 1.2 |
+
+Weights and keywords are edited from the scoring modal (sidebar, Topics, Manage): saved to the database, followed by an automatic rescore. `python cli.py tune --apply` suggests weights from your starred articles.
+
+### Per-feed multipliers
+
+The **Feeds** tab of the scoring modal sets a score multiplier per feed (0.1 to 10.0, default `1.0`). Feeds with non-default multipliers are listed first, colour-coded by intensity (boost in accent colour, malus in red).
+
+## Database
+
+Default: SQLite at `data/articles.db`, created automatically. For MySQL or PostgreSQL, install the async driver and set `database.url` or `DATABASE_URL`:
+
+```bash
+uv pip install aiomysql   # mysql+aiomysql://user:pass@host/db
+uv pip install asyncpg    # postgresql+asyncpg://user:pass@host/db
+```
+
+Schema migrations are applied automatically on startup (additive only).
+
+<details>
+<summary>The seen_ids table</summary>
+
+The `seen_ids` table tracks every article ID the incremental refresh has already processed, including the ones scored below `min_score` that are never stored in `articles`. Without it the refresh diff would re-list them every time, so they would be downloaded and re-scored on every run. It is seeded from the articles already present on first startup and pruned as FreshRSS drops IDs from its unread set, so it stays roughly the size of that set. A rescore forgets the IDs of the articles it drops below `min_score`, so the next refresh fetches them again if they are still unread upstream and scores them with the current weights. IDs are recorded in the same transaction as the articles they belong to.
+
+</details>
+
+## Deployment
+
+### Docker
 
 ```bash
 docker build -t freshrss-summary .
@@ -179,7 +268,9 @@ docker run -p 8123:8123 \
   freshrss-summary
 ```
 
-## Helm (Kubernetes)
+A `docker-compose.yml` using the published image is provided.
+
+### Helm (Kubernetes)
 
 ```bash
 helm install freshrss-summary ./helm/freshrss-summary \
@@ -200,112 +291,20 @@ secret:
   existingSecret: "freshrss-summary-creds"  # pre-existing Secret with expected keys
 ```
 
-Key values:
-
 | Key | Description |
 |-----|-------------|
 | `freshrss.url` | FreshRSS instance URL |
 | `freshrss.username` | FreshRSS username |
-| `secret.freshrssApiPassword` | FreshRSS API password (≠ login password) |
+| `secret.freshrssApiPassword` | FreshRSS API password (not the login password) |
 | `secret.adminPassword` | Admin UI password |
-| `secret.secretKey` | JWT secret - generate with `python3 -c "import secrets; print(secrets.token_hex(32))"` |
+| `secret.secretKey` | Session signing secret - generate with `python3 -c "import secrets; print(secrets.token_hex(32))"` |
 | `secret.databaseUrl` | Optional - override SQLite with MySQL/PostgreSQL URL |
 | `persistence.size` | PVC size for SQLite data (default: `1Gi`) |
 | `ingress.enabled` | Expose via ingress controller |
 | `networkPolicy.enabled` | Enable NetworkPolicy (default: `true`) |
 | `networkPolicy.dbPort` | Egress port for external DB - `5432` (PG) / `3306` (MySQL) / `0` to disable |
 
-> Run a single replica whatever the database - do **not** enable `autoscaling`: the cache, refresh slot, scheduler (refresh + Telegram digest) and login rate limit are per-process.
-
-## CLI
-
-The CLI provides offline operations without starting the server:
-
-```bash
-python cli.py <command> [options]
-```
-
-| Command | Description |
-|---------|-------------|
-| `check` | Test FreshRSS connection and DB reachability |
-| `stats` | Show DB statistics (articles, bookmarks, topics, last refresh) |
-| `fetch [--dry-run]` | Same incremental refresh as the app: fetch and score the unread articles not seen yet, save them, mark read the ones FreshRSS no longer lists as unread |
-| `rescore [--dry-run]` | Reapply the active topics and feed weights (DB, as edited in the UI) to articles already in DB |
-| `import [FILE] [--starred] [--limit N] [--dry-run]` | Import from a JSON file or from FreshRSS starred stream. Articles already read stay read; imported articles that FreshRSS does not list as unread are marked read by the next refresh |
-| `tune [--apply] [--limit N]` | Analyze starred articles, suggest weight adjustments; `--apply` writes them to the DB scoring config, like the UI ⚙ **Topics** editor (run `rescore` afterwards) |
-
-```bash
-python cli.py check
-python cli.py fetch --dry-run
-python cli.py import --starred --limit 300
-python cli.py tune --apply
-python cli.py import articles.json
-```
-
-## Scoring
-
-```
-score = Σ (title_occurrences × title_weight + body_occurrences) × topic_weight × feed_weight
-```
-
-The highest-scoring article best matches your configured topics. Score breakdown per topic - plus feed multiplier if non-default - is shown as a tooltip on each article's score badge.
-
-### Topics (default config)
-
-12 topics, each with tunable weight and keyword list:
-
-| Topic | Default weight |
-|-------|---------------|
-| SRE | 1.5 |
-| Kubernetes | 1.5 |
-| GKE | 2.0 |
-| GitOps (ArgoCD, Flux…) | 1.5 |
-| Terraform / IaC | 1.3 |
-| Immutable OS | 1.4 |
-| Platform Engineering | 1.2 |
-| Observability | 1.1 |
-| Security | 1.1 |
-| CI/CD | 1.0 |
-| Networking | 1.0 |
-| FinOps | 1.2 |
-
-Weights and keywords are editable live from the UI (⚙ **Topics** button) - persisted in the database, no restart required. The `config.yaml` topics section is only used to seed the database on first startup. Use `python cli.py tune --apply` to suggest weight adjustments based on your starred articles.
-
-### Per-feed multipliers
-
-The **Feeds** tab in the scoring modal (⚙ Topics → Feeds) lets you set a score multiplier per feed (0.1 to 10.0). Feeds with non-default multipliers are shown first, color-coded by intensity (boost in accent color, malus in red). Default is `1.0` (no effect).
-
-## UI Features
-
-### Reading
-
-- **SSE streaming**: articles appear progressively as they are fetched, no full-page wait
-- **Auto mark-as-read on scroll**: articles scrolled past are silently marked as read in FreshRSS after a 3s debounce
-- **Mark as read**: single article (✓ Lu), all articles in a day group (Mark Day), or all visible (✓ Tout lire) - articles disappear from the page immediately on mark
-- **Open all**: open every article in a day group as tabs (with confirmation above 10)
-- **Show read**: toggle to reveal articles marked as read (kept 7 days, purged on refresh) - requires login
-- **Bookmarks**: starred locally, survive refreshes
-
-### Filtering & sorting
-
-- **Topic pills**: filter by topic, with article count and proportion mini-bar
-- **Sort**: by score (default), date, or source
-- **Min score**: adjustable live - hides low-relevance articles
-- **Period**: 7d / 14d / 30d / all
-- **Full-text search**: client-side filter on title and feed name
-- **✓ Mark all read**: always-visible button - marks all currently displayed articles as read and removes them from the page; in search mode, scoped to search results
-
-### Interface
-
-- **Keyboard shortcuts**: `j`/`k` navigate, `Enter`/`o` open, `m` mark as read, `r` refresh, `Esc` close detail
-- **Compact mode**: denser list layout, toggled with ⊟
-- **Score tooltip**: hover the score badge to see per-topic contribution breakdown
-- **Auto-refresh**: configurable background scheduler - open the UI in the morning and articles are already there (see `REFRESH_INTERVAL_MINUTES`)
-- **Last refresh indicator**: shows time since last fetch; ⚠ warning if stale (>3h)
-- **Rescore**: reapply current weights without re-fetching
-- **Scoring config** (⚙ Topics): edit topic names, weights, and keywords live; **Feeds** tab for per-feed score multipliers - saved to DB, triggers automatic rescore
-- **Password change** (🔑 Password): change the current user's password directly from the UI - no restart required
-- **i18n**: French, English, German, Spanish, Italian, Portuguese - auto-detected from browser, override persisted in localStorage
+> Run a single replica whatever the database, and do **not** enable `autoscaling`: the cache, refresh slot, scheduler (refresh + Telegram digest) and login rate limit are per-process.
 
 ## API
 
@@ -336,6 +335,51 @@ Compact listing for an agent:
 curl -s 'https://summary.example.com/api/articles?days=30&limit=0&min_score=5&exclude_feeds=DEV.to&dedupe=title&fields=id,title,url,feed_title,score,top_topic,summary&summary_chars=200'
 ```
 
+### `POST /api/mark-unread`
+
+Auth required. Inverse of `/api/mark-read`: restores the articles to the unread list and unmarks them in FreshRSS (best effort, not retried).
+
+```bash
+curl -s -b cookies.txt -H 'Content-Type: application/json' -d '{"article_ids": ["tag:a"]}' https://summary.example.com/api/mark-unread
+# {"status": "ok", "unmarked": 1}
+```
+
+`status` is `ok`, `queued` (FreshRSS unreachable) or `not_configured`. Empty `article_ids` returns 400.
+
+### `GET /api/snoozes`
+
+Auth required. All pending snoozes, ordered by `snooze_until`.
+
+```json
+{"snoozes": [{"article_id": "tag:a", "snooze_until": 1760000000, "title": "K8s guide", "url": "https://example.com/k8s"}]}
+```
+
+### `DELETE /api/snooze/{article_id}`
+
+Auth required. Cancels the pending snooze of an article. Returns `{"status": "ok"}`.
+
+## Telegram digest
+
+Optional. With `bot_token` and `chat_id` set, a daily digest is sent at `digest_hour` (Europe/Paris, default `21`). Send `/digest` to the bot for an on-demand digest (requires the webhook). The app also sends trending alerts and snooze reminders.
+
+1. Create a bot with @BotFather and copy the token.
+2. Send a message to the bot, then read `chat.id` from `https://api.telegram.org/bot<TOKEN>/getUpdates`.
+3. Set `PUBLIC_URL` (or `server.public_url`) so the webhook registers automatically, or register it manually:
+
+```bash
+curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=<PUBLIC_URL>/telegram/webhook&secret_token=<SECRET>"
+```
+
+```yaml
+telegram:
+  bot_token: ""          # TELEGRAM_BOT_TOKEN
+  chat_id: ""            # TELEGRAM_CHAT_ID
+  digest_hour: 21        # Hour in Europe/Paris timezone (0-23)
+  webhook_secret: ""     # TELEGRAM_WEBHOOK_SECRET, any random string
+```
+
+`/telegram/webhook` checks the `X-Telegram-Bot-Api-Secret-Token` header against `webhook_secret`: 404 if Telegram is not configured, 403 if the secret is invalid.
+
 ## Observability
 
 ### Health check
@@ -356,9 +400,7 @@ Returns `503` with `"status": "degraded"` if the DB is unreachable.
 
 ### Prometheus metrics
 
-`GET /metrics` - **authentication required**, like every other mutating or
-operational endpoint. Point your scraper at it with a session cookie, or put it
-behind your own reverse-proxy auth. Standard Prometheus text format.
+`GET /metrics` - **authentication required**. Scrape it with a session cookie, or put it behind your own reverse-proxy auth. Standard Prometheus text format.
 
 | Metric | Type | Description |
 |--------|------|-------------|
@@ -372,30 +414,50 @@ behind your own reverse-proxy auth. Standard Prometheus text format.
 | `freshrss_rescore_articles` | Histogram | Articles processed per rescore |
 | `freshrss_rescore_workers` | Gauge | Worker processes used by the last rescore |
 
-Rescore duration scales with the article count divided by the number of worker
-processes, and that worker count is derived from the CPUs the container can
-actually use. Divide `rescore_duration_seconds_sum` by `rescore_articles_sum` for
-a per-article cost that is comparable across hosts:
+Per-article rescore cost, comparable across hosts (worker count follows the CPUs the container can use):
 
 ```promql
 rate(freshrss_rescore_duration_seconds_sum[1h])
   / rate(freshrss_rescore_articles_sum[1h])
 ```
 
-## Testing
+## CLI
+
+Offline operations, no server needed:
 
 ```bash
-# Install dev dependencies
-uv pip install -r requirements-dev.txt
-
-# Run all tests
-uv run pytest
-
-# With verbose output
-uv run pytest -v
+python cli.py <command> [options]
 ```
 
-156 tests across 5 modules - no network or FreshRSS access required:
+| Command | Description |
+|---------|-------------|
+| `check` | Test FreshRSS connection and DB reachability |
+| `stats` | Show DB statistics (articles, bookmarks, topics, last refresh) |
+| `fetch [--dry-run]` | Same incremental refresh as the app: fetch and score the unread articles not seen yet, save them, mark read the ones FreshRSS no longer lists as unread |
+| `rescore [--dry-run]` | Reapply the active topics and feed weights (DB, as edited in the UI) to articles already in DB |
+| `import [FILE] [--starred] [--limit N] [--dry-run]` | Import from a JSON file or from FreshRSS starred stream. Articles already read stay read; imported articles that FreshRSS does not list as unread are marked read by the next refresh |
+| `tune [--apply] [--limit N]` | Analyze starred articles, suggest weight adjustments; `--apply` writes them to the DB scoring config, like the scoring modal (run `rescore` afterwards) |
+
+```bash
+python cli.py check
+python cli.py fetch --dry-run
+python cli.py import --starred --limit 300
+python cli.py tune --apply
+python cli.py import articles.json
+```
+
+## Development
+
+```bash
+uv pip install -r requirements-dev.txt
+uv run pytest            # add -v for verbose output
+pre-commit run --all-files
+```
+
+Tests need no network or FreshRSS access.
+
+<details>
+<summary>Test modules</summary>
 
 | Module | Coverage |
 |--------|---------|
@@ -405,6 +467,15 @@ uv run pytest -v
 | `test_app.py` | Password hashing, `load_config`, `Cache.populate` |
 | `test_cli.py` | `load_config`, ANSI helpers |
 
-## Code Quality
+</details>
+
+<details>
+<summary>Code quality</summary>
 
 <img src="scorecard.png" width="100%">
+
+</details>
+
+## License
+
+[MIT](LICENSE)
