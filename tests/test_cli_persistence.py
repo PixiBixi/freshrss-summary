@@ -218,3 +218,23 @@ def test_tune_reads_feed_weights_from_db(cfg):
     assert seen == [{"Feed": 3.0}]
     assert _db(cfg, get_feed_weights) == {"Feed": 3.0}
     assert _db(cfg, get_meta, "total_fetched", "unset") == "unset"
+
+
+# -- isolation ---------------------------------------------------------------
+
+
+def test_cli_default_db_resolves_inside_tmp_path(tmp_path):
+    from cli import _init_db
+
+    async def _resolved() -> str:
+        await _init_db({"database": {}})
+        try:
+            return str(get_engine().url.database)
+        finally:
+            await get_engine().dispose()
+
+    try:
+        resolved = asyncio.run(_resolved())
+    finally:
+        set_engine_for_testing(None)
+    assert resolved.startswith(str(tmp_path)), resolved
