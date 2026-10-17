@@ -130,6 +130,27 @@ class TestGetArticles:
         assert "sre" not in ids
 
 
+class TestShowReadFilters:
+    async def test_read_articles_go_through_the_same_filters(self, authed_client, db_engine):
+        from db import save_articles, set_articles_read
+
+        off_topic = dict(_ARTICLE, id="read-sre", matched_topics={"SRE": 3.0}, score=3.0)
+        low = dict(_ARTICLE, id="read-low", score=1.0)
+        old = dict(_ARTICLE, id="read-old", published=int(time.time()) - 30 * 86400)
+        kept = dict(_ARTICLE, id="read-kept")
+        await save_articles([off_topic, low, old, kept], total_fetched=4)
+        await set_articles_read(["read-sre", "read-low", "read-old", "read-kept"])
+        cache.articles = [dict(_ARTICLE)]
+
+        resp = await authed_client.get(
+            "/api/articles?show_read=true&topic=Kubernetes&min_score=5&days=7"
+        )
+
+        data = resp.json()
+        assert sorted(a["id"] for a in data["articles"]) == ["read-kept", "tag:a"]
+        assert data["total"] == 2
+
+
 # ── /api/mark-read ─────────────────────────────────────────────────────────────
 
 
