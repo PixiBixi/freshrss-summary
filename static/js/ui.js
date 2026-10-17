@@ -58,6 +58,46 @@ function esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// Only http(s) URLs are linkable: blocks javascript:/data: URLs coming from feeds.
+function safeUrl(u) { return /^https?:\/\//i.test(String(u ?? '')) ? String(u) : '#'; }
+
+function linkAttrs(u) {
+  const url = safeUrl(u);
+  return url === '#' ? 'href="#"' : `href="${esc(url)}" target="_blank" rel="noopener"`;
+}
+
+// ── Delegated click handlers (no inline JS built from data) ────────────
+function _initDelegation() {
+  document.getElementById('articles-grid').addEventListener('click', e => {
+    if (e.target.closest('a.row-title, a.compact-title')) return;
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    const id = el.dataset.id;
+    switch (el.dataset.action) {
+      case 'toggle-row': el.classList.contains('compact-row') ? toggleCompactRow(id) : toggleDetail(id); break;
+      case 'bookmark':   toggleBookmark(id, e); break;
+      case 'mark-read':  markSingleAsRead(id, e); break;
+      case 'snooze':     snoozeArticle(id, e); break;
+      case 'day-open':   openDayLinks(el); break;
+      case 'day-read':   markDayAsRead(el); break;
+    }
+  });
+  document.getElementById('topic-bar').addEventListener('click', e => {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    switch (el.dataset.action) {
+      case 'filter-all':       filterTopic(null); break;
+      case 'filter-bookmarks': filterBookmarks(); break;
+      case 'filter-topic':     filterTopic(el.dataset.topic); break;
+    }
+  });
+  document.getElementById('overflow-lang')?.addEventListener('click', e => {
+    const el = e.target.closest('[data-lang]');
+    if (!el) return;
+    setLang(el.dataset.lang); closeOverflowMenu();
+  });
+}
+
 // ── Detail panel (mode A) ──────────────────────────────────────────────
 function toggleDetail(id) {
   const detail = document.getElementById(`detail-${id}`);
@@ -153,7 +193,7 @@ function _buildOverflowLang() {
   if (!container) return;
   container.innerHTML = LANGS.map(l =>
     `<button class="overflow-lang-item${l.code === state.lang ? ' active' : ''}"
-      onclick="setLang('${l.code}'); closeOverflowMenu()">
+      data-lang="${esc(l.code)}">
       <span>${l.flag}</span><span>${l.label}</span>
     </button>`
   ).join('');
@@ -253,10 +293,10 @@ function openDayLinks(btn) {
   const group = btn.closest('.date-group');
   if (!group) return;
   const ids = new Set(JSON.parse(group.dataset.ids || '[]'));
-  const articles = state.articles.filter(a => ids.has(a.id));
+  const articles = state.articles.filter(a => ids.has(a.id) && safeUrl(a.url) !== '#');
   if (!articles.length) return;
-  if (articles.length > 10 && !confirm(`Ouvrir ${articles.length} onglets ?`)) return;
-  articles.forEach(a => window.open(a.url, '_blank', 'noopener'));
+  if (articles.length > 10 && !confirm(t('confirm.openTabs', { n: articles.length }))) return;
+  articles.forEach(a => window.open(safeUrl(a.url), '_blank', 'noopener'));
 }
 
 // ── Scoring config modal ────────────────────────────────────────────────
@@ -266,13 +306,13 @@ async function openScoringModal() {
   if (!_requireAuth()) return;
   const modal = document.getElementById('scoring-modal');
   modal.style.display = 'flex';
-  document.getElementById('scoring-topics').innerHTML = '<p style="color:var(--text-3);font-size:13px">Chargement…</p>';
+  document.getElementById('scoring-topics').innerHTML = '<p style="color:var(--text-3);font-size:13px">' + esc(t('cfg.loading')) + '</p>';
   document.getElementById('scoring-feeds').innerHTML = '';
 
   try {
     const [cfg, feedsResp] = await Promise.all([
       fetchScoringConfig(),
-      fetch('/api/feeds').then(r => r.json()),
+      apiJson('/api/feeds'),
     ]);
     const { topics, feed_weights } = cfg;
     _scoringState = {
@@ -327,7 +367,7 @@ function _renderFeedRows(feedWeights) {
   const defaults = allFeeds.filter(f => Math.abs((feedWeights[f] ?? 1.0) - 1.0) <= 0.001);
 
   const sep = (custom.length && defaults.length)
-    ? `<div class="fw-sep">par défaut</div>`
+    ? `<div class="fw-sep">${esc(t('cfg.default'))}</div>`
     : '';
   container.innerHTML =
     custom.map(f => _feedWeightRowHtml(f, feedWeights[f])).join('') +
@@ -381,7 +421,7 @@ function closeScoringModal() {
 function _renderScoringTopics(topics) {
   const container = document.getElementById('scoring-topics');
   if (!Object.keys(topics).length) {
-    container.innerHTML = '<p style="color:var(--text-3);font-size:13px">Aucun topic configuré.</p>';
+    container.innerHTML = '<p style="color:var(--text-3);font-size:13px">' + esc(t('cfg.noTopics')) + '</p>';
     return;
   }
   container.innerHTML = Object.entries(topics)
@@ -572,10 +612,15 @@ document.addEventListener('DOMContentLoaded', () => {
     state.days = parseInt(e.target.value);
     loadArticles();
   });
+  let searchTimer = null;
   document.getElementById('search-input').addEventListener('input', e => {
-    state.search = e.target.value.trim();
-    state.displayed = 100;
-    applyFilters();
+    const v = e.target.value.trim();
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.search = v;
+      state.displayed = 100;
+      applyFilters();
+    }, 150);
   });
 
   document.getElementById('palette-input')?.addEventListener('input', e => {
@@ -630,7 +675,7 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (e.key === 'o' || e.key === 'Enter') {
       if (state.focusedIdx >= 0) {
         const a = state.filtered[state.focusedIdx];
-        if (a) window.open(a.url, '_blank', 'noopener');
+        if (a && safeUrl(a.url) !== '#') window.open(safeUrl(a.url), '_blank', 'noopener');
       }
     }
     else if (e.key === 'm') {
@@ -646,16 +691,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  _initDelegation();
   fetchMe();
   applyI18n();
 
   fetchStatus().then(status => {
     updateLastRefresh(status.last_refresh);
-    if (status.is_loading) {
-      if (state.authenticated) { setRefreshBtnLoading(true); showToast(status.load_progress || t('toast.loading')); startPolling(); }
-      loadArticles();
-    } else loadArticles();
-  });
+    if (status.is_loading && state.authenticated) {
+      setRefreshBtnLoading(true); showToast(status.load_progress || t('toast.loading')); startPolling();
+    }
+  }).catch(() => {}).finally(loadArticles);
 
-  setInterval(async () => { const s = await fetchStatus(); updateLastRefresh(s.last_refresh); }, 60000);
+  setInterval(async () => {
+    try { updateLastRefresh((await fetchStatus()).last_refresh); } catch { /* retried next tick */ }
+  }, 60000);
 });

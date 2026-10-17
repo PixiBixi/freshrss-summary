@@ -71,18 +71,14 @@ function renderArticles() {
       <div class="date-header">
         ${esc(label)}
         <span class="date-hr"></span>
-        <button class="day-open-btn" onclick="openDayLinks(this)">${t('btn.dayOpen')}</button>
-        <button class="day-read-btn" onclick="markDayAsRead(this)">${t('btn.dayRead')}</button>
+        <button class="day-open-btn" data-action="day-open">${t('btn.dayOpen')}</button>
+        <button class="day-read-btn" data-action="day-read">${t('btn.dayRead')}</button>
       </div>
       <div class="feed-list">
         ${items.map(state.compact ? renderCompactRow : renderRow).join('')}
       </div>
     </div>
   `).join('');
-
-  _markedIds.forEach(id => {
-    document.querySelector(`.feed-row[data-id="${CSS.escape(id)}"], .compact-row[data-id="${CSS.escape(id)}"]`)?.classList.add('read');
-  });
 
   lm.classList.toggle('visible', state.filtered.length > state.displayed);
 }
@@ -116,15 +112,15 @@ function groupByDate(articles) {
 
 function dateKey(d) { return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }
 
+function _locale() { return LANGS.find(l => l.code === state.lang)?.locale || 'fr-FR'; }
+
 function fmtDate(d) {
-  const locale = state.lang === 'en' ? 'en-GB' : 'fr-FR';
-  return d.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return d.toLocaleDateString(_locale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function fmtTime(ts) {
   if (!ts) return '';
-  const locale = state.lang === 'en' ? 'en-GB' : 'fr-FR';
-  return new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  return new Date(ts * 1000).toLocaleTimeString(_locale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 function fmtAgo(ts) {
@@ -154,21 +150,20 @@ function renderRow(a) {
   }
 
   return `
-    <div class="feed-row${a._read ? ' shown-read' : ''}" data-id="${esc(a.id)}"${a._read ? ' data-already-read="1"' : ''}
-      onclick="toggleDetail('${esc(a.id)}')">
+    <div class="feed-row${a._read ? ' shown-read' : ''}${_markedIds.has(a.id) ? ' read' : ''}" data-id="${esc(a.id)}"${a._read ? ' data-already-read="1"' : ''}
+      data-action="toggle-row">
       <div class="row-line1">
-        <a class="row-title" href="${esc(a.url)}" target="_blank" rel="noopener"
-          onclick="event.stopPropagation()">${esc(a.title)}</a>
+        <a class="row-title" ${linkAttrs(a.url)}>${esc(a.title)}</a>
         <div class="row-actions">
           ${!a._read ? `
             ${state.authenticated ? `
             <button class="row-bookmark ${a.bookmarked ? 'bookmarked' : ''}"
-              onclick="toggleBookmark('${esc(a.id)}', event)"
+              data-action="bookmark" data-id="${esc(a.id)}"
               aria-label="${a.bookmarked ? 'Retirer des favoris' : 'Ajouter aux favoris'}"
               aria-pressed="${a.bookmarked}">${a.bookmarked ? '★' : '☆'}</button>
-            <button class="row-lu" onclick="markSingleAsRead('${esc(a.id)}', event)"
+            <button class="row-lu" data-action="mark-read" data-id="${esc(a.id)}"
               aria-label="Marquer comme lu">${t('btn.markRead')}</button>
-            <button class="row-snooze" onclick="snoozeArticle('${esc(a.id)}', event)"
+            <button class="row-snooze" data-action="snooze" data-id="${esc(a.id)}"
               aria-label="Rappel demain" title="Rappel demain 8h">💤</button>
             ` : ''}
           ` : `<span class="badge-read">${t('label.read')}</span>`}
@@ -196,20 +191,19 @@ function renderCompactRow(a) {
   for (const topic of topTopics) metaParts.push(`<span class="row-topic-tag">${esc(topic)}</span>`);
 
   return `
-    <div class="compact-row${a._read ? ' shown-read' : ''}" data-id="${esc(a.id)}"${a._read ? ' data-already-read="1"' : ''}
-      onclick="toggleCompactRow('${esc(a.id)}')">
+    <div class="compact-row${a._read ? ' shown-read' : ''}${_markedIds.has(a.id) ? ' read' : ''}" data-id="${esc(a.id)}"${a._read ? ' data-already-read="1"' : ''}
+      data-action="toggle-row">
       <span class="compact-score ${sc}" data-tooltip="${esc(tooltip)}">${a.score.toFixed(0)}</span>
       <span class="compact-feed">${esc(a.feed_title)}</span>
-      <a class="compact-title" href="${esc(a.url)}" target="_blank" rel="noopener"
-        onclick="event.stopPropagation()">${esc(a.title)}</a>
+      <a class="compact-title" ${linkAttrs(a.url)}>${esc(a.title)}</a>
       ${!a._read ? `
         ${state.authenticated ? `
         <button class="row-bookmark ${a.bookmarked ? 'bookmarked' : ''}"
-          onclick="toggleBookmark('${esc(a.id)}', event)"
+          data-action="bookmark" data-id="${esc(a.id)}"
           aria-label="${a.bookmarked ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${a.bookmarked ? '★' : '☆'}</button>
-        <button class="row-lu" onclick="markSingleAsRead('${esc(a.id)}', event)"
+        <button class="row-lu" data-action="mark-read" data-id="${esc(a.id)}"
           aria-label="Marquer comme lu">${t('btn.markRead')}</button>
-        <button class="row-snooze" onclick="snoozeArticle('${esc(a.id)}', event)"
+        <button class="row-snooze" data-action="snooze" data-id="${esc(a.id)}"
           aria-label="Rappel demain" title="Rappel demain 8h">💤</button>
         ` : ''}
       ` : `<span class="badge-read">${t('label.read')}</span>`}
@@ -229,17 +223,17 @@ function buildTopicPills(articles) {
   const bookmarkCount = articles.filter(a => a.bookmarked).length;
   bar.innerHTML = `
     <button class="pill ${!state.activeTopic && !state.showBookmarks ? 'active' : ''}" id="pill-all"
-        style="--bar:100%" onclick="filterTopic(null)">
+        style="--bar:100%" data-action="filter-all">
       ${t('topic.all')} <span style="opacity:.6">${articles.length}</span>
     </button>
     ${bookmarkCount > 0 ? `
     <button class="pill ${state.showBookmarks ? 'active' : ''}" id="pill-bookmarks"
-        style="--bar:${Math.round(bookmarkCount / articles.length * 100)}%" onclick="filterBookmarks()">
+        style="--bar:${Math.round(bookmarkCount / articles.length * 100)}%" data-action="filter-bookmarks">
       ${t('topic.bookmarks')} <span style="opacity:.6">${bookmarkCount}</span>
     </button>` : ''}
     ${sorted.map(([topic, n]) => `
       <button class="pill ${state.activeTopic === topic ? 'active' : ''}" id="pill-${esc(topic.replace(/\s+/g, '-'))}"
-          style="--bar:${Math.round(n / maxCount * 100)}%" onclick="filterTopic('${esc(topic)}')">
+          style="--bar:${Math.round(n / maxCount * 100)}%" data-action="filter-topic" data-topic="${esc(topic)}">
         ${esc(topic)} <span style="opacity:.6">${n}</span>
       </button>`).join('')}`;
   bar.classList.toggle('visible', sorted.length > 0);
