@@ -1,6 +1,14 @@
 # Changelog
 
 - - -
+## [v1.10.0](https://github.com/PixiBixi/freshrss-summary/compare/9c5050e1f273fa41c2a78d7974136a92f199188e..v1.10.0) - 2026-10-17
+#### Features
+- (**api**) add compact listing params to /api/articles - ([9c5050e](https://github.com/PixiBixi/freshrss-summary/commit/9c5050e1f273fa41c2a78d7974136a92f199188e)) - Jeremy Delgado
+#### Tests
+- (**pipeline**) check feed-weighted rescore is idempotent - ([b473574](https://github.com/PixiBixi/freshrss-summary/commit/b473574a6b3bf525cae6be79a923cbaba988ba0a)) - Jeremy Delgado
+
+- - -
+
 ## [v1.9.40](https://github.com/PixiBixi/freshrss-summary/compare/90db9a2fcbca17da25b47727ba501da94612432b..v1.9.40) - 2026-10-17
 #### Bug Fixes
 - (**cli**) make tune use the DB scoring config - ([ef8cbf2](https://github.com/PixiBixi/freshrss-summary/commit/ef8cbf244ab26f9bc475ee0f4ef9bafde99f0196)) - Jeremy Delgado
