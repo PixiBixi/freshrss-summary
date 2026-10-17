@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.9.37](https://github.com/PixiBixi/freshrss-summary/compare/ab585daff572573cc57972ac7b152ec0a5b5e192..v1.9.37) - 2026-10-17
+#### Bug Fixes
+- (**deps**) update dependency sqlalchemy to v2.1.5 (#93) - ([ab585da](https://github.com/PixiBixi/freshrss-summary/commit/ab585daff572573cc57972ac7b152ec0a5b5e192)) - renovate[bot]
+
+- - -
+
 ## [v1.9.36](https://github.com/PixiBixi/freshrss-summary/compare/03e6b9c0f9a35f81fe19382f6ed3e04fc219ea5e..v1.9.36) - 2026-10-17
 #### Bug Fixes
 - (**deps**) update dependency fastapi to v0.143.3 (#92) - ([03e6b9c](https://github.com/PixiBixi/freshrss-summary/commit/03e6b9c0f9a35f81fe19382f6ed3e04fc219ea5e)) - renovate[bot]
