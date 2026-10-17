@@ -247,15 +247,40 @@ async def save_articles(articles: list[ArticleDict], total_fetched: int) -> set[
     return already_read
 
 
-async def upsert_articles(articles: list[ArticleDict]) -> None:
-    """Insert or replace articles by id without wiping the full table."""
+async def upsert_articles(articles: list[ArticleDict]) -> set[str]:
+    """
+    Insert or replace unread articles by id without wiping the full table.
+
+    Read rows are left alone, or an import would bring them back unread. Every ID
+    is recorded in seen_ids, same transaction, so the next refresh reconciles it
+    with FreshRSS like any fetched article. Returns the IDs skipped as read.
+    """
     now = int(time.time())
-    rows = [_article_to_row(a, now) for a in articles]
-    ids = [r["id"] for r in rows]
+    ids = [a["id"] for a in articles]
+    already_read: set[str] = set()
     async with get_engine().begin() as conn:
-        await conn.execute(delete(articles_table).where(articles_table.c.id.in_(ids)))
+        for i in range(0, len(ids), DB_CHUNK_SIZE):
+            chunk = ids[i : i + DB_CHUNK_SIZE]
+            already_read.update(
+                r[0]
+                for r in (
+                    await conn.execute(
+                        select(articles_table.c.id).where(
+                            articles_table.c.id.in_(chunk), articles_table.c.read_at.is_not(None)
+                        )
+                    )
+                ).all()
+            )
+            await conn.execute(
+                delete(articles_table).where(
+                    articles_table.c.id.in_(chunk), articles_table.c.read_at.is_(None)
+                )
+            )
+        rows = [_article_to_row(a, now) for a in articles if a["id"] not in already_read]
         if rows:
             await conn.execute(insert(articles_table), rows)
+        await _record_seen_ids(conn, ids, now)
+    return already_read
 
 
 async def bookmark_articles(ids: list[str]) -> None:
