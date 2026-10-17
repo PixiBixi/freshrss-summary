@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.11.1](https://github.com/PixiBixi/freshrss-summary/compare/e9836efe39755e4328f24414c8d91ed0248825fb..v1.11.1) - 2026-10-17
+#### Bug Fixes
+- (**ui**) calibrate P1/P2 thresholds on real scores - ([e9836ef](https://github.com/PixiBixi/freshrss-summary/commit/e9836efe39755e4328f24414c8d91ed0248825fb)) - Jeremy Delgado
+
+- - -
+
 ## [v1.11.0](https://github.com/PixiBixi/freshrss-summary/compare/40582c0ef5a334587d99aea5436a298c944b0250..v1.11.0) - 2026-10-17
 #### Features
 - (**api**) add mark-unread and snooze listing endpoints - ([40582c0](https://github.com/PixiBixi/freshrss-summary/commit/40582c0ef5a334587d99aea5436a298c944b0250)) - Jeremy Delgado
