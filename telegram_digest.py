@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import html
 import logging
 import math
 import time
+import urllib.parse
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -59,6 +61,13 @@ def _html_escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _link(url: str, escaped_title: str) -> str:
+    """HTML anchor for Telegram; non-http(s) URLs are dropped and the href is escaped."""
+    if urllib.parse.urlparse(url).scheme.lower() not in ("http", "https"):
+        return escaped_title
+    return f'<a href="{html.escape(url, quote=True)}">{escaped_title}</a>'
+
+
 def _split_message(text: str, max_len: int = _TELEGRAM_MAX_LEN) -> list[str]:
     """Split a message into chunks of at most max_len chars, breaking at newlines."""
     if len(text) <= max_len:
@@ -107,7 +116,7 @@ def build_digest(articles: list[ArticleDict]) -> str:
         title = _html_escape(a["title"])
         score = int(a["score"])
         url = a["url"]
-        lines.append(f'<code>{score:>4}↑</code> <a href="{url}">{title}</a>')
+        lines.append(f"<code>{score:>4}↑</code> {_link(url, title)}")
 
     article_word = "article" if len(top) == 1 else "articles"
     lines.extend(["", f"{len(top)} {article_word} · top 20% du jour"])
@@ -204,7 +213,7 @@ async def send_snooze_reminders(tg_cfg: TelegramConfig, due: list[SnoozeReminder
         try:
             title = _html_escape(s["title"])
             url = s["url"]
-            text = f'⏰ <b>Rappel</b>\n<a href="{url}">{title}</a>'
+            text = f"⏰ <b>Rappel</b>\n{_link(url, title)}"
             snooze_cfg = TelegramConfig(
                 bot_token=tg_cfg.bot_token,
                 chat_id=s.get("chat_id") or tg_cfg.chat_id,
