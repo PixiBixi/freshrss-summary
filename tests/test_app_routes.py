@@ -151,6 +151,72 @@ class TestShowReadFilters:
         assert data["total"] == 2
 
 
+class TestCompactArticles:
+    async def test_feeds_keeps_only_listed_feeds(self, client):
+        cache.articles = [
+            dict(_ARTICLE, id="a", feed_title="CNCF"),
+            dict(_ARTICLE, id="b", feed_title="DEV.to"),
+            dict(_ARTICLE, id="c", feed_title="Cert SSI"),
+        ]
+        data = (await client.get("/api/articles?feeds=CNCF, Cert SSI")).json()
+        assert sorted(a["id"] for a in data["articles"]) == ["a", "c"]
+        assert data["total"] == 2
+
+    async def test_exclude_feeds_drops_listed_feeds(self, client):
+        cache.articles = [
+            dict(_ARTICLE, id="a", feed_title="CNCF"),
+            dict(_ARTICLE, id="b", feed_title="DEV.to"),
+        ]
+        data = (await client.get("/api/articles?exclude_feeds=DEV.to")).json()
+        assert [a["id"] for a in data["articles"]] == ["a"]
+        assert data["total"] == 1
+
+    async def test_fields_projects_article_keys(self, client):
+        cache.articles = [dict(_ARTICLE)]
+        data = (await client.get("/api/articles?fields=id,score")).json()
+        assert data["articles"] == [{"id": "tag:a", "score": 12.0}]
+
+    async def test_fields_unknown_key_is_400(self, client):
+        cache.articles = [dict(_ARTICLE)]
+        resp = await client.get("/api/articles?fields=id,nope,_content")
+        assert resp.status_code == 400
+        assert "nope" in resp.json()["detail"]
+        assert "_content" in resp.json()["detail"]
+
+    async def test_summary_chars_strips_html_and_truncates(self, client):
+        art = dict(_ARTICLE, summary="<p>Hello   <b>world</b></p>\n<p>again</p>")
+        cache.articles = [art]
+        data = (await client.get("/api/articles?fields=id,summary&summary_chars=11")).json()
+        assert data["articles"][0]["summary"] == "Hello world"
+        # The shared cache dict must not be rewritten.
+        assert cache.articles[0]["summary"] == art["summary"]
+
+    async def test_summary_chars_negative_is_422(self, client):
+        cache.articles = [dict(_ARTICLE)]
+        resp = await client.get("/api/articles?summary_chars=-1")
+        assert resp.status_code == 422
+
+    async def test_dedupe_title_keeps_best_score(self, client):
+        cache.articles = [
+            dict(_ARTICLE, id="low", title="Same", score=3.0),
+            dict(_ARTICLE, id="high", title="Same ", score=9.0),
+            dict(_ARTICLE, id="other", title="Other", score=1.0),
+        ]
+        data = (await client.get("/api/articles?dedupe=title")).json()
+        assert [a["id"] for a in data["articles"]] == ["high", "other"]
+        assert data["total"] == 2
+
+    async def test_dedupe_unknown_value_is_422(self, client):
+        cache.articles = [dict(_ARTICLE)]
+        resp = await client.get("/api/articles?dedupe=url")
+        assert resp.status_code == 422
+
+    async def test_no_new_params_returns_full_articles(self, client):
+        cache.articles = [dict(_ARTICLE)]
+        data = (await client.get("/api/articles")).json()
+        assert data["articles"] == [_ARTICLE]
+
+
 # ── /api/mark-read ─────────────────────────────────────────────────────────────
 
 
