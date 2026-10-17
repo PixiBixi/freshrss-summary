@@ -286,6 +286,25 @@ class TestMarkAsRead:
         assert b"article-123" in body
 
 
+class TestMarkAsUnread:
+    def test_uses_remove_tag(self):
+        client = make_client()
+        client._auth_token = "tok"
+        client._csrf_token = "csrf"
+        with patch.object(client._client, "post", return_value=mock_response()) as mock_post:
+            client.mark_as_unread(["article-123"])
+        body = mock_post.call_args.kwargs["content"]
+        assert b"r=user%2F-%2Fstate%2Fcom.google%2Fread" in body
+        assert b"a=user" not in body
+        assert b"article-123" in body
+
+    def test_empty_list_noop(self):
+        client = make_client()
+        with patch.object(client._client, "post") as mock_post:
+            client.mark_as_unread([])
+        mock_post.assert_not_called()
+
+
 # ── context manager ───────────────────────────────────────────────────────────
 
 

@@ -21,6 +21,7 @@ from sqlalchemy import (
     Index,
     Integer,
     MetaData,
+    Select,
     Table,
     Text,
     delete,
@@ -303,60 +304,59 @@ async def bookmark_articles(ids: list[str]) -> None:
             )
 
 
+_UNREAD_COLUMNS = (
+    articles_table.c.id,
+    articles_table.c.title,
+    articles_table.c.url,
+    articles_table.c.feed_title,
+    articles_table.c.published,
+    articles_table.c.score,
+    articles_table.c.matched_topics,
+    articles_table.c.matched_keywords,
+    articles_table.c.top_topic,
+    articles_table.c.summary,
+)
+
+
+def _unread_query() -> Select[Any]:
+    """Unread articles joined with bookmarks, best score first."""
+    return (
+        select(*_UNREAD_COLUMNS, bookmarks_table.c.id.is_not(None).label("bookmarked"))
+        .select_from(
+            articles_table.outerjoin(bookmarks_table, articles_table.c.id == bookmarks_table.c.id)
+        )
+        .where(articles_table.c.read_at.is_(None))
+        .order_by(articles_table.c.score.desc())
+    )
+
+
+def _row_to_article(r: Any) -> ArticleDict:
+    return {
+        "id": r["id"],
+        "title": r["title"],
+        "url": r["url"],
+        "feed_title": r["feed_title"],
+        "published": r["published"],
+        "score": r["score"],
+        "matched_topics": json.loads(r["matched_topics"] or "{}"),
+        "matched_keywords": json.loads(r["matched_keywords"] or "[]"),
+        "top_topic": r["top_topic"],
+        "summary": r["summary"] or "",
+        "bookmarked": bool(r["bookmarked"]),
+        "_read": False,
+    }
+
+
 async def load_articles() -> tuple[list[ArticleDict], float | None, int]:
     """Load scored articles from DB for cache warm-up. Excludes raw content."""
     async with get_engine().connect() as conn:
-        rows = (
-            (
-                await conn.execute(
-                    select(
-                        articles_table.c.id,
-                        articles_table.c.title,
-                        articles_table.c.url,
-                        articles_table.c.feed_title,
-                        articles_table.c.published,
-                        articles_table.c.score,
-                        articles_table.c.matched_topics,
-                        articles_table.c.matched_keywords,
-                        articles_table.c.top_topic,
-                        articles_table.c.summary,
-                        bookmarks_table.c.id.is_not(None).label("bookmarked"),
-                    )
-                    .select_from(
-                        articles_table.outerjoin(
-                            bookmarks_table,
-                            articles_table.c.id == bookmarks_table.c.id,
-                        )
-                    )
-                    .where(articles_table.c.read_at.is_(None))
-                    .order_by(articles_table.c.score.desc())
-                )
-            )
-            .mappings()
-            .all()
-        )
+        rows = (await conn.execute(_unread_query())).mappings().all()
 
         meta = {
             r["key"]: r["value"] for r in (await conn.execute(select(meta_table))).mappings().all()
         }
 
-    articles = [
-        {
-            "id": r["id"],
-            "title": r["title"],
-            "url": r["url"],
-            "feed_title": r["feed_title"],
-            "published": r["published"],
-            "score": r["score"],
-            "matched_topics": json.loads(r["matched_topics"] or "{}"),
-            "matched_keywords": json.loads(r["matched_keywords"] or "[]"),
-            "top_topic": r["top_topic"],
-            "summary": r["summary"] or "",
-            "bookmarked": bool(r["bookmarked"]),
-            "_read": False,
-        }
-        for r in rows
-    ]
+    articles = [_row_to_article(r) for r in rows]
 
     last_refresh = float(meta["last_refresh"]) if "last_refresh" in meta else None
     total_fetched = int(meta.get("total_fetched", 0))
@@ -635,6 +635,36 @@ async def set_articles_read(ids: list[str]) -> None:
     logger.info("Marked %d articles as read in DB", len(ids))
 
 
+async def set_articles_unread(ids: list[str]) -> None:
+    """Undo set_articles_read: clear read_at. Bookmarks removed on read are not restored."""
+    if not ids:
+        return
+    async with get_engine().begin() as conn:
+        for i in range(0, len(ids), DB_CHUNK_SIZE):
+            chunk = ids[i : i + DB_CHUNK_SIZE]
+            await conn.execute(
+                update(articles_table).where(articles_table.c.id.in_(chunk)).values(read_at=None)
+            )
+    logger.info("Marked %d articles as unread in DB", len(ids))
+
+
+async def load_articles_by_ids(ids: list[str]) -> list[ArticleDict]:
+    """Load the unread articles among `ids` (same shape as load_articles)."""
+    if not ids:
+        return []
+    out: list[ArticleDict] = []
+    async with get_engine().connect() as conn:
+        for i in range(0, len(ids), DB_CHUNK_SIZE):
+            chunk = ids[i : i + DB_CHUNK_SIZE]
+            rows = (
+                (await conn.execute(_unread_query().where(articles_table.c.id.in_(chunk))))
+                .mappings()
+                .all()
+            )
+            out.extend(_row_to_article(r) for r in rows)
+    return out
+
+
 async def load_read_articles(days: int = 7) -> list[ArticleDict]:
     """Load articles marked as read (for 'show read' toggle)."""
     async with get_engine().connect() as conn:
@@ -818,6 +848,26 @@ async def get_due_snoozes(now: int | None = None) -> list[dict[str, Any]]:
     async with get_engine().connect() as conn:
         rows = (
             (await conn.execute(select(snooze_table).where(snooze_table.c.snooze_until <= now)))
+            .mappings()
+            .all()
+        )
+    return [dict(r) for r in rows]
+
+
+async def list_snoozes() -> list[dict[str, Any]]:
+    """Return all pending snoozes, soonest first."""
+    async with get_engine().connect() as conn:
+        rows = (
+            (
+                await conn.execute(
+                    select(
+                        snooze_table.c.article_id,
+                        snooze_table.c.snooze_until,
+                        snooze_table.c.title,
+                        snooze_table.c.url,
+                    ).order_by(snooze_table.c.snooze_until)
+                )
+            )
             .mappings()
             .all()
         )

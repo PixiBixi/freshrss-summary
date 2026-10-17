@@ -828,3 +828,113 @@ class TestRefreshPersistence:
         assert cache.error is not None
         assert await get_seen_ids() == set(), "the next refresh must retry the article"
         cache.error = None
+
+
+# ── /api/mark-unread, /api/snoozes, DELETE /api/snooze ─────────────────────────
+
+
+class TestMarkUnread:
+    async def test_requires_auth(self, client, db_engine):
+        resp = await client.post("/api/mark-unread", json={"article_ids": ["tag:a"]})
+        assert resp.status_code in (401, 403)
+
+    async def test_empty_ids_returns_400(self, authed_client_no_ratelimit, db_engine):
+        resp = await authed_client_no_ratelimit.post("/api/mark-unread", json={"article_ids": []})
+        assert resp.status_code == 400
+
+    async def test_restores_article_and_syncs_upstream(self, authed_client_no_ratelimit, db_engine):
+        from unittest.mock import MagicMock, patch
+
+        from db import add_pending_sync, get_pending_sync, save_articles, set_articles_read
+
+        await save_articles([dict(_ARTICLE)], total_fetched=1)
+        await set_articles_read(["tag:a"])
+        await add_pending_sync(["tag:a"])
+        cache.articles = []
+        client_mock = MagicMock()
+        try:
+            with (
+                patch("app.load_config", return_value={}),
+                patch("app._shared_freshrss_client", return_value=client_mock),
+            ):
+                resp = await authed_client_no_ratelimit.post(
+                    "/api/mark-unread", json={"article_ids": ["tag:a"]}
+                )
+                # Second call must not duplicate the article in the cache
+                await authed_client_no_ratelimit.post(
+                    "/api/mark-unread", json={"article_ids": ["tag:a"]}
+                )
+            assert resp.status_code == 200
+            assert resp.json() == {"status": "ok", "unmarked": 1}
+            assert [a["id"] for a in cache.articles] == ["tag:a"]
+            client_mock.mark_as_unread.assert_called_with(["tag:a"])
+            assert await get_pending_sync() == []
+        finally:
+            cache.articles = []
+
+    async def test_not_configured(self, authed_client_no_ratelimit, db_engine):
+        from unittest.mock import patch
+
+        with patch("app.load_config", side_effect=RuntimeError("no creds")):
+            resp = await authed_client_no_ratelimit.post(
+                "/api/mark-unread", json={"article_ids": ["tag:x"]}
+            )
+        assert resp.json() == {"status": "not_configured", "unmarked": 1}
+
+    async def test_upstream_unreachable_is_queued(self, authed_client_no_ratelimit, db_engine):
+        from unittest.mock import MagicMock, patch
+
+        import httpx
+
+        client_mock = MagicMock()
+        client_mock.mark_as_unread.side_effect = httpx.ConnectError("down")
+        with (
+            patch("app.load_config", return_value={}),
+            patch("app._shared_freshrss_client", return_value=client_mock),
+        ):
+            resp = await authed_client_no_ratelimit.post(
+                "/api/mark-unread", json={"article_ids": ["tag:x"]}
+            )
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "queued", "unmarked": 1}
+
+
+class TestSnoozeList:
+    async def test_list_requires_auth(self, client, db_engine):
+        resp = await client.get("/api/snoozes")
+        assert resp.status_code in (401, 403)
+
+    async def test_delete_requires_auth(self, client, db_engine):
+        resp = await client.delete("/api/snooze/tag:a")
+        assert resp.status_code in (401, 403)
+
+    async def test_list_and_delete(self, authed_client_no_ratelimit, db_engine):
+        from db import add_snooze
+
+        await add_snooze("tag:late", "42", 2000, "Late", "https://example.com/late")
+        await add_snooze("tag:soon", "42", 1000, "Soon", "https://example.com/soon")
+
+        resp = await authed_client_no_ratelimit.get("/api/snoozes")
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "snoozes": [
+                {
+                    "article_id": "tag:soon",
+                    "snooze_until": 1000,
+                    "title": "Soon",
+                    "url": "https://example.com/soon",
+                },
+                {
+                    "article_id": "tag:late",
+                    "snooze_until": 2000,
+                    "title": "Late",
+                    "url": "https://example.com/late",
+                },
+            ]
+        }
+
+        resp = await authed_client_no_ratelimit.delete("/api/snooze/tag:soon")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
+        remaining = (await authed_client_no_ratelimit.get("/api/snoozes")).json()["snoozes"]
+        assert [s["article_id"] for s in remaining] == ["tag:late"]

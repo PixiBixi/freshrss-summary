@@ -198,8 +198,9 @@ class FreshRSSClient:
         self._auth_token = None
         self._csrf_token = None
 
-    def _edit_tag(self, chunk: list[str], csrf: str) -> httpx.Response:
-        pairs = [("T", csrf), ("a", "user/-/state/com.google/read")]
+    def _edit_tag(self, chunk: list[str], csrf: str, *, unread: bool = False) -> httpx.Response:
+        # read tag added = read; removed (r=) = unread
+        pairs = [("T", csrf), ("r" if unread else "a", "user/-/state/com.google/read")]
         pairs += [("i", article_id) for article_id in chunk]
         return self._client.post(
             f"{self.base_url}/api/greader.php/reader/api/0/edit-tag",
@@ -212,6 +213,13 @@ class FreshRSSClient:
 
     def mark_as_read(self, article_ids: list[str]) -> None:
         """Mark a list of article IDs as read in FreshRSS."""
+        self._set_read_state(article_ids, unread=False)
+
+    def mark_as_unread(self, article_ids: list[str]) -> None:
+        """Mark a list of article IDs as unread in FreshRSS."""
+        self._set_read_state(article_ids, unread=True)
+
+    def _set_read_state(self, article_ids: list[str], *, unread: bool) -> None:
         if not article_ids:
             return
 
@@ -221,17 +229,17 @@ class FreshRSSClient:
         chunk_size = 250
         for i in range(0, len(article_ids), chunk_size):
             chunk = article_ids[i : i + chunk_size]
-            resp = self._edit_tag(chunk, csrf)
+            resp = self._edit_tag(chunk, csrf, unread=unread)
             if resp.status_code == 401:
                 # Tokens are cached across calls now, so they can outlive their
                 # server-side validity. Re-authenticate once before giving up.
                 logger.info("FreshRSS token rejected - re-authenticating")
                 self.invalidate_auth()
                 csrf = self._get_csrf_token()
-                resp = self._edit_tag(chunk, csrf)
+                resp = self._edit_tag(chunk, csrf, unread=unread)
             resp.raise_for_status()
 
-        logger.info("Marked %d articles as read", len(article_ids))
+        logger.info("Marked %d articles as %s", len(article_ids), "unread" if unread else "read")
 
     # ------------------------------------------------------------------
     # Parsing
