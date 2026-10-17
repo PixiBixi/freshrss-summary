@@ -231,7 +231,7 @@ python cli.py <command> [options]
 | `stats` | Show DB statistics (articles, bookmarks, topics, last refresh) |
 | `fetch [--dry-run]` | Fetch unread articles from FreshRSS, score, and save to DB |
 | `rescore [--dry-run]` | Reapply current topic weights to articles already in DB |
-| `import [FILE] [--starred] [--limit N] [--dry-run]` | Import from a JSON file or from FreshRSS starred stream |
+| `import [FILE] [--starred] [--limit N] [--dry-run]` | Import from a JSON file or from FreshRSS starred stream. Articles already read stay read; imported articles that FreshRSS does not list as unread are marked read by the next refresh |
 | `tune [--apply] [--limit N]` | Analyze starred articles, suggest weight adjustments; `--apply` writes to `config.yaml` (seed only - use the UI to update a running instance) |
 
 ```bash
