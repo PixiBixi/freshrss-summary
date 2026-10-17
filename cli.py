@@ -89,29 +89,13 @@ async def _db_stats(cfg: ConfigDict) -> dict[str, Any]:
 async def _run_fetch(
     cfg: ConfigDict, save: bool
 ) -> tuple[list[dict[str, Any]], int, list[tuple[int, int]]]:
-    """Init DB, fetch topics (DB-first), fetch+score, optionally save. Returns (articles, total_fetched, batch_info)."""
-    from db import get_or_seed_scoring_config, save_articles
-    from pipeline import fetch_and_score_iter
-    from scorer import DEFAULT_TOPICS, build_topics
+    """Run the app's incremental refresh, optionally persisting. Returns (new relevant articles, total unread, batch_info)."""
+    from refresh_service import run_refresh
 
     await _init_db(cfg)
-    topics_cfg = await get_or_seed_scoring_config(cfg, DEFAULT_TOPICS)
-    topics = build_topics(topics_cfg)
-
-    all_articles: list[dict[str, Any]] = []
-    batch_info: list[tuple[int, int]] = []
-    total_fetched, prev_fetched = 0, 0
-
-    for scored_batch, total_fetched in fetch_and_score_iter(cfg, topics):
-        batch_count = total_fetched - prev_fetched
-        prev_fetched = total_fetched
-        batch_info.append((batch_count, len(scored_batch)))
-        all_articles.extend(scored_batch)
-
-    if save and all_articles:
-        await save_articles(all_articles, total_fetched)
-
-    return all_articles, total_fetched, batch_info
+    # Same orchestrator as the app: seen_ids are recorded and removed IDs reconciled.
+    out = await run_refresh(lambda _event: None, cfg=cfg, persist=save)
+    return out.new_articles, out.total_fetched, out.batches
 
 
 async def _run_rescore(
@@ -227,7 +211,7 @@ def cmd_stats(args: argparse.Namespace, cfg: ConfigDict) -> int:
 
 
 def cmd_fetch(args: argparse.Namespace, cfg: ConfigDict) -> int:
-    """Fetch unread articles from FreshRSS, score and save to DB."""
+    """Fetch new unread articles from FreshRSS (incremental, like the app), score and save to DB."""
     print(f"\n{BOLD}Fetching unread articles{RESET}\n")
 
     min_score = float(cfg.get("scoring", {}).get("min_score", 1.0))
@@ -242,20 +226,24 @@ def cmd_fetch(args: argparse.Namespace, cfg: ConfigDict) -> int:
         return 1
 
     for batch_count, relevant in batch_info:
-        print(info(f"Batch: {batch_count} fetched, {relevant} relevant"))
+        print(info(f"Batch: {batch_count} new, {relevant} relevant"))
 
     if total_fetched == 0:
         print(warn("No unread articles"))
         return 0
 
     print()
-    print(ok(f"{total_fetched} fetched total - {len(all_articles)} relevant (score ≥ {min_score})"))
+    print(
+        ok(
+            f"{total_fetched} unread in FreshRSS - {len(all_articles)} new relevant (score ≥ {min_score})"
+        )
+    )
 
     if args.dry_run:
         print(warn("--dry-run: not saving to DB"))
         if all_articles:
             print(f"\n{BOLD}Top 5:{RESET}")
-            for a in all_articles[:5]:
+            for a in sorted(all_articles, key=lambda a: a["score"], reverse=True)[:5]:
                 print(f"    [{a['score']:.0f}]  {a['title'][:72]}")
     else:
         print(ok("Saved to DB"))
@@ -599,7 +587,7 @@ def main() -> int:
 {BOLD}commands:{RESET}
   check              Test FreshRSS connection and DB status
   stats              Show DB statistics (articles, topics, bookmarks)
-  fetch              Fetch unread articles, score, save to DB
+  fetch              Incremental refresh (as the app): fetch new unread, score, save to DB
   rescore            Rescore DB articles with current config weights
   import [FILE]      Import from JSON file  |  --starred : from FreshRSS starred
   tune               Analyze starred items, suggest weight adjustments  (--apply to save)

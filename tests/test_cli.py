@@ -306,43 +306,60 @@ _ARTICLE_DICT = {
 
 
 class TestCmdFetch:
-    def test_dry_run_returns_0(self, capsys):
+    """`fetch` runs the app's incremental refresh; the DB is a throwaway file."""
+
+    @pytest.fixture
+    def cfg(self, tmp_path):
+        from db import set_engine_for_testing
+
+        yield cast(
+            ConfigDict,
+            {**_MINIMAL_CFG, "database": {"url": f"sqlite+aiosqlite:///{tmp_path / 'f.db'}"}},
+        )
+        set_engine_for_testing(None)
+
+    def test_dry_run_returns_0(self, cfg, capsys):
         import argparse
         from unittest.mock import patch
+
+        from pipeline import IncrementalBatch
 
         args = argparse.Namespace(dry_run=True)
         from cli import cmd_fetch
 
-        with patch("pipeline.fetch_and_score_iter", return_value=iter([([_ARTICLE_DICT], 1)])):
-            rc = cmd_fetch(args, _MINIMAL_CFG)
+        batches = [IncrementalBatch([_ARTICLE_DICT], set(), 1, ["a1"])]
+        with patch("refresh_service.fetch_and_score_incremental_iter", return_value=iter(batches)):
+            rc = cmd_fetch(args, cfg)
 
         assert rc == 0
 
-    def test_no_articles_returns_0(self, capsys):
+    def test_no_articles_returns_0(self, cfg, capsys):
+        import argparse
+        from unittest.mock import patch
+
+        from pipeline import IncrementalBatch
+
+        args = argparse.Namespace(dry_run=False)
+        from cli import cmd_fetch
+
+        batches = [IncrementalBatch([], set(), 0, [])]
+        with patch("refresh_service.fetch_and_score_incremental_iter", return_value=iter(batches)):
+            rc = cmd_fetch(args, cfg)
+
+        assert rc == 0
+
+    def test_fetch_error_returns_1(self, cfg, capsys):
         import argparse
         from unittest.mock import patch
 
         args = argparse.Namespace(dry_run=False)
         from cli import cmd_fetch
 
-        with patch("pipeline.fetch_and_score_iter", return_value=iter([])):
-            rc = cmd_fetch(args, _MINIMAL_CFG)
-
-        assert rc == 0
-
-    def test_fetch_error_returns_1(self, capsys):
-        import argparse
-        from unittest.mock import patch
-
-        def _raise(*a, **kw):
-            raise RuntimeError("connection refused")
-            yield  # make it a generator
-
-        args = argparse.Namespace(dry_run=False)
-        from cli import cmd_fetch
-
-        with patch("pipeline.fetch_and_score_iter", side_effect=RuntimeError("connection refused")):
-            rc = cmd_fetch(args, _MINIMAL_CFG)
+        with patch(
+            "refresh_service.fetch_and_score_incremental_iter",
+            side_effect=RuntimeError("connection refused"),
+        ):
+            rc = cmd_fetch(args, cfg)
 
         assert rc == 1
 
