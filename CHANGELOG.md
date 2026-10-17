@@ -1,6 +1,17 @@
 # Changelog
 
 - - -
+## [v1.11.0](https://github.com/PixiBixi/freshrss-summary/compare/40582c0ef5a334587d99aea5436a298c944b0250..v1.11.0) - 2026-10-17
+#### Features
+- (**api**) add mark-unread and snooze listing endpoints - ([40582c0](https://github.com/PixiBixi/freshrss-summary/commit/40582c0ef5a334587d99aea5436a298c944b0250)) - Jeremy Delgado
+- (**fonts**) self-host Geist and Geist Mono - ([8228fc8](https://github.com/PixiBixi/freshrss-summary/commit/8228fc8e23e3e16ce8ba8aea5da675eb516f55ad)) - Jeremy Delgado
+- (**login**) restyle the login page - ([bf42a1f](https://github.com/PixiBixi/freshrss-summary/commit/bf42a1f83bfc6a27a5ff30eac0142b5d16d6751c)) - Jeremy Delgado
+- (**ui**) redesign the triage SPA - ([ca58d36](https://github.com/PixiBixi/freshrss-summary/commit/ca58d3608240924a1d9e8ef40c1ca54b82651a43)) - Jeremy Delgado
+#### Documentation
+- (**readme**) rework layout and document the new UI - ([197a228](https://github.com/PixiBixi/freshrss-summary/commit/197a22867e10c1e06c17c4b7a15ca058ad7cde2b)) - Jeremy Delgado
+
+- - -
+
 ## [v1.10.0](https://github.com/PixiBixi/freshrss-summary/compare/9c5050e1f273fa41c2a78d7974136a92f199188e..v1.10.0) - 2026-10-17
 #### Features
 - (**api**) add compact listing params to /api/articles - ([9c5050e](https://github.com/PixiBixi/freshrss-summary/commit/9c5050e1f273fa41c2a78d7974136a92f199188e)) - Jeremy Delgado
