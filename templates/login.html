@@ -1,33 +1,62 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
   <title>Connexion - FreshRSS Summary</title>
+  <script>
+    (function () {
+      try {
+        var r = document.documentElement, t = localStorage.getItem('theme'), a = localStorage.getItem('accent');
+        r.dataset.theme = t === 'dark' ? 'dark' : 'light';
+        if (a && /^#[0-9a-fA-F]{3,8}$/.test(a)) r.style.setProperty('--accent', a);
+      } catch (e) {}
+    })();
+  </script>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="preload" href="/static/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/static/css/fonts.css" />
   <link rel="stylesheet" href="/static/css/login.css" />
 </head>
 <body>
-  <div class="card">
-    <div class="logo">FreshRSS Summary</div>
-    <div class="subtitle" id="login-subtitle">Connexion requise</div>
+  <div class="page">
+  <aside class="left">
+    <div class="brand"><span class="logo">fr</span>FreshRSS Summary</div>
+    <div class="pitch">
+      <h2 id="login-pitch-title">Le triage de tes flux, triés par burn rate.</h2>
+      <p id="login-pitch-text">Les non-lus FreshRSS scorés sur tes topics. Connecte-toi pour ack, bookmark et snoozer.</p>
+      <div class="mini" aria-hidden="true">
+        <div><span class="c">7.8&times;</span><span>The Clean Way to Access AWS, Azure, and GCP From Kubernetes</span></div>
+        <div><span class="w">3.9&times;</span><span>Building a Production eBPF Observability &amp; Security Stack</span></div>
+        <div><span class="o">1.5&times;</span><span>Four AWS VPC blueprints that will save your MLOps pipeline</span></div>
+      </div>
+    </div>
+    <div class="foot"><span id="login-foot">Lecture seule possible sans compte.</span></div>
+  </aside>
+  <main class="right">
+    <form id="login-form" method="post" action="/login{% if request.query_params.get('next') %}?next={{ request.query_params.get('next') | urlencode }}{% endif %}">
+      <div class="brand mbrand"><span class="logo">fr</span>FreshRSS Summary</div>
+      <h1 id="login-title">Connexion</h1>
+      <p class="sub" id="login-subtitle">Connexion requise</p>
 
-    {% if error %}
-    <div class="error-msg">{{ error }}</div>
-    {% endif %}
+      {% if error %}
+      <div class="err" role="alert"><b id="login-err-label">Échec</b><span>{{ error }}</span></div>
+      {% endif %}
 
-    <form method="post" action="/login{% if request.query_params.get('next') %}?next={{ request.query_params.get('next') | urlencode }}{% endif %}">
-      <label for="username" id="login-username-label">Identifiant</label>
-      <input id="username" name="username" type="text" autocomplete="username" autofocus required />
-
-      <label for="password" id="login-password-label">Mot de passe</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required />
-
-      <button type="submit" id="login-submit-btn">Se connecter</button>
+      <label for="username"><span id="login-username-label">Identifiant</span>
+        <input id="username" name="username" type="text" autocomplete="username" autofocus required />
+      </label>
+      <label for="password"><span id="login-password-label">Mot de passe</span>
+        <span class="pw">
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+          <button type="button" id="login-show" aria-pressed="false">Afficher</button>
+        </span>
+      </label>
+      <button class="submit" type="submit" id="login-submit-btn">Se connecter</button>
+      <p class="alt"><a href="/" id="login-readonly">Continuer en lecture seule</a></p>
     </form>
+  </main>
   </div>
   <script src="/static/js/login.js"></script>
 </body>
