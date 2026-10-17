@@ -651,6 +651,53 @@ class TestRefreshSlotRelease:
         assert not cache.is_loading
 
 
+class TestRescoreCompute:
+    async def test_falls_back_to_a_thread_when_a_worker_crashes(self):
+        from concurrent.futures.process import BrokenProcessPool
+        from unittest.mock import patch
+
+        import app as app_module
+
+        class _CrashedPool:
+            def __init__(self, *a, **kw):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def submit(self, *a, **kw):
+                raise BrokenProcessPool("worker killed")
+
+        rescored = [dict(_ARTICLE)]
+        with (
+            patch("app.concurrent.futures.ProcessPoolExecutor", _CrashedPool),
+            patch("app.rescore_chunk", return_value=rescored) as chunk,
+        ):
+            result = await app_module._rescore_compute([{"id": "tag:a"}], {}, {})
+
+        assert result == rescored
+        chunk.assert_called_once()
+
+    async def test_empty_input_returns_empty(self):
+        import app as app_module
+
+        assert await app_module._rescore_compute([], {}, {}) == []
+
+    async def test_article_read_during_rescore_stays_out_of_cache(self, db_engine):
+        import app as app_module
+        from db import save_articles, set_articles_read
+
+        await save_articles([dict(_ARTICLE)], total_fetched=1)
+        await set_articles_read([_ARTICLE["id"]])
+
+        await app_module._persist_and_populate([dict(_ARTICLE)], 1)
+
+        assert cache.articles == []
+
+
 class TestRefreshPersistence:
     async def test_noop_refresh_updates_last_refresh_and_metrics(self, db_engine):
         from prometheus_client import REGISTRY

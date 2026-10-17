@@ -11,6 +11,7 @@ import os
 import secrets
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine
+from concurrent.futures.process import BrokenProcessPool
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -500,7 +501,9 @@ async def _persist_and_populate(
     """Save articles to DB, reconcile bookmarks, populate cache, update Prometheus.
     Used by the rescore path (full replace semantics).
     """
-    await save_articles(article_dicts, total_fetched)
+    read_meanwhile = await save_articles(article_dicts, total_fetched)
+    if read_meanwhile:
+        article_dicts = [a for a in article_dicts if a["id"] not in read_meanwhile]
     bookmarked = await get_bookmarked_ids()
     for a in article_dicts:
         a["bookmarked"] = a["id"] in bookmarked
@@ -815,6 +818,8 @@ async def _rescore_compute(
     scoring_cfg = cfg.get("scoring", {})
     title_weight = int(scoring_cfg.get("title_weight", 3))
     min_score = float(scoring_cfg.get("min_score", 1.0))
+    if not raw:
+        return []  # every article was read meanwhile; chunking below needs one
 
     # One worker still means one *process*: even without parallelism that keeps the
     # regex work off the event loop, which a thread cannot do.
@@ -833,7 +838,8 @@ async def _rescore_compute(
                     for c in chunks
                 )
             )
-    except OSError:
+    # BrokenProcessPool (a worker killed, e.g. OOM) is a RuntimeError, not an OSError.
+    except (OSError, BrokenProcessPool):
         logger.warning("Process pool unavailable - falling back to a single thread")
         return await asyncio.to_thread(
             rescore_chunk, raw, topics_cfg, title_weight, min_score, feed_weights
