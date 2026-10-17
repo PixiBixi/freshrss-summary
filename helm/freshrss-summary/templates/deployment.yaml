@@ -6,8 +6,8 @@ metadata:
   labels:
     {{- include "freshrss-summary.labels" . | nindent 4 }}
 spec:
-  # Single replica enforced - SQLite does not support concurrent writers.
-  # Scale horizontally only after migrating to PostgreSQL/MySQL.
+  # Single replica, whatever the database: cache, refresh slot, scheduler
+  # (refresh + Telegram digest) and login rate limit are per-process.
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:

@@ -215,7 +215,7 @@ Key values:
 | `networkPolicy.enabled` | Enable NetworkPolicy (default: `true`) |
 | `networkPolicy.dbPort` | Egress port for external DB - `5432` (PG) / `3306` (MySQL) / `0` to disable |
 
-> SQLite is the default - do **not** enable `autoscaling` with SQLite (single-writer constraint).
+> Run a single replica whatever the database - do **not** enable `autoscaling`: the cache, refresh slot, scheduler (refresh + Telegram digest) and login rate limit are per-process.
 
 ## CLI
 
