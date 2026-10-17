@@ -995,7 +995,7 @@ class ScoringConfigRequest(BaseModel):
 async def update_scoring(req: ScoringConfigRequest) -> dict[str, str]:
     """Persist a new scoring config to DB. Takes effect on next refresh or rescore.
 
-    Raises HTTP 422 if any feed_weight value is outside [0.1, 5.0].
+    Raises HTTP 422 if any feed_weight value is outside [0.1, 10.0].
     """
     for feed, mult in req.feed_weights.items():
         if not (0.1 <= mult <= 10.0):

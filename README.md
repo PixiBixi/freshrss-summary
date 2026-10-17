@@ -133,7 +133,10 @@ processed, including the ones scored below `min_score` that are never stored in
 `articles`. Without it the refresh diff would re-list them every time, so they
 would be downloaded and re-scored on every run. It is seeded from the articles
 already present on first startup and pruned as FreshRSS drops IDs from its unread
-set, so it stays roughly the size of that set.
+set, so it stays roughly the size of that set. A rescore forgets the IDs of the
+articles it drops below `min_score`, so the next refresh fetches them again if they
+are still unread upstream and scores them with the current weights. IDs are
+recorded in the same transaction as the articles they belong to.
 
 ## Environment variables
 
@@ -270,7 +273,7 @@ Weights and keywords are editable live from the UI (⚙ **Topics** button) - per
 
 ### Per-feed multipliers
 
-The **Feeds** tab in the scoring modal (⚙ Topics → Feeds) lets you set a score multiplier per feed (0.1–5.0). Feeds with non-default multipliers are shown first, color-coded by intensity (boost in accent color, malus in red). Default is `1.0` (no effect).
+The **Feeds** tab in the scoring modal (⚙ Topics → Feeds) lets you set a score multiplier per feed (0.1 to 10.0). Feeds with non-default multipliers are shown first, color-coded by intensity (boost in accent color, malus in red). Default is `1.0` (no effect).
 
 ## UI Features
 
@@ -334,9 +337,9 @@ behind your own reverse-proxy auth. Standard Prometheus text format.
 | `freshrss_articles_by_topic{topic}` | Gauge | Articles per topic in cache |
 | `freshrss_last_refresh_timestamp_seconds` | Gauge | Unix timestamp of last successful refresh |
 | `freshrss_refreshes_total` | Counter | Successful refreshes since startup |
-| `freshrss_refresh_duration_seconds` | Histogram | Refresh duration (buckets: 2s–300s) |
+| `freshrss_refresh_duration_seconds` | Histogram | Refresh duration (buckets: 2s to 300s) |
 | `freshrss_rescores_total` | Counter | Rescore runs since startup |
-| `freshrss_rescore_duration_seconds` | Histogram | Scoring phase of a rescore (buckets: 1s–300s) |
+| `freshrss_rescore_duration_seconds` | Histogram | Scoring phase of a rescore (buckets: 1s to 300s) |
 | `freshrss_rescore_articles` | Histogram | Articles processed per rescore |
 | `freshrss_rescore_workers` | Gauge | Worker processes used by the last rescore |
 
