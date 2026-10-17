@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from models import Article
+from scorer import _strip_html
 
 logger = logging.getLogger(__name__)
 
@@ -247,6 +248,9 @@ class FreshRSSClient:
                 break
         if not url:
             url = alternates[0].get("href", "") if alternates else ""
+        # Only http(s) URLs reach the UI and Telegram links (no javascript: etc.)
+        if urllib.parse.urlparse(url).scheme.lower() not in ("http", "https"):
+            url = ""
 
         content = ""
         summary = item.get("summary", {})
@@ -269,7 +273,7 @@ class FreshRSSClient:
             title=title,
             url=url,
             content=content,
-            summary=content[:300] if content else "",
+            summary=" ".join(_strip_html(content).split())[:300] if content else "",
             feed_title=feed_title,
             published=item.get("published", 0),
             categories=categories,
