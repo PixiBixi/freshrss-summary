@@ -101,24 +101,15 @@ async def _run_fetch(
 async def _run_rescore(
     cfg: ConfigDict, save: bool
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Init DB, fetch topics (DB-first), rescore DB articles, optionally save. Returns (raw, rescored)."""
-    from db import get_or_seed_scoring_config, load_for_rescore, save_articles
-    from pipeline import rescore_articles
-    from scorer import DEFAULT_TOPICS, build_topics
-
-    scoring_cfg = cfg.get("scoring", {})
-    title_weight = int(scoring_cfg.get("title_weight", 3))
-    min_score = float(scoring_cfg.get("min_score", 1.0))
+    """Rescore DB articles like the app does (DB topics and feed weights), optionally save. Returns (raw, rescored)."""
+    from refresh_service import compute_rescore, persist_rescore
 
     await _init_db(cfg)
-    raw = await load_for_rescore()
+    raw, rescored, total_fetched = await compute_rescore(cfg)
     if not raw:
         return [], []
-    topics_cfg = await get_or_seed_scoring_config(cfg, DEFAULT_TOPICS)
-    topics = build_topics(topics_cfg)
-    rescored = rescore_articles(raw, topics, title_weight, min_score)
     if save:
-        await save_articles(rescored, len(raw))
+        await persist_rescore(None, rescored, total_fetched)
     return raw, rescored
 
 
@@ -253,7 +244,7 @@ def cmd_fetch(args: argparse.Namespace, cfg: ConfigDict) -> int:
 
 
 def cmd_rescore(args: argparse.Namespace, cfg: ConfigDict) -> int:
-    """Rescore DB articles with the current config weights."""
+    """Rescore DB articles with the active topics and feed weights (DB, as edited in the UI)."""
     print(f"\n{BOLD}Rescoring from DB{RESET}\n")
 
     min_score = float(cfg.get("scoring", {}).get("min_score", 1.0))
@@ -588,7 +579,7 @@ def main() -> int:
   check              Test FreshRSS connection and DB status
   stats              Show DB statistics (articles, topics, bookmarks)
   fetch              Incremental refresh (as the app): fetch new unread, score, save to DB
-  rescore            Rescore DB articles with current config weights
+  rescore            Rescore DB articles with the active (DB) topic and feed weights
   import [FILE]      Import from JSON file  |  --starred : from FreshRSS starred
   tune               Analyze starred items, suggest weight adjustments  (--apply to save)
   digest             Build and print the digest  |  --send : push via Telegram
@@ -611,7 +602,7 @@ def main() -> int:
     p = sub.add_parser("fetch", help="Fetch + score + save to DB")
     p.add_argument("--dry-run", action="store_true", help="Don't write to DB")
 
-    p = sub.add_parser("rescore", help="Rescore DB articles with current weights")
+    p = sub.add_parser("rescore", help="Rescore DB articles with the active (DB) weights")
     p.add_argument("--dry-run", action="store_true", help="Don't write to DB")
 
     p = sub.add_parser("import", help="Import articles from JSON or FreshRSS starred")
