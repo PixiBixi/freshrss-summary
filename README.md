@@ -230,7 +230,7 @@ python cli.py <command> [options]
 | `check` | Test FreshRSS connection and DB reachability |
 | `stats` | Show DB statistics (articles, bookmarks, topics, last refresh) |
 | `fetch [--dry-run]` | Same incremental refresh as the app: fetch and score the unread articles not seen yet, save them, mark read the ones FreshRSS no longer lists as unread |
-| `rescore [--dry-run]` | Reapply current topic weights to articles already in DB |
+| `rescore [--dry-run]` | Reapply the active topics and feed weights (DB, as edited in the UI) to articles already in DB |
 | `import [FILE] [--starred] [--limit N] [--dry-run]` | Import from a JSON file or from FreshRSS starred stream. Articles already read stay read; imported articles that FreshRSS does not list as unread are marked read by the next refresh |
 | `tune [--apply] [--limit N]` | Analyze starred articles, suggest weight adjustments; `--apply` writes to `config.yaml` (seed only - use the UI to update a running instance) |
 

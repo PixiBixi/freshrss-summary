@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import concurrent.futures
 import json
 import time
 from unittest.mock import patch
@@ -15,8 +16,11 @@ from db import (
     init_db,
     load_articles,
     record_seen_ids,
+    save_articles,
     set_articles_read,
     set_engine_for_testing,
+    set_feed_weights,
+    set_scoring_config,
 )
 from pipeline import IncrementalBatch
 
@@ -127,3 +131,25 @@ def test_import_records_seen_ids_and_keeps_read_rows_read(cfg, tmp_path):
     assert cmd_import(args, cfg) == 0
 
     assert _unread_ids(cfg) == ["i1"], "a read article must not come back unread"
+
+
+# -- rescore -----------------------------------------------------------------
+
+
+def test_rescore_uses_db_feed_weights_and_keeps_total_fetched(cfg):
+    from cli import cmd_rescore
+
+    _db(cfg, set_scoring_config, _TOPICS)
+    _db(cfg, save_articles, [_article("a")], 42)
+    _db(cfg, set_feed_weights, {"Feed": 2.0})
+
+    with patch(
+        "refresh_service.concurrent.futures.ProcessPoolExecutor",
+        concurrent.futures.ThreadPoolExecutor,
+    ):
+        assert cmd_rescore(argparse.Namespace(dry_run=False), cfg) == 0
+
+    articles, _, total_fetched = _db(cfg, load_articles)
+    assert total_fetched == 42, "the stored FreshRSS unread count must survive a rescore"
+    # title (x3) + body match on "kubernetes" at weight 1.0, doubled by the feed weight
+    assert articles[0]["score"] == pytest.approx(2 * (3 + 1))
