@@ -1,6 +1,15 @@
 # Changelog
 
 - - -
+## [v1.9.38](https://github.com/PixiBixi/freshrss-summary/compare/dd5239e86e457fda0b30e5898845403c3e3066c2..v1.9.38) - 2026-10-17
+#### Bug Fixes
+- (**auth**) bound the login rate limiter memory - ([dd5239e](https://github.com/PixiBixi/freshrss-summary/commit/dd5239e86e457fda0b30e5898845403c3e3066c2)) - Jeremy Delgado
+- (**client**) keep only http(s) article URLs and strip HTML from summary - ([b9c00a8](https://github.com/PixiBixi/freshrss-summary/commit/b9c00a846ed6c8e5b8eb56ea08f9b37c22f79bd6)) - Jeremy Delgado
+- (**session**) set SameSite=lax and configurable Secure cookie - ([faace95](https://github.com/PixiBixi/freshrss-summary/commit/faace95de95f393b1223db14e948e96c90138807)) - Jeremy Delgado
+- (**telegram**) escape article href and skip non-http(s) URLs - ([bf39449](https://github.com/PixiBixi/freshrss-summary/commit/bf3944940f67f3e958e065bef7dfea591b8f829c)) - Jeremy Delgado
+
+- - -
+
 ## [v1.9.37](https://github.com/PixiBixi/freshrss-summary/compare/ab585daff572573cc57972ac7b152ec0a5b5e192..v1.9.37) - 2026-10-17
 #### Bug Fixes
 - (**deps**) update dependency sqlalchemy to v2.1.5 (#93) - ([ab585da](https://github.com/PixiBixi/freshrss-summary/commit/ab585daff572573cc57972ac7b152ec0a5b5e192)) - renovate[bot]
