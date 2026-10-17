@@ -407,6 +407,10 @@ async def get_articles(
     if show_read and not request.session.get("authenticated"):
         show_read = False
     articles = cache.articles
+    # Read articles join before filtering: appended after, they ignored every
+    # filter and inflated `total`.
+    if show_read:
+        articles = articles + await load_read_articles(days=days)
 
     if days > 0:
         cutoff = int(time.time()) - days * 86400
@@ -417,10 +421,6 @@ async def get_articles(
 
     if min_score is not None:
         articles = [a for a in articles if a["score"] >= min_score]
-
-    if show_read:
-        read_articles = await load_read_articles(days=days)
-        articles = articles + read_articles
 
     if sort == "score":
         articles = sorted(articles, key=lambda a: a["score"], reverse=True)
