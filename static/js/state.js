@@ -1,7 +1,8 @@
 // ── Constants ──────────────────────────────────────────────────────────
 // Severity bands on the raw score. Burn rate shown in the UI is score / BURN_DIVISOR.
-const SEV_P1_MIN = 400;
-const SEV_P2_MIN = 200;
+// Calibrated on prod scores (30 days): P1 ~ top 1% (about 2 a day), P2 ~ next 3%. 400/200 left almost everything P3.
+const SEV_P1_MIN = 100;
+const SEV_P2_MIN = 40;
 const BURN_DIVISOR = 100;
 const MIN_SCORE_MAX = 800;
 const PAGE_SIZE = 30;
