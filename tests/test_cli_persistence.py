@@ -5,13 +5,16 @@ import asyncio
 import concurrent.futures
 import json
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 import config as config_module
 from db import (
     get_engine,
+    get_feed_weights,
+    get_meta,
+    get_scoring_config,
     get_seen_ids,
     init_db,
     load_articles,
@@ -22,6 +25,7 @@ from db import (
     set_feed_weights,
     set_scoring_config,
 )
+from models import Article
 from pipeline import IncrementalBatch
 
 _TOPICS = {"Kubernetes": {"weight": 1.0, "keywords": ["kubernetes"]}}
@@ -153,3 +157,64 @@ def test_rescore_uses_db_feed_weights_and_keeps_total_fetched(cfg):
     assert total_fetched == 42, "the stored FreshRSS unread count must survive a rescore"
     # title (x3) + body match on "kubernetes" at weight 1.0, doubled by the feed weight
     assert articles[0]["score"] == pytest.approx(2 * (3 + 1))
+
+
+# -- tune --------------------------------------------------------------------
+
+
+def _starred_client():
+    starred = [
+        Article(
+            id=f"s{i}",
+            title="kubernetes upgrade",
+            url="https://example.com",
+            content="kubernetes",
+            summary="",
+            feed_title="Feed",
+            published=0,
+        )
+        for i in range(3)
+    ]
+    client = MagicMock()
+    client.__enter__ = MagicMock(return_value=client)
+    client.__exit__ = MagicMock(return_value=False)
+    client.fetch_starred.return_value = starred
+    return client
+
+
+def test_tune_apply_writes_active_db_scoring_config(cfg):
+    from cli import cmd_tune
+
+    _db(cfg, set_scoring_config, _TOPICS)
+
+    with patch("cli.make_client", return_value=_starred_client()):
+        assert cmd_tune(argparse.Namespace(apply=True, limit=None), cfg) == 0
+
+    stored = _db(cfg, get_scoring_config)
+    assert stored["Kubernetes"]["weight"] == pytest.approx(1.5)
+    assert stored["Kubernetes"]["keywords"] == ["kubernetes"]
+    assert not config_module.CONFIG_PATH.exists(), "config.yaml is not the active config"
+
+
+def test_tune_reads_feed_weights_from_db(cfg):
+    import scorer
+    from cli import cmd_tune
+
+    _db(cfg, set_scoring_config, _TOPICS)
+    _db(cfg, set_feed_weights, {"Feed": 3.0})
+    seen: list = []
+    real = scorer.analyze_favorites
+
+    def _spy(*a, **kw):
+        seen.append(kw.get("feed_weights"))
+        return real(*a, **kw)
+
+    with (
+        patch("cli.make_client", return_value=_starred_client()),
+        patch("scorer.analyze_favorites", _spy),
+    ):
+        assert cmd_tune(argparse.Namespace(apply=False, limit=None), cfg) == 0
+
+    assert seen == [{"Feed": 3.0}]
+    assert _db(cfg, get_feed_weights) == {"Feed": 3.0}
+    assert _db(cfg, get_meta, "total_fetched", "unset") == "unset"
