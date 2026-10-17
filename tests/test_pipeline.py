@@ -196,6 +196,18 @@ class TestRescoreArticles:
         result = rescore_articles([], _TOPICS)
         assert result == []
 
+    def test_feed_weight_rescore_is_idempotent(self):
+        """Rescoring twice with the same feed weights gives the same scores."""
+        weights = {"Tech": 0.2, "Ops": 5.0}
+        first = rescore_articles(self._RAW_ROWS, _TOPICS, min_score=0.0, feed_weights=weights)
+        second = rescore_articles(self._RAW_ROWS, _TOPICS, min_score=0.0, feed_weights=weights)
+        assert first == second
+        unweighted = {
+            a["id"]: a["score"] for a in rescore_articles(self._RAW_ROWS, _TOPICS, min_score=0.0)
+        }
+        # Applied once, on the final topic score: never compounded across rescores.
+        assert {a["id"]: a["score"] for a in second}["1"] == unweighted["1"] * 0.2
+
 
 # ---------------------------------------------------------------------------
 # Incremental diff: sub-threshold articles must not be re-fetched forever
