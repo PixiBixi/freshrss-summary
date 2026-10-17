@@ -13,9 +13,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from freshrss_client import FreshRSSClient
 
-import yaml
-
-from config import CONFIG_PATH, ConfigDict, FreshRSSConfig, load_config
+from config import ConfigDict, FreshRSSConfig, load_config
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +121,28 @@ async def _run_import(
     await upsert_articles(articles)
     if bookmark_ids:
         await bookmark_articles(bookmark_ids)
+
+
+async def _load_tune_inputs(cfg: ConfigDict) -> tuple[dict[str, Any], dict[str, float]]:
+    """Init DB and return the active topics and feed weights, both as the UI stores them."""
+    from db import get_feed_weights, get_or_seed_scoring_config
+    from scorer import DEFAULT_TOPICS
+
+    await _init_db(cfg)
+    return await get_or_seed_scoring_config(cfg, DEFAULT_TOPICS), await get_feed_weights()
+
+
+async def _apply_weights(cfg: ConfigDict, suggestions: dict[str, Any]) -> None:
+    """Write suggested weights to the DB scoring config, the one refresh and rescore read."""
+    from db import get_or_seed_scoring_config, set_scoring_config
+    from scorer import DEFAULT_TOPICS
+
+    await _init_db(cfg)
+    topics = await get_or_seed_scoring_config(cfg, DEFAULT_TOPICS)
+    for topic_name, s in suggestions.items():
+        if topic_name in topics:
+            topics[topic_name]["weight"] = round(s["suggested"], 2)
+    await set_scoring_config(topics)
 
 
 async def _get_active_topics(cfg: ConfigDict) -> dict[str, Any]:
@@ -428,11 +448,12 @@ def cmd_tune(args: argparse.Namespace, cfg: ConfigDict) -> int:
 
     from scorer import analyze_favorites, build_topics
 
-    topics = build_topics(asyncio.run(_get_active_topics(cfg)))
+    topics_cfg, feed_weights = asyncio.run(_load_tune_inputs(cfg))
+    topics = build_topics(topics_cfg)
     max_items = args.limit or 200
 
     if not topics:
-        print(err("No topics configured in config.yaml"))
+        print(err("No topics configured"))
         return 1
 
     try:
@@ -453,7 +474,6 @@ def cmd_tune(args: argparse.Namespace, cfg: ConfigDict) -> int:
 
     scoring_cfg = cfg.get("scoring", {})
     title_weight = scoring_cfg.get("title_weight", 3)
-    feed_weights = cfg.get("feed_weights", {})
     analysis = analyze_favorites(starred, topics, title_weight, feed_weights=feed_weights or None)
 
     # ── Top keywords ──────────────────────────────────────────────────────
@@ -501,15 +521,15 @@ def cmd_tune(args: argparse.Namespace, cfg: ConfigDict) -> int:
 
     if args.apply:
         try:
-            _apply_weights(analysis["suggestions"])
-            print(ok(f"Weights written to {CONFIG_PATH}"))
+            asyncio.run(_apply_weights(cfg, analysis["suggestions"]))
+            print(ok("Weights written to the DB scoring config (as edited in the UI)"))
             print(info("Run  python cli.py rescore  to apply new weights to existing DB articles"))
         except Exception as e:
-            logger.exception("tune: failed to write config")
-            print(err(f"Failed to write config: {e}"))
+            logger.exception("tune: failed to write scoring config")
+            print(err(f"Failed to write scoring config: {e}"))
             return 1
     else:
-        print(info("Pass --apply to write these suggestions to config.yaml"))
+        print(info("Pass --apply to write these suggestions to the DB scoring config"))
 
     print()
     return 0
@@ -554,18 +574,6 @@ def cmd_digest(args: argparse.Namespace, cfg: ConfigDict) -> int:
     return 0
 
 
-def _apply_weights(suggestions: dict[str, Any]) -> None:
-    if not CONFIG_PATH.exists():
-        raise FileNotFoundError("config.yaml not found")
-    with CONFIG_PATH.open() as f:
-        raw = yaml.safe_load(f) or {}
-    for topic_name, s in suggestions.items():
-        if topic_name in raw.get("topics", {}):
-            raw["topics"][topic_name]["weight"] = round(s["suggested"], 2)
-    with CONFIG_PATH.open("w") as f:
-        yaml.dump(raw, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
-
-
 # ── Argparse ───────────────────────────────────────────────────────────────
 
 
@@ -581,7 +589,7 @@ def main() -> int:
   fetch              Incremental refresh (as the app): fetch new unread, score, save to DB
   rescore            Rescore DB articles with the active (DB) topic and feed weights
   import [FILE]      Import from JSON file  |  --starred : from FreshRSS starred
-  tune               Analyze starred items, suggest weight adjustments  (--apply to save)
+  tune               Analyze starred items, suggest weight adjustments  (--apply: save to DB)
   digest             Build and print the digest  |  --send : push via Telegram
 
 {BOLD}examples:{RESET}
@@ -612,7 +620,9 @@ def main() -> int:
     p.add_argument("--dry-run", action="store_true", help="Don't write to DB")
 
     p = sub.add_parser("tune", help="Analyze starred → suggest weight adjustments")
-    p.add_argument("--apply", action="store_true", help="Write suggestions to config.yaml")
+    p.add_argument(
+        "--apply", action="store_true", help="Write suggestions to the DB scoring config"
+    )
     p.add_argument("--limit", type=int, help="Max starred items to analyze (default: 200)")
 
     p = sub.add_parser("digest", help="Build and print the Telegram digest (--send to push)")
