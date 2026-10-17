@@ -19,7 +19,7 @@
     <div class="error-msg">{{ error }}</div>
     {% endif %}
 
-    <form method="post" action="/login{% if request.query_params.get('next') %}?next={{ request.query_params.get('next') }}{% endif %}">
+    <form method="post" action="/login{% if request.query_params.get('next') %}?next={{ request.query_params.get('next') | urlencode }}{% endif %}">
       <label for="username" id="login-username-label">Identifiant</label>
       <input id="username" name="username" type="text" autocomplete="username" autofocus required />
 
