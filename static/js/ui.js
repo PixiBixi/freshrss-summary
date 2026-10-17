@@ -1,534 +1,240 @@
-// ── Command Palette commands ───────────────────────────────────────────
-const PALETTE_COMMANDS = [
-  { icon: '⟳', labelKey: 'btn.refresh',        shortcut: 'R', action: () => { closePalette(); triggerRefresh(); } },
-  { icon: '✓', labelKey: 'btn.markVisible',     shortcut: 'M', action: () => { closePalette(); markVisibleAsRead(); } },
-  { icon: '⇄', labelKey: 'btn.rescore',         shortcut: '',  action: () => { closePalette(); triggerRescore(); } },
-  { icon: '⚙', labelKey: 'btn.scoringCfg',     shortcut: '',  action: () => { closePalette(); openScoringModal(); } },
-  { icon: '📅', labelKey: 'palette.period7',    shortcut: '',  action: () => { closePalette(); setDays(7); } },
-  { icon: '📅', labelKey: 'palette.period14',   shortcut: '',  action: () => { closePalette(); setDays(14); } },
-  { icon: '📅', labelKey: 'palette.period30',   shortcut: '',  action: () => { closePalette(); setDays(30); } },
-  { icon: '📅', labelKey: 'palette.periodAll',  shortcut: '',  action: () => { closePalette(); setDays(0); } },
-  { icon: '🎨', labelKey: 'palette.accent',     shortcut: '',  action: () => { closePalette(); openOverflowMenu(); } },
-  { icon: '🌐', labelKey: 'palette.lang',       shortcut: '',  action: () => { closePalette(); openOverflowMenu(); } },
-  { icon: '🔑', labelKey: 'btn.changePassword', shortcut: '',  action: () => { closePalette(); openPwdModal(); } },
-  { icon: '⎋',  labelKey: 'palette.logout',     shortcut: '',  action: () => { closePalette(); doLogout(); } },
-];
-
 // ── Toast ──────────────────────────────────────────────────────────────
+// One toast at a time. `action` is a callback shown as a link button (undo).
 let _toastTimeout = null;
+let _toastAction = null;
 
-function showToast(msg) {
-  const el = document.getElementById('toast'); el.className = '';
-  document.getElementById('toast-text').textContent = msg;
-  document.getElementById('toast-spinner').style.display = 'block';
-  document.getElementById('toast-close').style.display = 'none';
+function toast(msg, o = {}) {
+  const el = byId('toast');
+  el.className = 'toast on' + (o.err ? ' err' : '');
+  _toastAction = o.action || null;
+  el.innerHTML = (o.spin ? '<span class="spin" aria-hidden="true"></span>' : '')
+    + `<span class="tt">${esc(msg)}</span>`
+    + (o.action ? `<button type="button" data-toast="action">${esc(o.label || t('toast.undo'))}</button>` : '')
+    + (o.spin ? '' : `<button type="button" class="tx" data-toast="close" aria-label="${esc(t('toast.close'))}">${ic('x')}</button>`);
   if (_toastTimeout) { clearTimeout(_toastTimeout); _toastTimeout = null; }
+  if (!o.sticky) _toastTimeout = setTimeout(dismissToast, o.ms || (o.err ? 6000 : 4000));
 }
 
-function updateToast(msg) { document.getElementById('toast-text').textContent = msg; }
+function showToast(msg) { toast(msg, { spin: true, sticky: true }); }
 
-function toastSuccess(msg) {
-  const el = document.getElementById('toast'); el.className = 'ok';
-  document.getElementById('toast-spinner').style.display = 'none';
-  document.getElementById('toast-text').textContent = '✓ ' + msg;
-  document.getElementById('toast-close').style.display = 'inline';
-  _toastTimeout = setTimeout(dismissToast, 4000);
+function updateToast(msg) {
+  const tt = document.querySelector('#toast .tt');
+  if (tt) tt.textContent = msg;
 }
 
-function toastError(msg) {
-  const el = document.getElementById('toast'); el.className = 'err';
-  document.getElementById('toast-spinner').style.display = 'none';
-  document.getElementById('toast-text').textContent = '✕ ' + msg;
-  document.getElementById('toast-close').style.display = 'inline';
-}
+function toastSuccess(msg) { toast(msg); }
+
+function toastError(msg) { toast(msg, { err: true }); }
 
 function dismissToast() {
-  document.getElementById('toast').className = 'hidden';
+  byId('toast').classList.remove('on');
+  _toastAction = null;
   if (_toastTimeout) { clearTimeout(_toastTimeout); _toastTimeout = null; }
 }
 
-function showError(msg) {
-  const el = document.getElementById('error-state');
-  el.style.display = 'block'; el.textContent = msg;
+function progress(p) {
+  const l = byId('sync-line');
+  l.style.opacity = p >= 100 ? 0 : 1;
+  l.style.width = Math.min(p, 100) + '%';
+  if (p >= 100) setTimeout(() => { l.style.width = '0'; }, 400);
 }
 
 // ── Utility ────────────────────────────────────────────────────────────
 function esc(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // Only http(s) URLs are linkable: blocks javascript:/data: URLs coming from feeds.
 function safeUrl(u) { return /^https?:\/\//i.test(String(u ?? '')) ? String(u) : '#'; }
 
-function linkAttrs(u) {
+function openUrl(u) {
   const url = safeUrl(u);
-  return url === '#' ? 'href="#"' : `href="${esc(url)}" target="_blank" rel="noopener"`;
-}
-
-// ── Delegated click handlers (no inline JS built from data) ────────────
-function _initDelegation() {
-  document.getElementById('articles-grid').addEventListener('click', e => {
-    if (e.target.closest('a.row-title, a.compact-title')) return;
-    const el = e.target.closest('[data-action]');
-    if (!el) return;
-    const id = el.dataset.id;
-    switch (el.dataset.action) {
-      case 'toggle-row': el.classList.contains('compact-row') ? toggleCompactRow(id) : toggleDetail(id); break;
-      case 'bookmark':   toggleBookmark(id, e); break;
-      case 'mark-read':  markSingleAsRead(id, e); break;
-      case 'snooze':     snoozeArticle(id, e); break;
-      case 'day-open':   openDayLinks(el); break;
-      case 'day-read':   markDayAsRead(el); break;
-    }
-  });
-  document.getElementById('topic-bar').addEventListener('click', e => {
-    const el = e.target.closest('[data-action]');
-    if (!el) return;
-    switch (el.dataset.action) {
-      case 'filter-all':       filterTopic(null); break;
-      case 'filter-bookmarks': filterBookmarks(); break;
-      case 'filter-topic':     filterTopic(el.dataset.topic); break;
-    }
-  });
-  document.getElementById('overflow-lang')?.addEventListener('click', e => {
-    const el = e.target.closest('[data-lang]');
-    if (!el) return;
-    setLang(el.dataset.lang); closeOverflowMenu();
-  });
-}
-
-// ── Detail panel (mode A) ──────────────────────────────────────────────
-function toggleDetail(id) {
-  const detail = document.getElementById(`detail-${id}`);
-  if (!detail) return;
-  if (detail.classList.contains('open')) {
-    detail.classList.remove('open');
-    state.openRow = null;
-  } else {
-    if (state.openRow) {
-      const prev = document.getElementById(`detail-${state.openRow}`);
-      if (prev) prev.classList.remove('open');
-    }
-    detail.classList.add('open');
-    state.openRow = id;
-  }
-}
-
-// ── Compact row expand (mode C) ────────────────────────────────────────
-function toggleCompactRow(id) {
-  if (state.openRow && state.openRow !== id) {
-    const prev = document.getElementById(`cexp-${state.openRow}`);
-    const prevRow = document.querySelector(`.compact-row[data-id="${CSS.escape(state.openRow)}"]`);
-    if (prev) prev.classList.remove('open');
-    if (prevRow) {
-      prevRow.classList.remove('compact-expanded');
-      const chev = prevRow.querySelector('.compact-chevron');
-      if (chev) chev.textContent = '▼';
-    }
-  }
-
-  const detail = document.getElementById(`cexp-${id}`);
-  const row = document.querySelector(`.compact-row[data-id="${CSS.escape(id)}"]`);
-  if (!detail || !row) return;
-
-  const isOpen = detail.classList.contains('open');
-  if (isOpen) {
-    detail.classList.remove('open');
-    row.classList.remove('compact-expanded');
-    state.openRow = null;
-    const chev = row.querySelector('.compact-chevron');
-    if (chev) chev.textContent = '▼';
-  } else {
-    detail.classList.add('open');
-    row.classList.add('compact-expanded');
-    state.openRow = id;
-    const chev = row.querySelector('.compact-chevron');
-    if (chev) chev.textContent = '▲';
-  }
-}
-
-// ── Show read articles ─────────────────────────────────────────────────
-async function toggleShowRead() {
-  state.showRead = !state.showRead;
-  const btn = document.getElementById('show-old-btn');
-  btn.classList.toggle('btn-primary', state.showRead);
-  btn.classList.toggle('btn-ghost', !state.showRead);
-  btn.textContent = t(state.showRead ? 'btn.hideRead' : 'btn.showRead');
-  await loadArticles();
-}
-
-// ── Compact mode ───────────────────────────────────────────────────────
-function toggleCompact() {
-  state.compact = !state.compact;
-  localStorage.setItem('freshrss-compact', state.compact ? '1' : '0');
-  state.openRow = null;
-  const item = document.getElementById('compact-overflow-item');
-  if (item) item.style.color = state.compact ? 'var(--accent)' : '';
-  closeOverflowMenu();
-  renderArticles();
-}
-
-// ── Overflow menu ──────────────────────────────────────────────────────
-function openOverflowMenu() {
-  document.getElementById('overflow-menu').classList.add('open');
-  document.getElementById('overflow-btn').setAttribute('aria-expanded', 'true');
-  _buildOverflowLang();
-  initAccentColor();
-}
-
-function closeOverflowMenu() {
-  document.getElementById('overflow-menu')?.classList.remove('open');
-  document.getElementById('overflow-btn')?.setAttribute('aria-expanded', 'false');
-}
-
-function toggleOverflowMenu() {
-  const menu = document.getElementById('overflow-menu');
-  if (menu.classList.contains('open')) closeOverflowMenu();
-  else openOverflowMenu();
-}
-
-function _buildOverflowLang() {
-  const container = document.getElementById('overflow-lang');
-  if (!container) return;
-  container.innerHTML = LANGS.map(l =>
-    `<button class="overflow-lang-item${l.code === state.lang ? ' active' : ''}"
-      data-lang="${esc(l.code)}">
-      <span>${l.flag}</span><span>${l.label}</span>
-    </button>`
-  ).join('');
-}
-
-// ── Accent color ───────────────────────────────────────────────────────
-function setAccentColor(val) {
-  document.documentElement.style.setProperty('--accent', val);
-  localStorage.setItem('freshrss-accent', val);
-}
-
-function resetAccentColor(e) {
-  if (e) e.stopPropagation();
-  const def = '#5c98a0';
-  setAccentColor(def);
-  const picker = document.getElementById('accent-picker');
-  if (picker) picker.value = def;
-}
-
-function initAccentColor() {
-  const saved = localStorage.getItem('freshrss-accent') || '#5c98a0';
-  document.documentElement.style.setProperty('--accent', saved);
-  const picker = document.getElementById('accent-picker');
-  if (picker) picker.value = saved;
+  if (url !== '#') window.open(url, '_blank', 'noopener');
 }
 
 // ── Button loading states ──────────────────────────────────────────────
-function setRefreshBtnLoading(on) {
-  const btn = document.getElementById('refresh-btn');
-  btn.disabled = on;
-  btn.innerHTML = on
-    ? `<span class="spinner" style="display:inline-block;width:12px;height:12px;border-width:2px"></span> ${t('toast.loading')}`
-    : t('btn.refresh');
+function setRefreshBtnLoading(on) { state.syncing = on; renderToolbar(); }
+
+function setRescoreBtnLoading(on) { state.rescoring = on; }
+
+// ── View, filters, display ─────────────────────────────────────────────
+function _resetListScroll() { const l = byId('list'); l.scrollTop = 0; _lastListTop = 0; }
+
+function setView(v) {
+  if (!state.authenticated && v !== 'triage') return;
+  const reload = (v === 'read') !== (state.view === 'read');
+  state.keep.clear(); state.view = v; state.sel = 0; state.open = null; state.side = false; state.shown = PAGE_SIZE;
+  if (reload) { state.everLoaded = false; loadArticles(); }
+  render(); _resetListScroll();
 }
 
-function setRescoreBtnLoading(on) {
-  // rescore btn is now in overflow menu - no DOM button to update
+function setFilter(patch) {
+  Object.assign(state, patch);
+  state.keep.clear(); state.sel = 0; state.shown = PAGE_SIZE;
+  render(); _resetListScroll();
 }
 
-// ── Last refresh label ─────────────────────────────────────────────────
-function updateLastRefresh(ts) {
-  const el = document.getElementById('last-refresh-label');
-  if (!el) return;
-  if (!ts) { el.textContent = ''; el.className = 'last-refresh'; el.title = ''; return; }
-  const diff = Math.floor(Date.now() / 1000 - ts);
-  const stale = diff > 10800;
-  let text;
-  if (diff < 60)         text = t('time.now');
-  else if (diff < 3600)  text = t('time.min', { n: Math.floor(diff / 60) });
-  else if (diff < 86400) text = t('time.h',   { n: Math.floor(diff / 3600) });
-  else                   text = t('time.d',   { n: Math.floor(diff / 86400) });
-  el.textContent = stale ? `⚠ ${text}` : text;
-  el.className = 'last-refresh' + (stale ? ' stale' : '');
-  el.title = stale ? t('stale.title') : '';
+function resetFilters() {
+  setFilter({ topic: null, search: '', minScore: 0, sev: null });
+  lsSet('freshrss-minscore', '0');
 }
 
-// ── Days period ────────────────────────────────────────────────────────
 function setDays(n) {
-  state.days = n;
-  const sel = document.getElementById('days-select');
-  if (sel) sel.value = String(n);
-  loadArticles();
+  state.days = n; lsSet('freshrss-days', String(n));
+  state.keep.clear(); state.sel = 0; state.shown = PAGE_SIZE;
+  renderSidebar(); loadArticles();
 }
 
-// ── Keyboard navigation ────────────────────────────────────────────────
-function _rowSelector(id) {
-  return state.compact
-    ? `.compact-row[data-id="${CSS.escape(id)}"]`
-    : `.feed-row[data-id="${CSS.escape(id)}"]`;
+function setSort(k) {
+  if (state.sortKey === k) state.sortDir = -state.sortDir;
+  else { state.sortKey = k; state.sortDir = (k === 'burn' || k === 'age') ? -1 : 1; }
+  lsSet('freshrss-sort', `${state.sortKey}:${state.sortDir}`);
+  state.sel = 0; render();
 }
 
-function moveFocus(dir) {
-  const maxIdx = Math.min(state.filtered.length, state.displayed) - 1;
-  if (maxIdx < 0) return;
-  const next = Math.max(0, Math.min(maxIdx, state.focusedIdx + dir));
+function setDensity(d) { document.documentElement.dataset.density = d; lsSet('freshrss-density', d); render(); }
 
-  if (state.focusedIdx >= 0) {
-    const curr = state.filtered[state.focusedIdx];
-    if (curr) document.querySelector(_rowSelector(curr.id))?.classList.remove('focused');
-  }
+function setTheme(th) { document.documentElement.dataset.theme = th; lsSet('theme', th); render(); }
 
-  state.focusedIdx = next;
-  const article = state.filtered[next];
-  if (!article) return;
+function _onAccent(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const lum = (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255;
+  return lum > 0.6 ? '#111' : '#fff';
+}
 
-  if (next >= state.displayed - 3 && state.filtered.length > state.displayed) {
-    state.displayed += 100;
-    renderArticles();
-  }
+function setAccent(c, persist = true) {
+  const r = document.documentElement;
+  if (c && /^#[0-9a-fA-F]{6}$/.test(c)) { r.style.setProperty('--accent', c); r.style.setProperty('--on-accent', _onAccent(c)); }
+  else { r.style.removeProperty('--accent'); r.style.removeProperty('--on-accent'); c = null; }
+  if (persist) lsSet('accent', c);
+}
 
-  const row = document.querySelector(_rowSelector(article.id));
-  if (row) { row.classList.add('focused'); row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+function move(delta) {
+  const l = visibleList();
+  if (!l.length) return;
+  state.sel = Math.max(0, Math.min(l.length - 1, state.sel + delta));
+  // Prefetch the next page when the cursor reaches the end of what is shown.
+  if (state.sel >= l.length - 1 && _view.list.length > state.shown) state.shown += PAGE_SIZE;
+  if (state.open) state.open = l[state.sel].id;
+  render();
+  document.querySelector('.row[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
 }
 
 // ── Open all links of a day ────────────────────────────────────────────
-function openDayLinks(btn) {
-  const group = btn.closest('.date-group');
-  if (!group) return;
-  const ids = new Set(JSON.parse(group.dataset.ids || '[]'));
-  const articles = state.articles.filter(a => ids.has(a.id) && safeUrl(a.url) !== '#');
+function openDayLinks(key) {
+  const articles = visibleList().filter(a => dayKey(a.published) === key && safeUrl(a.url) !== '#');
   if (!articles.length) return;
   if (articles.length > 10 && !confirm(t('confirm.openTabs', { n: articles.length }))) return;
   articles.forEach(a => window.open(safeUrl(a.url), '_blank', 'noopener'));
 }
 
-// ── Scoring config modal ────────────────────────────────────────────────
-let _scoringState = { activeTab: 'topics', topics: {}, feedWeights: {} };
-
-async function openScoringModal() {
-  if (!_requireAuth()) return;
-  const modal = document.getElementById('scoring-modal');
-  modal.style.display = 'flex';
-  document.getElementById('scoring-topics').innerHTML = '<p style="color:var(--text-3);font-size:13px">' + esc(t('cfg.loading')) + '</p>';
-  document.getElementById('scoring-feeds').innerHTML = '';
-
-  try {
-    const [cfg, feedsResp] = await Promise.all([
-      fetchScoringConfig(),
-      apiJson('/api/feeds'),
-    ]);
-    const { topics, feed_weights } = cfg;
-    _scoringState = {
-      activeTab: 'topics',
-      topics: {},
-      feedWeights: { ...(feed_weights || {}) },
-      allFeeds: feedsResp.feeds || [],
-    };
-    _renderScoringTopics(topics);
-    switchScoringTab('topics');
-  } catch (e) {
-    document.getElementById('scoring-topics').innerHTML =
-      `<p style="color:#dc2626">${esc(e.message)}</p>`;
-  }
-
-  modal.onclick = (e) => { if (e.target === modal) closeScoringModal(); };
-  document.addEventListener('keydown', _scoringEscHandler);
-}
-
-function switchScoringTab(tab) {
-  if (_scoringState.activeTab === 'topics') {
-    _scoringState.topics = _collectTopics();
-  } else {
-    _scoringState.feedWeights = _collectFeedWeights();
-  }
-  _scoringState.activeTab = tab;
-
-  document.getElementById('tab-topics').classList.toggle('active', tab === 'topics');
-  document.getElementById('tab-feeds').classList.toggle('active', tab === 'feeds');
-  document.getElementById('scoring-topics').style.display = tab === 'topics' ? '' : 'none';
-  document.getElementById('scoring-feeds').style.display = tab === 'feeds' ? '' : 'none';
-  document.getElementById('scoring-add-topic').style.display = tab === 'topics' ? '' : 'none';
-
-  if (tab === 'feeds') _renderFeedRows(_scoringState.feedWeights);
-}
-
-function _renderFeedRows(feedWeights) {
-  const container = document.getElementById('scoring-feeds');
-  const dbFeeds = _scoringState.allFeeds || [];
-  const allFeeds = [...new Set([...dbFeeds, ...Object.keys(feedWeights)])]
-    .sort((a, b) => {
-      const wa = feedWeights[a] ?? 1.0;
-      const wb = feedWeights[b] ?? 1.0;
-      if (wb !== wa) return wb - wa;
-      return a.localeCompare(b);
-    });
-  if (!allFeeds.length) {
-    container.innerHTML = `<p style="color:var(--text-3);font-size:13px">${esc(t('cfg.noFeeds'))}</p>`;
-    return;
-  }
-  const custom   = allFeeds.filter(f => Math.abs((feedWeights[f] ?? 1.0) - 1.0) > 0.001);
-  const defaults = allFeeds.filter(f => Math.abs((feedWeights[f] ?? 1.0) - 1.0) <= 0.001);
-
-  const sep = (custom.length && defaults.length)
-    ? `<div class="fw-sep">${esc(t('cfg.default'))}</div>`
-    : '';
-  container.innerHTML =
-    custom.map(f => _feedWeightRowHtml(f, feedWeights[f])).join('') +
-    sep +
-    defaults.map(f => _feedWeightRowHtml(f, 1.0)).join('');
-}
-
-function _fwClass(w) {
-  const d = w - 1.0;
-  if (Math.abs(d) <= 0.001) return '';
-  if (d > 0) return d >= 2 ? ' fw-boost-hi' : d >= 0.5 ? ' fw-boost-md' : ' fw-boost-lo';
-  return Math.abs(d) >= 0.5 ? ' fw-malus-hi' : ' fw-malus-lo';
-}
-
-function _feedWeightRowHtml(feed, weight) {
-  const cls = _fwClass(weight);
-  return `<div class="fw-row${cls}" data-feed="${esc(feed)}">
-    <span class="fw-name" title="${esc(feed)}">${esc(feed)}</span>
-    <input type="number" class="fw-mult" value="${weight}" min="0.1" max="10" step="0.1"
-      aria-label="Multiplicateur"
-      oninput="(function(r,v){r.classList.remove('fw-boost-hi','fw-boost-md','fw-boost-lo','fw-malus-hi','fw-malus-lo');var c=_fwClass(v).trim();if(c)r.classList.add(c)})(this.closest('.fw-row'),parseFloat(this.value)||1)" />
-    <button class="btn btn-ghost fw-reset" onclick="resetFeedWeight(this)" title="Remettre à 1">↺</button>
-  </div>`;
-}
-
-function resetFeedWeight(btn) {
-  const row = btn.closest('.fw-row');
-  row.querySelector('.fw-mult').value = 1.0;
-  row.classList.remove('fw-boost-hi', 'fw-boost-md', 'fw-boost-lo', 'fw-malus-hi', 'fw-malus-lo');
-}
-
-function _collectFeedWeights() {
-  const weights = {};
-  for (const row of document.querySelectorAll('.fw-row')) {
-    const feed = row.dataset.feed;
-    const mult = parseFloat(row.querySelector('.fw-mult').value) || 1.0;
-    if (Math.abs(mult - 1.0) > 0.001) weights[feed] = mult;
-  }
-  return weights;
-}
-
-function _scoringEscHandler(e) {
-  if (e.key === 'Escape') closeScoringModal();
-}
-
-function closeScoringModal() {
-  document.getElementById('scoring-modal').style.display = 'none';
-  document.removeEventListener('keydown', _scoringEscHandler);
-}
-
-function _renderScoringTopics(topics) {
-  const container = document.getElementById('scoring-topics');
-  if (!Object.keys(topics).length) {
-    container.innerHTML = '<p style="color:var(--text-3);font-size:13px">' + esc(t('cfg.noTopics')) + '</p>';
-    return;
-  }
-  container.innerHTML = Object.entries(topics)
-    .map(([name, cfg]) => _topicRowHtml(name, cfg))
-    .join('');
-}
-
-function _topicRowHtml(name, cfg) {
-  const kws = Array.isArray(cfg.keywords) ? cfg.keywords.join('\n') : '';
-  const weight = typeof cfg.weight === 'number' ? cfg.weight : 1.0;
-  return `
-    <div class="topic-row">
-      <div class="topic-row-header">
-        <input type="text" class="topic-name" value="${esc(name)}" placeholder="${esc(t('cfg.ph.name'))}" aria-label="Nom du topic" />
-        <input type="number" class="topic-weight" value="${weight}" min="0.1" step="0.1" aria-label="Poids" />
-        <button class="btn btn-ghost topic-remove" onclick="removeTopicRow(this)" aria-label="Supprimer ce topic">✕</button>
-      </div>
-      <div class="topic-keywords-label">${esc(t('cfg.colKeywords'))}</div>
-      <textarea class="topic-keywords" placeholder="${esc(t('cfg.ph.keywords'))}" aria-label="Mots-clés">${esc(kws)}</textarea>
-    </div>`;
-}
-
-function addTopicRow() {
-  const container = document.getElementById('scoring-topics');
-  if (container.querySelector('p')) container.innerHTML = '';
-  const div = document.createElement('div');
-  div.innerHTML = _topicRowHtml('', { keywords: [], weight: 1.0 });
-  container.appendChild(div.firstElementChild);
-  container.lastElementChild.querySelector('.topic-name')?.focus();
-}
-
-function removeTopicRow(btn) {
-  btn.closest('.topic-row').remove();
-}
-
-function _collectTopics() {
-  const topics = {};
-  for (const row of document.querySelectorAll('.topic-row')) {
-    const name = row.querySelector('.topic-name').value.trim();
-    if (!name) continue;
-    const weight = parseFloat(row.querySelector('.topic-weight').value) || 1.0;
-    const keywords = row.querySelector('.topic-keywords').value
-      .split('\n').map(k => k.trim().toLowerCase()).filter(Boolean);
-    topics[name] = { keywords, weight };
-  }
-  return topics;
-}
-
-async function saveScoringConfig() {
-  const btn = document.getElementById('scoring-save-btn');
-  btn.disabled = true;
-  try {
-    if (_scoringState.activeTab === 'topics') {
-      _scoringState.topics = _collectTopics();
-    } else {
-      _scoringState.feedWeights = _collectFeedWeights();
-    }
-    await updateScoringConfig(_scoringState.topics, _scoringState.feedWeights);
-    closeScoringModal();
-    showToast(t('cfg.saved'));
-    _doRescore();
-  } catch (e) {
-    toastError(e.message);
-    btn.disabled = false;
+// ── Commands (buttons, menu, palette, keyboard) ────────────────────────
+function command(c) {
+  switch (c) {
+    case 'sync': triggerRefresh(); break;
+    case 'reload': loadArticles(); break;
+    case 'menu': state.menu = !state.menu; state.rescoreArm = false; renderMenu(); break;
+    case 'pin': state.pin = !state.pin; state.open = null; lsSet('freshrss-pin', state.pin ? '1' : '0'); render(); break;
+    case 'collapse': state.collapse = !state.collapse; lsSet('freshrss-collapse', state.collapse ? '1' : '0'); render(); break;
+    case 'palette': openPalette(); break;
+    case 'cfg': openScoringModal('topics'); break;
+    case 'cfgfeeds': openScoringModal('feeds'); break;
+    case 'pwd': openPwdModal(); break;
+    case 'help': openHelp(); break;
+    case 'logout': doLogout(); break;
+    case 'login': window.location.href = '/login'; break;
+    case 'autoread':
+      state.autoRead = !state.autoRead; lsSet('freshrss-autoread', state.autoRead ? '1' : '0'); renderMenu();
+      toastSuccess(t(state.autoRead ? 'toast.autoReadOn' : 'toast.autoReadOff'));
+      break;
+    case 'rescore': triggerRescore(); break;
+    case 'rescore-now': _doRescore(); break;
+    case 'ackvisible': if (state.view === 'triage') markVisibleAsRead(); break;
+    case 'reset': resetFilters(); break;
+    case 'clearq': setFilter({ search: '' }); byId('q').focus(); break;
+    case 'more': state.shown += PAGE_SIZE; renderMain(); break;
+    case 'prev': move(-1); break;
+    case 'next': move(1); break;
+    case 'density': setDensity(document.documentElement.dataset.density === 'scan' ? 'read' : 'scan'); break;
+    case 'theme': setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); break;
+    case 'menu-open': state.menu = true; renderMenu(); break;
   }
 }
 
-// ── Password change modal ───────────────────────────────────────────────
+function _closeMenu() { if (state.menu) { state.menu = false; state.rescoreArm = false; renderMenu(); } }
+
+function _articleAction(act, id) {
+  if (act === 'ack') markSingleAsRead(id);
+  else if (act === 'bm') toggleBookmark(id);
+  else if (act === 'sn') snoozeArticle(id);
+  else if (act === 'unack') markUnread([id]);
+  else if (act === 'wake') cancelSnooze(id);
+}
+
+// ── Modal layer ────────────────────────────────────────────────────────
+// One modal at a time in #layer; focus returns to the opener on close.
+const M = { kind: null, opener: null };
+
+function _layer(html, cls = '') {
+  byId('layer').innerHTML = html ? `<div class="ov ${cls}" data-ovl>${html}</div>` : '';
+}
+
+function closeModal() {
+  M.kind = null; _layer('');
+  if (M.opener && document.contains(M.opener)) M.opener.focus();
+  M.opener = null;
+}
+
+function _openModal(kind) {
+  if (!M.kind) M.opener = document.activeElement;
+  M.kind = kind; state.menu = false; renderMenu();
+}
+
+function _modalHead(id, titleKey) {
+  return `<div class="mh"><h2 id="${id}">${esc(t(titleKey))}</h2><button type="button" class="btn ghost ico x" data-mclose aria-label="${esc(t('modal.close'))}">${ic('x')}</button></div>`;
+}
+
+// Tab stays inside the open dialog.
+function _trapFocus(e) {
+  const dlg = document.querySelector('#layer [role="dialog"]');
+  if (!dlg) return;
+  const f = [...dlg.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(x => !x.disabled && x.offsetParent);
+  if (!f.length) return;
+  if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+  else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+}
+
+// ── Password change modal ──────────────────────────────────────────────
 function openPwdModal() {
   if (!_requireAuth()) return;
-  const modal = document.getElementById('pwd-modal');
-  document.getElementById('pwd-current').value = '';
-  document.getElementById('pwd-new').value = '';
-  document.getElementById('pwd-confirm').value = '';
-  document.getElementById('pwd-error').textContent = '';
-  modal.style.display = 'flex';
-  document.getElementById('pwd-current').focus();
-  modal.onclick = (e) => { if (e.target === modal) closePwdModal(); };
-  document.addEventListener('keydown', _pwdEscHandler);
-}
-
-function _pwdEscHandler(e) {
-  if (e.key === 'Escape') closePwdModal();
-}
-
-function closePwdModal() {
-  document.getElementById('pwd-modal').style.display = 'none';
-  document.removeEventListener('keydown', _pwdEscHandler);
+  _openModal('pwd');
+  _layer(`<div class="modal" role="dialog" aria-modal="true" aria-labelledby="pwd-t">${_modalHead('pwd-t', 'pwd.title')}`
+    + `<form class="mb form" id="pwd-form" novalidate>`
+    + `<label class="field">${esc(t('pwd.current'))}<input class="input" type="password" id="pwd-current" autocomplete="current-password"></label>`
+    + `<label class="field">${esc(t('pwd.new'))}<input class="input" type="password" id="pwd-new" autocomplete="new-password"><span class="hint">${esc(t('pwd.hint'))}</span></label>`
+    + `<label class="field">${esc(t('pwd.confirm'))}<input class="input" type="password" id="pwd-confirm" autocomplete="new-password"></label>`
+    + `<p class="form-err" id="pwd-error" role="alert"></p></form>`
+    + `<div class="mf"><span class="sp"></span><button type="button" class="btn" data-mclose>${esc(t('pwd.cancel'))}</button>`
+    + `<button type="button" class="btn primary" id="pwd-save-btn" data-cmd-modal="pwdsave">${esc(t('pwd.save'))}</button></div></div>`);
+  byId('pwd-current').focus();
 }
 
 async function savePwd() {
-  const current = document.getElementById('pwd-current').value;
-  const newPwd  = document.getElementById('pwd-new').value;
-  const confirm = document.getElementById('pwd-confirm').value;
-  const errEl   = document.getElementById('pwd-error');
+  const current = byId('pwd-current').value;
+  const newPwd  = byId('pwd-new').value;
+  const confirmPwd = byId('pwd-confirm').value;
+  const errEl   = byId('pwd-error');
   errEl.textContent = '';
+  if (!current) { errEl.textContent = t('pwd.needCurrent'); return; }
+  if (newPwd.length < 8) { errEl.textContent = t('pwd.tooShort'); return; }
+  if (newPwd !== confirmPwd) { errEl.textContent = t('pwd.mismatch'); return; }
 
-  if (newPwd !== confirm) {
-    errEl.textContent = t('pwd.mismatch');
-    return;
-  }
-
-  const btn = document.getElementById('pwd-save-btn');
+  const btn = byId('pwd-save-btn');
   btn.disabled = true;
   try {
     await changePassword(current, newPwd);
-    closePwdModal();
+    closeModal();
     toastSuccess(t('pwd.ok'));
   } catch (e) {
     const key = e.message === 'current_password_wrong' ? 'pwd.wrongCurrent'
@@ -539,170 +245,374 @@ async function savePwd() {
   }
 }
 
-// ── Command Palette ────────────────────────────────────────────────────
-let _paletteFocusIdx = 0;
-let _paletteFiltered = [];
+// ── Help modal ─────────────────────────────────────────────────────────
+const HELP_KEYS = [
+  ['help.nav'], ['j / k', 'help.next'], ['Enter', 'help.enter'], ['o', 'help.open'], ['Esc', 'help.esc'],
+  ['help.triage'], ['m', 'help.ack'], ['Shift M', 'help.ackAll'], ['u', 'help.undo'], ['s', 'help.snooze'], ['b', 'help.bookmark'],
+  ['help.filters'], ['/', 'help.search'], ['1 / 2 / 3', 'help.sev'], ['0', 'help.reset'],
+  ['help.display'], ['⌘K', 'help.palette'], ['v', 'help.density'], ['p', 'help.pin'], ['[', 'help.sidebar'], ['r', 'help.sync'], ['?', 'help.help'],
+];
 
-function openPalette() {
-  const overlay = document.getElementById('cmd-palette');
-  if (!overlay) return;
-  overlay.style.display = 'flex';
-  const input = document.getElementById('palette-input');
-  input.value = '';
-  _paletteFocusIdx = 0;
-  _renderPalette('');
-  setTimeout(() => input.focus(), 0);
+function openHelp() {
+  _openModal('help');
+  _layer(`<div class="modal" role="dialog" aria-modal="true" aria-labelledby="help-t">${_modalHead('help-t', 'help.title')}<div class="mb"><div class="keys">`
+    + HELP_KEYS.map(k => k.length === 1 ? `<h3>${esc(t(k[0]))}</h3>` : `<kbd>${esc(k[0])}</kbd><span>${esc(t(k[1]))}</span>`).join('')
+    + '</div></div></div>');
+  document.querySelector('#layer [data-mclose]')?.focus();
 }
 
-function closePalette() {
-  const overlay = document.getElementById('cmd-palette');
-  if (overlay) overlay.style.display = 'none';
+// ── Command Palette ────────────────────────────────────────────────────
+const P = { ids: [], sel: 0 };
+
+// [group, label key, shortcut, command id, auth only]
+function _paletteCommands() {
+  const c = [
+    ['pal.gActions', 'pal.sync', 'r', 'sync', true], ['pal.gActions', 'pal.ackVisible', '⇧M', 'ackvisible', true], ['pal.gActions', 'pal.rescore', '', 'rescore-now', true],
+    ['pal.gViews', 'pal.vTriage', '', 'v:triage'], ['pal.gViews', 'pal.vBookmarks', '', 'v:bm', true], ['pal.gViews', 'pal.vSnoozed', '', 'v:sn', true], ['pal.gViews', 'pal.vRead', '', 'v:read', true],
+    ['pal.gFilters', 'pal.p1', '1', 'sev:crit'], ['pal.gFilters', 'pal.p2', '2', 'sev:warn'], ['pal.gFilters', 'pal.p3', '3', 'sev:ok'], ['pal.gFilters', 'pal.reset', '0', 'reset'],
+    ['pal.gFilters', 'pal.period7', '', 'd:7'], ['pal.gFilters', 'pal.period14', '', 'd:14'], ['pal.gFilters', 'pal.period30', '', 'd:30'], ['pal.gFilters', 'pal.periodAll', '', 'd:0'],
+    ['pal.gDisplay', 'pal.density', 'v', 'density'], ['pal.gDisplay', 'pal.pin', 'p', 'pin'], ['pal.gDisplay', 'pal.sidebar', '[', 'collapse'], ['pal.gDisplay', 'pal.theme', '', 'theme'], ['pal.gDisplay', 'pal.accent', '', 'menu-open'],
+    ['pal.gConfig', 'pal.topics', '', 'cfg', true], ['pal.gConfig', 'pal.feeds', '', 'cfgfeeds', true], ['pal.gConfig', 'pal.lang', '', 'menu-open'],
+    ['pal.gAccount', 'btn.changePassword', '', 'pwd', true], ['pal.gAccount', 'menu.shortcuts', '?', 'help'],
+    ['pal.gAccount', state.authenticated ? 'btn.logout' : 'btn.login', '', state.authenticated ? 'logout' : 'login'],
+  ].filter(x => state.authenticated || !x[4]).map(x => [t(x[0]), t(x[1]), x[2], x[3]]);
+  for (const [name] of topicCounts()) c.push([t('pal.gTopics'), t('pal.topic', { t: name }), '', 't:' + name]);
+  return c;
+}
+
+function openPalette() {
+  if (M.kind === 'pal') { closeModal(); return; }
+  _openModal('pal'); P.sel = 0;
+  _layer(`<div class="modal pal" role="dialog" aria-modal="true" aria-label="${esc(t('pal.label'))}"><div class="pin">${ic('search')}`
+    + `<input id="pal-q" placeholder="${esc(t('pal.placeholder'))}" autocomplete="off" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-label="${esc(t('pal.label'))}"></div>`
+    + '<div class="pl" id="pal-list" role="listbox"></div>'
+    + `<div class="foot"><span><span class="kbd">↑↓</span> ${esc(t('pal.navigate'))}</span><span><span class="kbd">↵</span> ${esc(t('pal.run'))}</span><span><span class="kbd">esc</span> ${esc(t('pal.close'))}</span></div></div>`);
+  _renderPalette('');
+  byId('pal-q').focus();
 }
 
 function _renderPalette(query) {
   const q = query.toLowerCase().trim();
-  _paletteFiltered = PALETTE_COMMANDS.filter(c => {
-    const label = t(c.labelKey).toLowerCase();
-    return !q || label.includes(q) || c.icon.includes(q);
-  });
-  if (_paletteFocusIdx >= _paletteFiltered.length) _paletteFocusIdx = 0;
-
-  const list = document.getElementById('palette-list');
-  list.innerHTML = _paletteFiltered.map((c, i) => `
-    <div class="palette-item${i === _paletteFocusIdx ? ' focused' : ''}"
-      onclick="_execPaletteIdx(${i})"
-      onmouseover="_paletteFocusIdx=${i}; _highlightPalette()">
-      <span class="palette-item-label">${esc(t(c.labelKey))}</span>
-      ${c.shortcut ? `<span class="palette-shortcut">${esc(c.shortcut)}</span>` : ''}
-    </div>`).join('');
+  const c = _paletteCommands().filter(x => !q || x[1].toLowerCase().includes(q) || x[0].toLowerCase().includes(q));
+  const arts = q.length > 1 ? state.articles.filter(a => (a.title || '').toLowerCase().includes(q)).slice(0, 6) : [];
+  P.ids = c.map(x => x[3]).concat(arts.map(a => 'a:' + a.id));
+  if (P.sel >= P.ids.length) P.sel = 0;
+  let h = '', g = null, i = 0;
+  for (const x of c) {
+    if (x[0] !== g) { h += `<div class="g">${esc(x[0])}</div>`; g = x[0]; }
+    h += `<button type="button" class="c" role="option" id="pal-o${i}" data-pal="${i}" aria-selected="${i === P.sel}">${esc(x[1])}${x[2] ? `<span class="k">${esc(x[2])}</span>` : ''}</button>`; i++;
+  }
+  if (arts.length) {
+    h += `<div class="g">${esc(t('pal.gArticles'))}</div>`;
+    for (const a of arts) {
+      h += `<button type="button" class="c" role="option" id="pal-o${i}" data-pal="${i}" aria-selected="${i === P.sel}"><span class="tt">${esc(a.title)}</span><span class="meta ${sevOf(a.score)}">${burn(a.score)}</span></button>`; i++;
+    }
+  }
+  byId('pal-list').innerHTML = h || `<div class="empty">${esc(t('pal.none', { q }))}</div>`;
+  byId('pal-q').setAttribute('aria-activedescendant', P.ids.length ? 'pal-o' + P.sel : '');
+  document.querySelector('.pal .c[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
 }
 
-function _highlightPalette() {
-  document.querySelectorAll('.palette-item').forEach((el, i) => {
-    el.classList.toggle('focused', i === _paletteFocusIdx);
-  });
+function _runPalette(i) {
+  const id = P.ids[i];
+  if (!id) return;
+  closeModal();
+  if (id.startsWith('a:')) {
+    const aid = id.slice(2), art = state.articles.find(a => a.id === aid);
+    if (!art) return;
+    state.view = isAcked(art) && state.authenticated ? 'read' : 'triage';
+    state.keep.clear(); state.topic = null; state.search = ''; state.sev = null; state.minScore = 0;
+    recompute();
+    const ix = _view.list.indexOf(art);
+    if (ix >= 0) { state.shown = Math.max(state.shown, ix + 1); state.sel = ix; state.open = aid; }
+    render(); rowEl(aid)?.scrollIntoView({ block: 'center' });
+    return;
+  }
+  if (id.startsWith('v:')) { setView(id.slice(2)); return; }
+  if (id.startsWith('sev:')) { setFilter({ sev: id.slice(4) }); return; }
+  if (id.startsWith('d:')) { setDays(+id.slice(2)); return; }
+  if (id.startsWith('t:')) { if (state.view !== 'triage') setView('triage'); setFilter({ topic: id.slice(2) }); return; }
+  command(id);
 }
 
-function _execPaletteIdx(idx) {
-  if (_paletteFiltered[idx]) _paletteFiltered[idx].action();
+// ── Scoring config modal ───────────────────────────────────────────────
+// Draft edited in memory; nothing is sent before "Save and rescore".
+const C = { tab: 'topics', topic: null, draft: null, fw: null, feeds: [], fq: '' };
+
+async function openScoringModal(tab = 'topics') {
+  if (!_requireAuth()) return;
+  _openModal('cfg');
+  _layer(`<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="cfg-t">${_modalHead('cfg-t', 'cfg.title')}<div class="mb"><p class="hint">${esc(t('cfg.loading'))}</p></div></div>`, 'cfg');
+  try {
+    const [cfg, feedsResp] = await Promise.all([fetchScoringConfig(), fetchFeeds()]);
+    if (M.kind !== 'cfg') return;
+    C.tab = tab; C.fq = '';
+    C.draft = JSON.parse(JSON.stringify(cfg.topics || {}));
+    C.fw = { ...(cfg.feed_weights || {}) };
+    C.feeds = [...new Set([...(feedsResp.feeds || []), ...Object.keys(C.fw)])];
+    if (!C.draft[C.topic]) C.topic = Object.keys(C.draft)[0] || null;
+    _drawCfg();
+  } catch (e) {
+    if (M.kind === 'cfg') document.querySelector('#layer .mb').innerHTML = `<p class="form-err">${esc(e.message)}</p>`;
+  }
+}
+
+function _kwTotal(d) { return Object.values(d).reduce((n, x) => n + (x.keywords || []).length, 0); }
+
+function _fwAdjusted() { return Object.keys(C.fw).filter(k => Math.abs(C.fw[k] - 1) > 0.001).length; }
+
+function _cfgTopicsBody() {
+  const d = C.draft, names = Object.keys(d), tp = d[C.topic];
+  const list = names.map(n => `<button type="button" class="tpc" role="option" data-tpc="${esc(n)}" aria-selected="${n === C.topic}">`
+    + `<span class="nm">${esc(n || t('cfg.unnamed'))}</span><span class="wt">×${(+d[n].weight || 1).toFixed(2)}</span><span class="kc">${esc(t('cfg.kwCount', { n: (d[n].keywords || []).length }))}</span></button>`).join('')
+    + `<button type="button" class="btn ghost add" data-cfg="addtopic">${ic('plus')}${esc(t('cfg.addTopic'))}</button>`;
+  if (!tp) return `<div class="cfg-grid"><div class="cfg-list" role="listbox" aria-label="${esc(t('cfg.tabTopics'))}">${list}</div><div class="cfg-ed"><p class="hint">${esc(t('cfg.noTopics'))}</p></div></div>`;
+  const w = +tp.weight || 1;
+  return `<div class="cfg-grid"><div class="cfg-list" role="listbox" aria-label="${esc(t('cfg.tabTopics'))}">${list}</div><div class="cfg-ed">`
+    + `<div class="two"><label class="field">${esc(t('cfg.ph.name'))}<input class="input" id="cfg-name" value="${esc(C.topic)}"></label>`
+    + `<div class="field">${esc(t('cfg.weight'))}<div class="wrow"><input type="range" id="cfg-w" min="0.1" max="3" step="0.05" value="${w}" aria-label="${esc(t('cfg.weight'))}">`
+    + `<input class="input" id="cfg-wn" type="number" min="0.1" max="10" step="0.05" value="${w}" aria-label="${esc(t('cfg.weightValue'))}"></div></div></div>`
+    + `<div class="field"><span>${esc(t('cfg.colKeywords'))} <span class="hint">${esc(t('cfg.kwHint'))}</span></span><div class="chips">`
+    + (tp.keywords || []).map((k, i) => `<span class="ch">${esc(k)}<button type="button" data-kwdel="${i}" aria-label="${esc(t('cfg.kwRemove', { k }))}">${ic('x')}</button></span>`).join('')
+    + `<input id="cfg-kw" placeholder="${esc(t('cfg.ph.keywords'))}" aria-label="${esc(t('cfg.ph.keywords'))}"></div></div>`
+    + `<div class="danger-zone"><button type="button" class="btn danger" data-cfg="deltopic">${esc(t('cfg.delTopic', { t: C.topic }))}</button></div></div></div>`;
+}
+
+function _cfgFeedsBody() {
+  const unread = new Map();
+  for (const a of state.articles) if (!isAcked(a)) unread.set(a.feed_title, (unread.get(a.feed_title) || 0) + 1);
+  const q = C.fq.toLowerCase();
+  const feeds = C.feeds.filter(f => !q || f.toLowerCase().includes(q))
+    .sort((a, b) => (C.fw[b] ?? 1) - (C.fw[a] ?? 1) || a.localeCompare(b));
+  const loc = _locale();
+  const rows = feeds.map(f => {
+    const w = C.fw[f] ?? 1, cls = w > 1.001 ? 'up' : w < 0.999 ? 'down' : 'def';
+    return `<div class="frow"><span class="nm" title="${esc(f)}">${esc(f)}</span><span class="n">${(unread.get(f) || 0).toLocaleString(loc)}</span>`
+      + `<span class="step"><button type="button" data-fstep="-" data-feed="${esc(f)}" aria-label="${esc(t('cfg.decrease'))}">-</button>`
+      + `<input data-fin="${esc(f)}" type="number" min="0.1" max="10" step="0.1" value="${+w.toFixed(2)}" aria-label="${esc(t('cfg.multFor', { f }))}">`
+      + `<button type="button" data-fstep="+" data-feed="${esc(f)}" aria-label="${esc(t('cfg.increase'))}">+</button></span>`
+      + `<span class="eff ${cls}">${esc(t('cfg.eff.' + cls))}</span>`
+      + (cls !== 'def' ? `<button type="button" class="btn ghost ico" data-freset="${esc(f)}" aria-label="${esc(t('cfg.resetFeed'))}" title="${esc(t('cfg.resetFeed'))}">${ic('undo')}</button>` : '<span></span>')
+      + '</div>';
+  }).join('');
+  return `<div class="feeds"><div class="ftool"><label class="search">${ic('search')}<input id="cfg-fq" type="search" placeholder="${esc(t('cfg.filterFeeds'))}" value="${esc(C.fq)}" aria-label="${esc(t('cfg.filterFeeds'))}"></label><span class="hint">${esc(t('cfg.feedsHint'))}</span></div>`
+    + `<div class="frow h"><span>${esc(t('cfg.colFeed'))}</span><span class="n">${esc(t('cfg.colUnread'))}</span><span>${esc(t('cfg.colMult'))}</span><span class="eff">${esc(t('cfg.colEffect'))}</span><span></span></div>`
+    + (rows || `<p class="hint pad">${esc(t('cfg.noFeeds'))}</p>`) + '</div>';
+}
+
+function _drawCfg() {
+  const names = Object.keys(C.draft), fwN = _fwAdjusted();
+  const focus = document.activeElement?.id;
+  _layer(`<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="cfg-t">${_modalHead('cfg-t', 'cfg.title')}`
+    + `<div class="tabs" role="tablist"><button type="button" role="tab" data-tab="topics" aria-selected="${C.tab === 'topics'}">${esc(t('cfg.tabTopics'))}<span>${names.length}</span></button>`
+    + `<button type="button" role="tab" data-tab="feeds" aria-selected="${C.tab === 'feeds'}">${esc(t('cfg.tabFeeds'))}<span>${esc(t('cfg.adjusted', { n: fwN }))}</span></button></div>`
+    + `<div class="mb flush">${C.tab === 'topics' ? _cfgTopicsBody() : _cfgFeedsBody()}</div>`
+    + `<div class="mf"><span class="stat">${esc(t('cfg.footer', { t: names.length, k: _kwTotal(C.draft), f: fwN }))}</span><span class="sp"></span>`
+    + `<button type="button" class="btn" data-mclose>${esc(t('cfg.cancel'))}</button>`
+    + `<button type="button" class="btn primary" id="cfg-save" data-cfg="save">${ic('redo')}${esc(t('cfg.save'))}</button></div></div>`, 'cfg');
+  if (focus) byId(focus)?.focus();
+}
+
+function _cfgAction(a) {
+  if (a === 'addtopic') {
+    let n = t('cfg.newTopic'), k = 2;
+    while (C.draft[n]) n = `${t('cfg.newTopic')} ${k++}`;
+    C.draft[n] = { keywords: [], weight: 1 }; C.topic = n; _drawCfg(); byId('cfg-name')?.select();
+  } else if (a === 'deltopic') {
+    delete C.draft[C.topic]; C.topic = Object.keys(C.draft)[0] || null; _drawCfg();
+  } else if (a === 'save') saveScoringConfig();
+}
+
+function _renameTopic(nn) {
+  nn = nn.trim();
+  if (!nn || nn === C.topic || C.draft[nn]) { _drawCfg(); return; }
+  const o = {};
+  for (const k of Object.keys(C.draft)) o[k === C.topic ? nn : k] = C.draft[k];
+  C.draft = o; C.topic = nn; _drawCfg();
+}
+
+async function saveScoringConfig() {
+  const name = byId('cfg-name');
+  if (name && name.value.trim() !== C.topic) _renameTopic(name.value);
+  const btn = byId('cfg-save');
+  if (btn) btn.disabled = true;
+  const fw = {};
+  for (const [k, v] of Object.entries(C.fw)) if (Math.abs(v - 1) > 0.001) fw[k] = v;
+  try {
+    await updateScoringConfig(C.draft, fw);
+    closeModal();
+    showToast(t('cfg.saved'));
+    _doRescore();
+  } catch (e) {
+    toastError(e.message);
+    if (byId('cfg-save')) byId('cfg-save').disabled = false;
+  }
+}
+
+// ── Delegated events (no inline JS built from data) ────────────────────
+function _onClick(e) {
+  const tgt = e.target.closest('button, a[data-cmd], [data-i], [data-side], [data-ovl]');
+  if (state.menu && !e.target.closest('#menu-pop') && !e.target.closest('#menu-btn')) _closeMenu();
+  if (!tgt) return;
+  const ds = tgt.dataset;
+  if (tgt.hasAttribute('data-ovl')) { if (e.target === tgt) closeModal(); return; }
+  if (ds.toast) {
+    const fn = _toastAction; dismissToast();
+    if (ds.toast === 'action' && fn) fn();
+    return;
+  }
+  if (tgt.hasAttribute('data-mclose')) { closeModal(); return; }
+  if (ds.cmdModal === 'pwdsave') { savePwd(); return; }
+  if (ds.cfg) { _cfgAction(ds.cfg); return; }
+  if (ds.cmd) { e.preventDefault(); command(ds.cmd); return; }
+  if (ds.pal !== undefined) { _runPalette(+ds.pal); return; }
+  if (ds.tab) { C.tab = ds.tab; _drawCfg(); return; }
+  if (ds.tpc !== undefined) {
+    const nm = byId('cfg-name');
+    if (nm && nm.value.trim() !== C.topic) _renameTopic(nm.value);
+    C.topic = ds.tpc; _drawCfg(); return;
+  }
+  if (ds.kwdel !== undefined) { C.draft[C.topic].keywords.splice(+ds.kwdel, 1); _drawCfg(); byId('cfg-kw')?.focus(); return; }
+  if (ds.fstep) {
+    const w = (C.fw[ds.feed] ?? 1) + (ds.fstep === '+' ? 0.1 : -0.1);
+    C.fw[ds.feed] = Math.max(0.1, Math.min(10, Math.round(w * 10) / 10)); _drawCfg(); return;
+  }
+  if (ds.freset) { delete C.fw[ds.freset]; _drawCfg(); return; }
+  if (ds.dens) { setDensity(ds.dens); return; }
+  if (ds.theme) { setTheme(ds.theme); return; }
+  if (ds.accent !== undefined) { setAccent(ds.accent || null); renderMenu(); return; }
+  if (ds.lang) { setLang(ds.lang); return; }
+  if (ds.view) { if (!tgt.disabled) setView(ds.view); return; }
+  if (ds.sort) { setSort(ds.sort); return; }
+  if (ds.sev !== undefined) { setFilter({ sev: ds.sev && state.sev !== ds.sev ? ds.sev : null, open: null }); return; }
+  if (ds.topic !== undefined) {
+    if (state.view !== 'triage') { state.view = 'triage'; state.open = null; }
+    state.side = false;
+    setFilter({ topic: state.topic === ds.topic ? null : ds.topic, open: null }); return;
+  }
+  if (ds.days !== undefined) { setDays(+ds.days); return; }
+  if (ds.clear) {
+    if (ds.clear === 'min') lsSet('freshrss-minscore', '0');
+    setFilter({ topic: ds.clear === 'topic' ? null : state.topic, minScore: ds.clear === 'min' ? 0 : state.minScore, search: ds.clear === 'q' ? '' : state.search });
+    return;
+  }
+  if (ds.dact) { if (ds.dact === 'ack') markDayAsRead(ds.day); else openDayLinks(ds.day); return; }
+  if (ds.act) { e.stopPropagation(); _articleAction(ds.act, ds.id); return; }
+  if (tgt.hasAttribute('data-close')) { state.open = null; renderPanel(); return; }
+  if (tgt.hasAttribute('data-side')) { state.side = !state.side; _shellClasses(); return; }
+  if (ds.i !== undefined) { state.sel = +ds.i; state.open = ds.id; render(); }
+}
+
+function _onInput(e) {
+  const el = e.target, id = el.id;
+  if (id === 'q') { state.search = el.value.trim(); state.keep.clear(); state.sel = 0; state.shown = PAGE_SIZE; renderMain(); }
+  else if (id === 'min-score') {
+    state.minScore = +el.value; state.sel = 0; state.keep.clear();
+    byId('min-val').textContent = burn(state.minScore);
+    lsSet('freshrss-minscore', String(state.minScore));
+    renderMain();
+  }
+  else if (id === 'accent-input') setAccent(el.value, false);
+  else if (id === 'pal-q') { P.sel = 0; _renderPalette(el.value); }
+  else if (id === 'cfg-w' || id === 'cfg-wn') {
+    const v = Math.max(0.1, Math.min(10, +el.value || 1));
+    C.draft[C.topic].weight = v;
+    const other = byId(id === 'cfg-w' ? 'cfg-wn' : 'cfg-w'); if (other) other.value = v;
+    const w = document.querySelector('.tpc[aria-selected="true"] .wt'); if (w) w.textContent = '×' + v.toFixed(2);
+  }
+  else if (id === 'cfg-name') {
+    const nm = document.querySelector('.tpc[aria-selected="true"] .nm'); if (nm) nm.textContent = el.value || t('cfg.unnamed');
+  }
+  else if (id === 'cfg-fq') { C.fq = el.value; _drawCfg(); }
+  else if (el.dataset.fin) { const v = +el.value; if (v >= 0.1 && v <= 10) C.fw[el.dataset.fin] = v; }
+}
+
+function _onChange(e) {
+  const el = e.target;
+  if (el.id === 'accent-input') { setAccent(el.value); renderMenu(); }
+  else if (el.id === 'cfg-name') _renameTopic(el.value);
+  else if (el.dataset.fin) _drawCfg();
+  else if (el.id === 'min-score') renderSidebar();
+}
+
+function _onKeydown(e) {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); return; }
+  if (M.kind) {
+    if (e.key === 'Escape') { e.preventDefault(); closeModal(); return; }
+    if (e.key === 'Tab') { _trapFocus(e); return; }
+    if (M.kind === 'pal' && P.ids.length) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        P.sel = (P.sel + (e.key === 'ArrowDown' ? 1 : -1) + P.ids.length) % P.ids.length;
+        _renderPalette(byId('pal-q').value);
+      } else if (e.key === 'Enter') { e.preventDefault(); _runPalette(P.sel); }
+    }
+    if (M.kind === 'cfg' && e.target.id === 'cfg-kw') {
+      const kw = C.draft[C.topic].keywords;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const v = e.target.value.trim().toLowerCase();
+        if (v && !kw.includes(v)) kw.push(v);
+        _drawCfg(); byId('cfg-kw')?.focus();
+      } else if (e.key === 'Backspace' && !e.target.value && kw.length) { kw.pop(); _drawCfg(); byId('cfg-kw')?.focus(); }
+    }
+    if (M.kind === 'cfg' && e.target.id === 'cfg-name' && e.key === 'Enter') { e.preventDefault(); _renameTopic(e.target.value); }
+    if (M.kind === 'pwd' && e.key === 'Enter') { e.preventDefault(); savePwd(); }
+    return;
+  }
+  if (e.target.matches?.('input, select, textarea')) { if (e.key === 'Escape') e.target.blur(); return; }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const l = visibleList(), cur = l[state.sel], k = e.key;
+  const triage = state.view === 'triage' && state.authenticated;
+  if (k === 'Escape') {
+    if (state.menu) _closeMenu();
+    else if (state.open) { state.open = null; renderPanel(); }
+    else if (state.side) { state.side = false; _shellClasses(); }
+  }
+  else if (k === 'j' || k === 'ArrowDown') { e.preventDefault(); move(1); }
+  else if (k === 'k' || k === 'ArrowUp') { e.preventDefault(); move(-1); }
+  else if (k === 'Enter') { if (cur && !e.target.closest('button, a')) { state.open = cur.id; renderPanel(); } }
+  else if (k === 'o') { if (cur) openUrl(cur.url); }
+  else if (k === 'm') { if (cur && triage) markSingleAsRead(cur.id); }
+  else if (k === 'M') { if (triage) markVisibleAsRead(); }
+  else if (k === 'u') { if (state.authenticated) undoAck(); }
+  else if (k === 's') { if (cur && triage) snoozeArticle(cur.id); }
+  else if (k === 'b') { if (cur && state.authenticated && !cur._stub) toggleBookmark(cur.id); }
+  else if (k === 'v') command('density');
+  else if (k === 'p') command('pin');
+  else if (k === '[') command('collapse');
+  else if (k === 'r') triggerRefresh();
+  else if (k === '/') { e.preventDefault(); byId('q').focus(); }
+  else if (k === '?') openHelp();
+  else if (k === '1' || k === '2' || k === '3') {
+    const sv = ['crit', 'warn', 'ok'][+k - 1];
+    setFilter({ sev: state.sev === sv ? null : sv });
+  }
+  else if (k === '0') resetFilters();
 }
 
 // ── Init ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  initAccentColor();
+  document.querySelectorAll('[data-ic]').forEach(el => { el.outerHTML = ic(el.dataset.ic); });
+  document.addEventListener('click', _onClick);
+  document.addEventListener('input', _onInput);
+  document.addEventListener('change', _onChange);
+  document.addEventListener('keydown', _onKeydown);
+  window.matchMedia('(min-width: 1100px)').addEventListener('change', renderPanel);
+  initReadTracking(byId('list'));
 
-  // Compact mode state indicator
-  if (state.compact) {
-    const item = document.getElementById('compact-overflow-item');
-    if (item) item.style.color = 'var(--accent)';
-  }
-
-  document.getElementById('sort-select').addEventListener('change', e => { state.sort = e.target.value; applyFilters(); });
-  const minScoreEl = document.getElementById('min-score');
-  const minScoreVal = document.getElementById('min-score-val');
-  minScoreEl.value = state.minScore;
-  if (minScoreVal) minScoreVal.textContent = state.minScore;
-  minScoreEl.addEventListener('input', e => {
-    state.minScore = parseFloat(e.target.value) || 0;
-    if (minScoreVal) minScoreVal.textContent = state.minScore;
-    localStorage.setItem('freshrss-minscore', state.minScore);
-    applyFilters();
-  });
-  document.getElementById('days-select').addEventListener('change', e => {
-    state.days = parseInt(e.target.value);
-    loadArticles();
-  });
-  let searchTimer = null;
-  document.getElementById('search-input').addEventListener('input', e => {
-    const v = e.target.value.trim();
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-      state.search = v;
-      state.displayed = 100;
-      applyFilters();
-    }, 150);
-  });
-
-  document.getElementById('palette-input')?.addEventListener('input', e => {
-    _paletteFocusIdx = 0;
-    _renderPalette(e.target.value);
-  });
-
-  document.getElementById('cmd-palette')?.addEventListener('click', closePalette);
-
-  // Close overflow menu on outside click
-  document.addEventListener('click', e => {
-    if (!e.target.closest('.overflow-wrap')) closeOverflowMenu();
-  });
-
-  document.addEventListener('keydown', (e) => {
-    // ⌘K / Ctrl+K - toggle palette
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-      e.preventDefault();
-      const palette = document.getElementById('cmd-palette');
-      if (palette && palette.style.display !== 'none') closePalette();
-      else openPalette();
-      return;
-    }
-
-    // Palette navigation (when open)
-    const paletteOpen = document.getElementById('cmd-palette')?.style.display !== 'none';
-    if (paletteOpen) {
-      if (e.key === 'Escape') { closePalette(); return; }
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        _paletteFocusIdx = Math.min(_paletteFocusIdx + 1, _paletteFiltered.length - 1);
-        _highlightPalette();
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        _paletteFocusIdx = Math.max(_paletteFocusIdx - 1, 0);
-        _highlightPalette();
-        return;
-      }
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        _execPaletteIdx(_paletteFocusIdx);
-        return;
-      }
-      return;
-    }
-
-    if (e.target.matches('input, select, textarea')) return;
-    if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
-    else if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
-    else if (e.key === 'o' || e.key === 'Enter') {
-      if (state.focusedIdx >= 0) {
-        const a = state.filtered[state.focusedIdx];
-        if (a && safeUrl(a.url) !== '#') window.open(safeUrl(a.url), '_blank', 'noopener');
-      }
-    }
-    else if (e.key === 'm') {
-      if (state.authenticated && state.focusedIdx >= 0) {
-        const a = state.filtered[state.focusedIdx];
-        if (a) markSingleAsRead(a.id, { stopPropagation: () => {}, preventDefault: () => {} });
-      }
-    }
-    else if (e.key === 'r' && !e.ctrlKey && !e.metaKey) triggerRefresh();
-    else if (e.key === 'Escape' && state.openRow) {
-      if (state.compact) toggleCompactRow(state.openRow);
-      else toggleDetail(state.openRow);
-    }
-  });
-
-  _initDelegation();
   fetchMe();
   applyI18n();
+  fetchSnoozes();
 
   fetchStatus().then(status => {
-    updateLastRefresh(status.last_refresh);
+    _applyStatus(status);
     if (status.is_loading && state.authenticated) {
-      setRefreshBtnLoading(true); showToast(status.load_progress || t('toast.loading')); startPolling();
+      setRefreshBtnLoading(true); showToast(status.load_progress || t('toast.loading')); progress(30); startPolling();
     }
   }).catch(() => {}).finally(loadArticles);
 
   setInterval(async () => {
-    try { updateLastRefresh((await fetchStatus()).last_refresh); } catch { /* retried next tick */ }
+    try { _applyStatus(await fetchStatus()); renderSummary(); } catch { /* retried next tick */ }
   }, 60000);
 });

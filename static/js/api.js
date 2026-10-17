@@ -27,23 +27,14 @@ function _reportError(e) {
   toastError(e.message || t('toast.error'));
 }
 
-function postMarkRead(ids) { return apiFetch('/api/mark-read', { json: { article_ids: ids } }); }
+function postMarkRead(ids) { return apiJson('/api/mark-read', { json: { article_ids: ids } }); }
+function postMarkUnread(ids) { return apiJson('/api/mark-unread', { json: { article_ids: ids } }); }
 
 function fetchStatus(opts) { return apiJson('/api/status', opts); }
 
 function fetchMe() {
   state.authenticated = !!window._AUTH;
-  const authEl     = document.getElementById('overflow-auth');
-  const loginEl    = document.getElementById('overflow-login');
-  const usernameEl = document.getElementById('auth-username');
-  if (state.authenticated) {
-    if (usernameEl) usernameEl.textContent = window._USER || '';
-    if (authEl)  authEl.style.display  = '';
-    if (loginEl) loginEl.style.display = 'none';
-  } else {
-    if (authEl)  authEl.style.display  = 'none';
-    if (loginEl) loginEl.style.display = '';
-  }
+  document.documentElement.classList.toggle('auth', state.authenticated);
 }
 
 async function doLogout() {
@@ -59,6 +50,12 @@ function _requireAuth() {
   return true;
 }
 
+function _applyStatus(s) {
+  state.lastRefresh = s.last_refresh || null;
+  state.syncError = s.is_loading ? null : (s.error || null);
+  if (Array.isArray(s.all_topics)) state.allTopics = s.all_topics;
+}
+
 let _loadCtl = null;
 
 async function loadArticles() {
@@ -66,7 +63,7 @@ async function loadArticles() {
   const ctl = _loadCtl = new AbortController();
   try {
     const params = new URLSearchParams({ days: state.days, limit: 0 });
-    if (state.showRead) params.set('show_read', 'true');
+    if (state.view === 'read') params.set('show_read', 'true');
     let data;
     for (let attempt = 0; ; attempt++) {
       try { data = await apiJson(`/api/articles?${params}`, { signal: ctl.signal }); break; }
@@ -77,117 +74,149 @@ async function loadArticles() {
       }
     }
     if (ctl.signal.aborted) return;
-    document.getElementById('error-state').style.display = 'none';
+    state.loadError = null;
     state.articles = data.articles;
-    state.displayed = 100; state.everLoaded = true;
+    state.everLoaded = true;
     const currentIds = new Set(data.articles.map(a => a.id));
     for (const id of _markedIds) if (!currentIds.has(id)) _markedIds.delete(id);
     saveReadIds();
-    buildTopicPills(data.articles.filter(a => !a._read)); applyFilters();
     try {
       const status = await fetchStatus({ signal: ctl.signal });
-      if (!ctl.signal.aborted) updateLastRefresh(status.last_refresh);
+      if (!ctl.signal.aborted) _applyStatus(status);
     } catch { /* last-refresh label is cosmetic */ }
+    render();
   } catch (e) {
     if (e.name === 'AbortError' || ctl !== _loadCtl) return;
-    showError(e.message);
+    state.loadError = e.message || t('toast.error');
+    state.everLoaded = true;
+    render();
   }
 }
 
-async function markVisibleAsRead() {
-  const ids = state.filtered.slice(0, state.displayed).map(a => a.id);
-  if (!ids.length) return;
+async function fetchSnoozes() {
+  if (!state.authenticated) return;
   try {
-    await postMarkRead(ids);
-    for (const id of ids) { _markedIds.add(id); _readQueue.delete(id); }
-    saveReadIds();
-    state.displayed = 100; buildTopicPills(state.articles.filter(a => !_markedIds.has(a.id))); applyFilters();
+    const { snoozes } = await apiJson('/api/snoozes');
+    state.snoozes = new Map((snoozes || []).map(s => [s.article_id, s]));
+    render();
   } catch (e) { _reportError(e); }
 }
 
-async function markSingleAsRead(id, e) {
-  e.stopPropagation(); e.preventDefault();
+// ── Ack (mark read) and undo ───────────────────────────────────────────
+// Optimistic: rows fade out, ids are hidden at once, rolled back if the POST fails.
+async function ackArticles(ids, label) {
+  if (!state.authenticated || !ids.length) return;
+  ids.forEach(id => rowEl(id)?.classList.add('leaving'));
+  await new Promise(res => setTimeout(res, 180));
+  for (const id of ids) { _markedIds.add(id); _readQueue.delete(id); }
+  saveReadIds();
+  if (ids.includes(state.open)) state.open = null;
+  render();
   try {
-    await postMarkRead([id]);
-    _markedIds.add(id); _readQueue.delete(id);
-    saveReadIds();
-    if (state.openRow === id) toggleDetail(id);
-    document.querySelector(`.feed-row[data-id="${CSS.escape(id)}"], .compact-row[data-id="${CSS.escape(id)}"]`)?.classList.add('read');
-    buildTopicPills(state.articles.filter(a => !_markedIds.has(a.id)));
-    updateStats();
-  } catch (err) { _reportError(err); }
+    const r = await postMarkRead(ids);
+    state.lastAck = ids;
+    const msg = label || (ids.length > 1 ? t('toast.ackedN', { n: ids.length }) : t('toast.acked'));
+    toast(msg + ' · ' + t(r && r.status !== 'ok' ? 'toast.ackQueued' : 'toast.ackSynced'),
+      { action: undoAck, label: t('toast.undoKey') });
+  } catch (e) {
+    for (const id of ids) _markedIds.delete(id);
+    saveReadIds(); render(); _reportError(e);
+  }
 }
 
-async function markDayAsRead(btn) {
-  const group = btn.closest('.date-group');
-  if (!group) return;
-  const ids = JSON.parse(group.dataset.ids || '[]');
-  if (!ids.length) return;
-  btn.disabled = true;
+function markVisibleAsRead() { ackArticles(visibleList().map(a => a.id)); }
+
+function markSingleAsRead(id) { ackArticles([id]); }
+
+function markDayAsRead(key) {
+  const items = visibleList().filter(a => dayKey(a.published) === key);
+  ackArticles(items.map(a => a.id), t('toast.ackedDay', { n: items.length, day: dayLabel(items[0]?.published).toLowerCase() }));
+}
+
+async function markUnread(ids, msg) {
+  if (!state.authenticated || !ids.length) return;
   try {
-    await postMarkRead(ids);
-    const s = new Set(ids);
-    for (const id of ids) { _markedIds.add(id); _readQueue.delete(id); }
-    state.articles = state.articles.filter(a => !s.has(a.id));
+    await postMarkUnread(ids);
+    for (const id of ids) { _markedIds.delete(id); state.keep.delete(id); }
     saveReadIds();
-    if (s.has(state.openRow)) { state.openRow = null; }
-    buildTopicPills(state.articles.filter(a => !_markedIds.has(a.id)));
-    applyFilters();
+    let missing = false;
+    for (const id of ids) {
+      const a = state.articles.find(x => x.id === id);
+      if (a) a._read = false; else missing = true;
+    }
+    if (missing) await loadArticles(); else render();
+    toastSuccess(msg || (ids.length > 1 ? t('toast.unackedN', { n: ids.length }) : t('toast.unacked')));
   } catch (e) { _reportError(e); }
-  finally { btn.disabled = false; }
 }
 
-async function markSearchAsRead() {
-  const ids = state.filtered.slice(0, state.displayed).map(a => a.id);
-  if (!ids.length) return;
-  const btn = document.getElementById('search-read-btn');
-  btn.disabled = true; btn.textContent = t('toast.marking');
-  try {
-    await postMarkRead(ids);
-    const idSet = new Set(ids);
-    for (const id of ids) { _markedIds.add(id); _readQueue.delete(id); }
-    state.articles = state.articles.filter(a => !idSet.has(a.id));
-    saveReadIds();
-    state.displayed = 100;
-    buildTopicPills(state.articles.filter(a => !_markedIds.has(a.id))); applyFilters();
-  } catch (e) { _reportError(e); }
-  finally { btn.disabled = false; btn.textContent = t('btn.markSearch'); }
+function undoAck() {
+  const ids = state.lastAck;
+  if (!ids || !ids.length) return;
+  state.lastAck = null;
+  markUnread(ids, ids.length > 1 ? t('toast.unackedN', { n: ids.length }) : t('toast.undone'));
 }
 
-async function toggleBookmark(id, e) {
-  e.stopPropagation(); e.preventDefault();
+// ── Bookmark, snooze ───────────────────────────────────────────────────
+async function toggleBookmark(id) {
+  if (!_requireAuth()) return;
   try {
     const { bookmarked } = await apiJson('/api/bookmark', { json: { article_id: id } });
     const article = state.articles.find(a => a.id === id);
     if (article) article.bookmarked = bookmarked;
-    const btn = document.querySelector(`.row-bookmark[data-id="${CSS.escape(id)}"]`);
-    if (btn) {
-      btn.textContent = bookmarked ? '★' : '☆';
-      btn.classList.toggle('bookmarked', bookmarked);
-    }
-    buildTopicPills(state.articles);
+    render();
+    toastSuccess(t(bookmarked ? 'toast.bmAdded' : 'toast.bmRemoved'));
   } catch (err) { _reportError(err); }
 }
 
+async function snoozeArticle(id) {
+  if (!_requireAuth()) return;
+  const a = state.articles.find(x => x.id === id);
+  try {
+    const r = await apiJson('/api/snooze', { json: { article_id: id } });
+    state.snoozes.set(id, { article_id: id, snooze_until: r.snooze_until, title: a?.title || '', url: a?.url || '' });
+    if (state.open === id) state.open = null;
+    render();
+    toast(t('toast.snoozed', { when: fmtWhen(r.snooze_until) }), { action: () => cancelSnooze(id, true), label: t('toast.undo') });
+  } catch (err) {
+    if (err.status === 400) toastError(t('toast.snoozeNoTelegram'));
+    else _reportError(err);
+  }
+}
+
+async function cancelSnooze(id, quiet) {
+  if (!_requireAuth()) return;
+  try {
+    await apiFetch(`/api/snooze/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    state.snoozes.delete(id);
+    if (state.view === 'sn' && state.open === id) state.open = null;
+    render();
+    toastSuccess(t(quiet ? 'toast.snoozeCancelled' : 'toast.woken'));
+  } catch (err) { _reportError(err); }
+}
+
+// ── Refresh (SSE) ──────────────────────────────────────────────────────
 let _refreshES = null;
 
 function triggerRefresh() {
-  if (_refreshES) return;
+  if (_refreshES || state.syncing) return;
   if (!_requireAuth()) return;
   setRefreshBtnLoading(true);
   showToast(t('toast.starting'));
+  progress(8);
 
   const es = _refreshES = new EventSource('/api/refresh/stream');
   const freshMap = new Map();
   let buffer = [];
   let renderTimer = null;
   let isIncremental = false;
+  let pct = 8;
 
   function closeStream() {
     if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
     es.close();
     _refreshES = null;
     setRefreshBtnLoading(false);
+    progress(100);
   }
 
   function flushBuffer(isFinal = false) {
@@ -204,15 +233,14 @@ function triggerRefresh() {
       } else {
         state.articles = [...freshMap.values()];
       }
-      state.displayed = 100;
+      state.everLoaded = true;
     } else {
       const existingIds = new Set(state.articles.map(a => a.id));
       const toAdd = [...freshMap.values()].filter(a => !existingIds.has(a.id));
       if (!toAdd.length) return;
       state.articles = [...state.articles, ...toAdd];
     }
-    buildTopicPills(state.articles);
-    applyFilters();
+    renderMain(); renderSidebar();
   }
 
   es.onmessage = (ev) => {
@@ -220,13 +248,14 @@ function triggerRefresh() {
     try { event = JSON.parse(ev.data); } catch { return; }
     switch (event.type) {
       case 'progress':
+        // No percentage in the stream: creep towards 90 % on each step.
+        pct += (90 - pct) * 0.25; progress(pct);
         updateToast(event.message);
         break;
       case 'removed': {
         const removedSet = new Set(event.ids);
         state.articles = state.articles.filter(a => !removedSet.has(a.id));
-        buildTopicPills(state.articles);
-        applyFilters();
+        renderMain(); renderSidebar();
         break;
       }
       case 'article':
@@ -238,12 +267,15 @@ function triggerRefresh() {
         if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
         flushBuffer(true);
         closeStream();
+        state.lastRefresh = Math.floor(Date.now() / 1000); state.syncError = null;
+        render();
         toastSuccess(event.total_fetched === 0
           ? t('toast.noUnread')
           : t('toast.relevant', { n: event.count }));
         break;
       case 'error':
         closeStream();
+        state.syncError = event.message; render();
         toastError(event.message);
         break;
       case 'busy':
@@ -259,42 +291,22 @@ function triggerRefresh() {
   };
 }
 
+// ── Rescore ────────────────────────────────────────────────────────────
+// Two-step confirm lives in the menu (state.rescoreArm); the palette and the
+// scoring modal call _doRescore directly since they are explicit already.
 function triggerRescore() {
-  const btn = document.getElementById('rescore-btn');
-  // Since the editorial redesign the rescore action lives in the overflow menu
-  // and in the command palette - neither leaves a button in the DOM to carry the
-  // two-step confirm, and the menu closes on click anyway. Fall back to a plain
-  // dialog so the action still cannot fire by accident.
-  if (!btn) {
-    if (window.confirm(t('btn.rescoreConfirm'))) _doRescore();
-    return;
-  }
-  if (btn.dataset.confirming === 'true') {
-    clearTimeout(btn._confirmTimer);
-    delete btn.dataset.confirming;
-    btn.className = 'btn btn-ghost';
-    btn.innerHTML = t('btn.rescore');
-    _doRescore();
-  } else {
-    btn.dataset.confirming = 'true';
-    btn.className = 'btn btn-warn';
-    btn.innerHTML = t('btn.rescoreConfirm');
-    btn._confirmTimer = setTimeout(() => {
-      delete btn.dataset.confirming;
-      btn.className = 'btn btn-ghost';
-      btn.innerHTML = t('btn.rescore');
-    }, 4000);
-  }
+  if (state.rescoreArm) { state.rescoreArm = false; state.menu = false; renderMenu(); _doRescore(); }
+  else { state.rescoreArm = true; renderMenu(); }
 }
 
 async function _doRescore() {
   if (!_requireAuth()) return;
-  setRescoreBtnLoading(true); showToast(t('toast.rescoring'));
+  setRescoreBtnLoading(true); showToast(t('toast.rescoring')); progress(15);
   try {
     const json = await apiJson('/api/rescore', { method: 'POST' });
-    if (json.status === 'already_loading') { toastError(t('toast.alreadyLoading')); setRescoreBtnLoading(false); return; }
+    if (json.status === 'already_loading') { toastError(t('toast.alreadyLoading')); setRescoreBtnLoading(false); progress(100); return; }
     startRescorePolling();
-  } catch (e) { _reportError(e); setRescoreBtnLoading(false); }
+  } catch (e) { _reportError(e); setRescoreBtnLoading(false); progress(100); }
 }
 
 // Status polling: ticks never overlap, and a failed status is not a finished load.
@@ -309,12 +321,13 @@ function _startStatusPolling(setLoading, okMsg) {
       failures = 0;
       updateToast(s.load_progress || t('toast.loading'));
       if (!s.is_loading) {
-        stopPolling(); setLoading(false);
-        if (s.error) toastError(s.error);
+        stopPolling(); setLoading(false); progress(100);
+        _applyStatus(s);
+        if (s.error) { toastError(s.error); render(); }
         else { toastSuccess(okMsg(s)); await loadArticles(); }
       }
     } catch (e) {
-      if (++failures >= 5) { stopPolling(); setLoading(false); _reportError(e); }
+      if (++failures >= 5) { stopPolling(); setLoading(false); progress(100); _reportError(e); }
     } finally { busy = false; }
   }, 1500);
 }
@@ -334,17 +347,10 @@ function stopPolling() {
 // ── Scoring config ─────────────────────────────────────────────────────
 function fetchScoringConfig() { return apiJson('/api/config/scoring'); }
 
+function fetchFeeds() { return apiJson('/api/feeds'); }
+
 async function updateScoringConfig(topics, feed_weights = {}) {
   await apiFetch('/api/config/scoring', { method: 'PUT', json: { topics, feed_weights } });
-}
-
-async function snoozeArticle(id, e) {
-  e.stopPropagation(); e.preventDefault();
-  if (!_requireAuth()) return;
-  try {
-    await apiFetch('/api/snooze', { json: { article_id: id } });
-    showToast(t('toast.snoozed'));
-  } catch (err) { _reportError(err); }
 }
 
 async function changePassword(currentPassword, newPassword) {
