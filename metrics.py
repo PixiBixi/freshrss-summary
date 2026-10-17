@@ -120,5 +120,7 @@ def _update_prom_cache(articles: list[dict[str, Any]], last_refresh: float | Non
     for a in articles:
         for t in a.get("matched_topics", {}):
             topic_counts[t] = topic_counts.get(t, 0) + 1
+    # A topic left with no article must disappear, not keep its last count forever.
+    m.topic_articles.clear()
     for topic, count in topic_counts.items():
         m.topic_articles.labels(topic=topic).set(count)
