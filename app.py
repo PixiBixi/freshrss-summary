@@ -40,7 +40,7 @@ from auth import (
     resolve_secret_key,
     verify_password,
 )
-from config import ConfigDict, load_config
+from config import ConfigDict, load_config, session_https_only
 from db import (
     DEFAULT_DB_URL,
     add_pending_sync,
@@ -233,7 +233,12 @@ class _SessionMiddleware(SessionMiddleware):
     """
 
     def __init__(self, app: Any) -> None:
-        super().__init__(app, secret_key=secrets.token_hex(32))
+        super().__init__(
+            app,
+            secret_key=secrets.token_hex(32),
+            same_site="lax",
+            https_only=session_https_only(),
+        )
         global _session_middleware
         _session_middleware = self
 
