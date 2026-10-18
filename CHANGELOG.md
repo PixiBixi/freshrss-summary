@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.11.2](https://github.com/PixiBixi/freshrss-summary/compare/c8eea3a6e4960ea9887917fa9d6e7884582e9129..v1.11.2) - 2026-10-18
+#### Bug Fixes
+- (**deps**) update dependency fastapi to v0.146.0 (#101) - ([c8eea3a](https://github.com/PixiBixi/freshrss-summary/commit/c8eea3a6e4960ea9887917fa9d6e7884582e9129)) - renovate[bot]
+
+- - -
+
 ## [v1.11.1](https://github.com/PixiBixi/freshrss-summary/compare/e9836efe39755e4328f24414c8d91ed0248825fb..v1.11.1) - 2026-10-17
 #### Bug Fixes
 - (**ui**) calibrate P1/P2 thresholds on real scores - ([e9836ef](https://github.com/PixiBixi/freshrss-summary/commit/e9836efe39755e4328f24414c8d91ed0248825fb)) - Jeremy Delgado
