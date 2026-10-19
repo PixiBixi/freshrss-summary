@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.0](https://github.com/PixiBixi/freshrss-summary/compare/64f549557b4051a948d268240e32151de95c03a1..v1.12.0) - 2026-10-19
+#### Features
+- (**ui**) load more articles on scroll - ([64f5495](https://github.com/PixiBixi/freshrss-summary/commit/64f549557b4051a948d268240e32151de95c03a1)) - Jeremy Delgado
+
+- - -
+
 ## [v1.11.2](https://github.com/PixiBixi/freshrss-summary/compare/c8eea3a6e4960ea9887917fa9d6e7884582e9129..v1.11.2) - 2026-10-18
 #### Bug Fixes
 - (**deps**) update dependency fastapi to v0.146.0 (#101) - ([c8eea3a](https://github.com/PixiBixi/freshrss-summary/commit/c8eea3a6e4960ea9887917fa9d6e7884582e9129)) - renovate[bot]
