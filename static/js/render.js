@@ -360,6 +360,21 @@ function renderList() {
   const head = empty ? '' : `<div class="head" role="presentation">${_th('burn', 'col.burn')}${_th('title', 'col.title')}${_th('topic', 'col.topic')}${_th('feed', 'col.feed', 'fd')}${_th('age', state.view === 'sn' ? 'col.reminder' : 'col.age', 'r')}</div>`;
   el.innerHTML = head + _listBody(currentArticle());
   if (keepTop) { el.scrollTop = keepTop; _lastListTop = el.scrollTop; }
+  _observeMore(el);
+}
+
+// Infinite scroll: the "load more" button doubles as the sentinel, kept as a fallback.
+let _moreObserver = null;
+function _observeMore(el) {
+  _moreObserver?.disconnect();
+  const btn = el.querySelector('[data-cmd="more"]');
+  if (!btn) return;
+  _moreObserver = new IntersectionObserver((entries) => {
+    if (!entries.some(e => e.isIntersecting)) return;
+    _moreObserver.disconnect();
+    state.shown += PAGE_SIZE; renderMain();
+  }, { root: el, rootMargin: '0px 0px 400px 0px' });
+  _moreObserver.observe(btn);
 }
 
 // ── Reader panel ───────────────────────────────────────────────────────
