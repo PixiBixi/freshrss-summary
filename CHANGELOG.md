@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.1](https://github.com/PixiBixi/freshrss-summary/compare/8eea7afb8544c2f51a7f9736b04e44534e432f13..v1.12.1) - 2026-10-20
+#### Miscellaneous Chores
+- (**deps**) update step-security/harden-runner action to v2.22.2 (#103) - ([8eea7af](https://github.com/PixiBixi/freshrss-summary/commit/8eea7afb8544c2f51a7f9736b04e44534e432f13)) - renovate[bot]
+
+- - -
+
 ## [v1.12.0](https://github.com/PixiBixi/freshrss-summary/compare/64f549557b4051a948d268240e32151de95c03a1..v1.12.0) - 2026-10-19
 #### Features
 - (**ui**) load more articles on scroll - ([64f5495](https://github.com/PixiBixi/freshrss-summary/commit/64f549557b4051a948d268240e32151de95c03a1)) - Jeremy Delgado
