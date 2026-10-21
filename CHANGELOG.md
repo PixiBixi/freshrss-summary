@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.6](https://github.com/PixiBixi/freshrss-summary/compare/15d26550234e4d2ecd293a9a6aa4fa01203394ad..v1.12.6) - 2026-10-21
+#### Miscellaneous Chores
+- (**deps**) update python docker tag to v3.15 (#89) - ([15d2655](https://github.com/PixiBixi/freshrss-summary/commit/15d26550234e4d2ecd293a9a6aa4fa01203394ad)) - renovate[bot]
+
+- - -
+
 ## [v1.12.5](https://github.com/PixiBixi/freshrss-summary/compare/a00532795390a05a7191aa3e9c4fd490395dce8f..v1.12.5) - 2026-10-21
 #### Bug Fixes
 - (**deps**) update dependency fastapi to v0.156.8 (#104) - ([a005327](https://github.com/PixiBixi/freshrss-summary/commit/a00532795390a05a7191aa3e9c4fd490395dce8f)) - renovate[bot]
