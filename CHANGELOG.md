@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.3](https://github.com/PixiBixi/freshrss-summary/compare/0119828637b9d4ab516313cf4a23f39bd86c7d79..v1.12.3) - 2026-10-21
+#### Miscellaneous Chores
+- (**renovate**) raise security PRs from OSV advisories - ([0119828](https://github.com/PixiBixi/freshrss-summary/commit/0119828637b9d4ab516313cf4a23f39bd86c7d79)) - Jeremy Delgado
+
+- - -
+
 ## [v1.12.2](https://github.com/PixiBixi/freshrss-summary/compare/b080245a044afc86ef5a3bbb316fd44f89e9df46..v1.12.2) - 2026-10-21
 #### Bug Fixes
 - (**deps**) update dependency fastapi to v0.156.4 (#102) - ([b080245](https://github.com/PixiBixi/freshrss-summary/commit/b080245a044afc86ef5a3bbb316fd44f89e9df46)) - renovate[bot]
