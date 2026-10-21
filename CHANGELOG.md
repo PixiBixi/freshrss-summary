@@ -1,6 +1,14 @@
 # Changelog
 
 - - -
+## [v1.12.4](https://github.com/PixiBixi/freshrss-summary/compare/4692f6d33e0fc3ae6c1594e012c782f74f7c1266..v1.12.4) - 2026-10-21
+#### Bug Fixes
+- (**deps**) refresh lockfile for transitive security fixes - ([4692f6d](https://github.com/PixiBixi/freshrss-summary/commit/4692f6d33e0fc3ae6c1594e012c782f74f7c1266)) - Jeremy Delgado
+#### Miscellaneous Chores
+- (**renovate**) automerge lock file maintenance - ([256e42d](https://github.com/PixiBixi/freshrss-summary/commit/256e42d0f8b7a875a4353ea1d5e27f799b54efcb)) - Jeremy Delgado
+
+- - -
+
 ## [v1.12.3](https://github.com/PixiBixi/freshrss-summary/compare/0119828637b9d4ab516313cf4a23f39bd86c7d79..v1.12.3) - 2026-10-21
 #### Miscellaneous Chores
 - (**renovate**) raise security PRs from OSV advisories - ([0119828](https://github.com/PixiBixi/freshrss-summary/commit/0119828637b9d4ab516313cf4a23f39bd86c7d79)) - Jeremy Delgado
