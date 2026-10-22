@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.9](https://github.com/PixiBixi/freshrss-summary/compare/ed57751ca7db8f30f34b72da81fea94634bc3400..v1.12.9) - 2026-10-22
+#### Miscellaneous Chores
+- (**deps**) update astral-sh/setup-uv action to v10.3.2 (#109) - ([ed57751](https://github.com/PixiBixi/freshrss-summary/commit/ed57751ca7db8f30f34b72da81fea94634bc3400)) - renovate[bot]
+
+- - -
+
 ## [v1.12.8](https://github.com/PixiBixi/freshrss-summary/compare/5d0db22d8aefbe8ee10b7eef966ece1f1a85cea4..v1.12.8) - 2026-10-22
 #### Bug Fixes
 - (**deps**) update dependency sqlalchemy to v2.1.6 (#106) - ([5d0db22](https://github.com/PixiBixi/freshrss-summary/commit/5d0db22d8aefbe8ee10b7eef966ece1f1a85cea4)) - renovate[bot]
