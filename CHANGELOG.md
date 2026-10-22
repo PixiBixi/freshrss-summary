@@ -1,6 +1,14 @@
 # Changelog
 
 - - -
+## [v1.12.7](https://github.com/PixiBixi/freshrss-summary/compare/c365f85497febec259471f9f8acf455ac93f59d4..v1.12.7) - 2026-10-22
+#### Continuous Integration
+- (**release**) serialize release runs - ([c365f85](https://github.com/PixiBixi/freshrss-summary/commit/c365f85497febec259471f9f8acf455ac93f59d4)) - Jeremy Delgado
+#### Miscellaneous Chores
+- (**deps**) update astral-sh/setup-uv action to v10.3.1 (#105) - ([1388fe0](https://github.com/PixiBixi/freshrss-summary/commit/1388fe0615835677de372221e44692a0629a2963)) - renovate[bot]
+
+- - -
+
 ## [v1.12.6](https://github.com/PixiBixi/freshrss-summary/compare/15d26550234e4d2ecd293a9a6aa4fa01203394ad..v1.12.6) - 2026-10-21
 #### Miscellaneous Chores
 - (**deps**) update python docker tag to v3.15 (#89) - ([15d2655](https://github.com/PixiBixi/freshrss-summary/commit/15d26550234e4d2ecd293a9a6aa4fa01203394ad)) - renovate[bot]
