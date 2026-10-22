@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.8](https://github.com/PixiBixi/freshrss-summary/compare/5d0db22d8aefbe8ee10b7eef966ece1f1a85cea4..v1.12.8) - 2026-10-22
+#### Bug Fixes
+- (**deps**) update dependency sqlalchemy to v2.1.6 (#106) - ([5d0db22](https://github.com/PixiBixi/freshrss-summary/commit/5d0db22d8aefbe8ee10b7eef966ece1f1a85cea4)) - renovate[bot]
+
+- - -
+
 ## [v1.12.7](https://github.com/PixiBixi/freshrss-summary/compare/c365f85497febec259471f9f8acf455ac93f59d4..v1.12.7) - 2026-10-22
 #### Continuous Integration
 - (**release**) serialize release runs - ([c365f85](https://github.com/PixiBixi/freshrss-summary/commit/c365f85497febec259471f9f8acf455ac93f59d4)) - Jeremy Delgado
