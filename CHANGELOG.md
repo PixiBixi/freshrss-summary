@@ -1,6 +1,15 @@
 # Changelog
 
 - - -
+## [v1.12.9](https://github.com/PixiBixi/freshrss-summary/compare/ed57751ca7db8f30f34b72da81fea94634bc3400..v1.12.9) - 2026-10-23
+#### Bug Fixes
+- (**deps**) update dependency fastapi to v0.161.1 (#107) - ([7b7309a](https://github.com/PixiBixi/freshrss-summary/commit/7b7309af579ef4b688cf50b829fb15bbcc7c2793)) - renovate[bot]
+#### Miscellaneous Chores
+- (**deps**) update astral-sh/setup-uv action to v10.3.2 (#109) - ([ed57751](https://github.com/PixiBixi/freshrss-summary/commit/ed57751ca7db8f30f34b72da81fea94634bc3400)) - renovate[bot]
+- (**version**) v1.12.9 - ([8ddda58](https://github.com/PixiBixi/freshrss-summary/commit/8ddda583e94f325f92ff5ffb5c4e7b2d29ed8677)) - github-actions[bot]
+
+- - -
+
 ## [v1.12.9](https://github.com/PixiBixi/freshrss-summary/compare/ed57751ca7db8f30f34b72da81fea94634bc3400..v1.12.9) - 2026-10-22
 #### Miscellaneous Chores
 - (**deps**) update astral-sh/setup-uv action to v10.3.2 (#109) - ([ed57751](https://github.com/PixiBixi/freshrss-summary/commit/ed57751ca7db8f30f34b72da81fea94634bc3400)) - renovate[bot]
