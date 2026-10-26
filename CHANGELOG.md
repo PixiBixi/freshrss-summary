@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.12](https://github.com/PixiBixi/freshrss-summary/compare/faea82901de95bcbd70c00f46b8c918b9f36de3f..v1.12.12) - 2026-10-26
+#### Miscellaneous Chores
+- (**deps**) lock file maintenance (#113) - ([faea829](https://github.com/PixiBixi/freshrss-summary/commit/faea82901de95bcbd70c00f46b8c918b9f36de3f)) - renovate[bot]
+
+- - -
+
 ## [v1.12.11](https://github.com/PixiBixi/freshrss-summary/compare/b44d2cf46049f5e39b8335c9a22239322cc1588e..v1.12.11) - 2026-10-26
 #### Miscellaneous Chores
 - (**deps**) update dependency pytest-asyncio to v1.4.1 (#112) - ([b44d2cf](https://github.com/PixiBixi/freshrss-summary/commit/b44d2cf46049f5e39b8335c9a22239322cc1588e)) - renovate[bot]
