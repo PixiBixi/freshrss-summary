@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.13](https://github.com/PixiBixi/freshrss-summary/compare/c3a7ec53c47aed38044610b07a98235272bcf4f2..v1.12.13) - 2026-10-28
+#### Miscellaneous Chores
+- (**deps**) update step-security/harden-runner action to v2.22.3 (#114) - ([c3a7ec5](https://github.com/PixiBixi/freshrss-summary/commit/c3a7ec53c47aed38044610b07a98235272bcf4f2)) - renovate[bot]
+
+- - -
+
 ## [v1.12.12](https://github.com/PixiBixi/freshrss-summary/compare/faea82901de95bcbd70c00f46b8c918b9f36de3f..v1.12.12) - 2026-10-26
 #### Miscellaneous Chores
 - (**deps**) lock file maintenance (#113) - ([faea829](https://github.com/PixiBixi/freshrss-summary/commit/faea82901de95bcbd70c00f46b8c918b9f36de3f)) - renovate[bot]
