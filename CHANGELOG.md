@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.16](https://github.com/PixiBixi/freshrss-summary/compare/6736fcfa03da9de9b96480d22d6a669364b3cd22..v1.12.16) - 2026-10-28
+#### Miscellaneous Chores
+- (**deps**) update astral-sh/setup-uv action to v10.3.3 (#116) - ([6736fcf](https://github.com/PixiBixi/freshrss-summary/commit/6736fcfa03da9de9b96480d22d6a669364b3cd22)) - renovate[bot]
+
+- - -
+
 ## [v1.12.15](https://github.com/PixiBixi/freshrss-summary/compare/71f942c8e3a4c2b5ad07d981b8cbb34a5cf2f571..v1.12.15) - 2026-10-28
 #### Miscellaneous Chores
 - (**deps**) update actions/setup-python digest to 6d4fd22 (#108) - ([adcfa90](https://github.com/PixiBixi/freshrss-summary/commit/adcfa90178e8281ad7fbf353a7d6bc0649cd3e90)) - renovate[bot]
