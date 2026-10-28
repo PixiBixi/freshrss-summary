@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.14](https://github.com/PixiBixi/freshrss-summary/compare/511b5530b7e88c5bdd3f8ab88af3099ac2a5e712..v1.12.14) - 2026-10-28
+#### Miscellaneous Chores
+- (**deps**) update dependency pytest to v9.2.0 (#115) - ([511b553](https://github.com/PixiBixi/freshrss-summary/commit/511b5530b7e88c5bdd3f8ab88af3099ac2a5e712)) - renovate[bot]
+
+- - -
+
 ## [v1.12.13](https://github.com/PixiBixi/freshrss-summary/compare/c3a7ec53c47aed38044610b07a98235272bcf4f2..v1.12.13) - 2026-10-28
 #### Miscellaneous Chores
 - (**deps**) update step-security/harden-runner action to v2.22.3 (#114) - ([c3a7ec5](https://github.com/PixiBixi/freshrss-summary/commit/c3a7ec53c47aed38044610b07a98235272bcf4f2)) - renovate[bot]
