@@ -1,6 +1,13 @@
 # Changelog
 
 - - -
+## [v1.12.15](https://github.com/PixiBixi/freshrss-summary/compare/71f942c8e3a4c2b5ad07d981b8cbb34a5cf2f571..v1.12.15) - 2026-10-28
+#### Miscellaneous Chores
+- (**deps**) update actions/setup-python digest to 6d4fd22 (#108) - ([adcfa90](https://github.com/PixiBixi/freshrss-summary/commit/adcfa90178e8281ad7fbf353a7d6bc0649cd3e90)) - renovate[bot]
+- (**deps**) update docker/login-action digest to 81c6f93 (#110) - ([71f942c](https://github.com/PixiBixi/freshrss-summary/commit/71f942c8e3a4c2b5ad07d981b8cbb34a5cf2f571)) - renovate[bot]
+
+- - -
+
 ## [v1.12.14](https://github.com/PixiBixi/freshrss-summary/compare/511b5530b7e88c5bdd3f8ab88af3099ac2a5e712..v1.12.14) - 2026-10-28
 #### Miscellaneous Chores
 - (**deps**) update dependency pytest to v9.2.0 (#115) - ([511b553](https://github.com/PixiBixi/freshrss-summary/commit/511b5530b7e88c5bdd3f8ab88af3099ac2a5e712)) - renovate[bot]
