@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.18](https://github.com/PixiBixi/freshrss-summary/compare/ce12ba8a40b32abe5fe04196d94c156ddd5474ef..v1.12.18) - 2026-11-01
+#### Bug Fixes
+- (**deps**) update dependency python-multipart to v0.0.33 (#118) - ([ce12ba8](https://github.com/PixiBixi/freshrss-summary/commit/ce12ba8a40b32abe5fe04196d94c156ddd5474ef)) - renovate[bot]
+
+- - -
+
 ## [v1.12.17](https://github.com/PixiBixi/freshrss-summary/compare/94484b3edec06715f974fe422db2da3a586722b6..v1.12.17) - 2026-10-30
 #### Bug Fixes
 - (**deps**) update dependency pydantic to v2.14.2 (#117) - ([94484b3](https://github.com/PixiBixi/freshrss-summary/commit/94484b3edec06715f974fe422db2da3a586722b6)) - renovate[bot]
