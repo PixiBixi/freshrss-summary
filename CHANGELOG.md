@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.19](https://github.com/PixiBixi/freshrss-summary/compare/19134c0e1bd739d9f3629a7628176b8224057b42..v1.12.19) - 2026-11-02
+#### Miscellaneous Chores
+- (**deps**) update dependency pytest-asyncio to v1.4.1.post1 (#119) - ([19134c0](https://github.com/PixiBixi/freshrss-summary/commit/19134c0e1bd739d9f3629a7628176b8224057b42)) - renovate[bot]
+
+- - -
+
 ## [v1.12.18](https://github.com/PixiBixi/freshrss-summary/compare/ce12ba8a40b32abe5fe04196d94c156ddd5474ef..v1.12.18) - 2026-11-01
 #### Bug Fixes
 - (**deps**) update dependency python-multipart to v0.0.33 (#118) - ([ce12ba8](https://github.com/PixiBixi/freshrss-summary/commit/ce12ba8a40b32abe5fe04196d94c156ddd5474ef)) - renovate[bot]
