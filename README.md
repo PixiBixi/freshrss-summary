@@ -451,7 +451,7 @@ python cli.py import articles.json
 ```bash
 uv pip install -r requirements-dev.txt
 uv run pytest            # add -v for verbose output
-pre-commit run --all-files
+prek run --all-files
 ```
 
 Tests need no network or FreshRSS access.

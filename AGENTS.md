@@ -65,6 +65,6 @@ L'utilisateur est SRE/Platform Engineer - les topics prioritaires sont SRE, GKE,
 
 - Setup : `uv venv && source .venv/bin/activate && uv pip install -r requirements-dev.txt`
 - Lancer en local : `python app.py` ou `uvicorn app:app --host 0.0.0.0 --port 8123 --reload`
-- Lint : `pre-commit run --all-files` (ou directement `ruff check --fix .` / `ruff format .`)
+- Lint : `prek run --all-files` (ou directement `ruff check --fix .` / `ruff format .`)
 - Tests : `uv run pytest` ; un seul test : `uv run pytest tests/test_scorer.py::test_name` (ou `-k <expr>`)
-- CI (`.github/workflows/ci.yml`) : job `lint` = `pre-commit/action`, job `test` = `uv run pytest --tb=short` (Python 3.14)
+- CI (`.github/workflows/ci.yml`) : job `lint` = `j178/prek-action`, job `test` = `uv run pytest --tb=short` (Python 3.14)
