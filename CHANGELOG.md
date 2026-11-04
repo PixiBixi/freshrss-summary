@@ -1,6 +1,14 @@
 # Changelog
 
 - - -
+## [v1.12.21](https://github.com/PixiBixi/freshrss-summary/compare/beedc0e3a863d6c6c093d0496e5d3258584862ab..v1.12.21) - 2026-11-04
+#### Bug Fixes
+- (**deps**) update dependency sqlalchemy to v2.1.8 (#121) - ([beedc0e](https://github.com/PixiBixi/freshrss-summary/commit/beedc0e3a863d6c6c093d0496e5d3258584862ab)) - renovate[bot]
+#### Miscellaneous Chores
+- replace pre-commit with prek (#122) - ([14017fd](https://github.com/PixiBixi/freshrss-summary/commit/14017fd5e98f28f32bfc0ea44bf6c565f200cb72)) - Jérémy
+
+- - -
+
 ## [v1.12.20](https://github.com/PixiBixi/freshrss-summary/compare/cdefc843b4e513498a66b9450ce372c668d24c74..v1.12.20) - 2026-11-02
 #### Miscellaneous Chores
 - (**deps**) lock file maintenance (#120) - ([cdefc84](https://github.com/PixiBixi/freshrss-summary/commit/cdefc843b4e513498a66b9450ce372c668d24c74)) - renovate[bot]
