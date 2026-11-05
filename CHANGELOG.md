@@ -1,6 +1,14 @@
 # Changelog
 
 - - -
+## [v1.12.22](https://github.com/PixiBixi/freshrss-summary/compare/2f9fc02dc17c3f63509ba9ba22506e93e0dd2399..v1.12.22) - 2026-11-05
+#### Bug Fixes
+- (**deps**) update dependency pydantic to v2.14.3 (#124) - ([9da0910](https://github.com/PixiBixi/freshrss-summary/commit/9da0910b857994a70c182438355dd66583f94ee9)) - renovate[bot]
+#### Continuous Integration
+- fix the prek checksum comment (#123) - ([2f9fc02](https://github.com/PixiBixi/freshrss-summary/commit/2f9fc02dc17c3f63509ba9ba22506e93e0dd2399)) - Jérémy
+
+- - -
+
 ## [v1.12.21](https://github.com/PixiBixi/freshrss-summary/compare/beedc0e3a863d6c6c093d0496e5d3258584862ab..v1.12.21) - 2026-11-04
 #### Bug Fixes
 - (**deps**) update dependency sqlalchemy to v2.1.8 (#121) - ([beedc0e](https://github.com/PixiBixi/freshrss-summary/commit/beedc0e3a863d6c6c093d0496e5d3258584862ab)) - renovate[bot]
