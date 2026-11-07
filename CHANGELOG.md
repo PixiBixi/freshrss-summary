@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.24](https://github.com/PixiBixi/freshrss-summary/compare/bfe427c63bcff952958a7c1a24863b07235ae917..v1.12.24) - 2026-11-07
+#### Bug Fixes
+- (**deps**) update dependency fastapi to v0.162.2 (#127) - ([bfe427c](https://github.com/PixiBixi/freshrss-summary/commit/bfe427c63bcff952958a7c1a24863b07235ae917)) - renovate[bot]
+
+- - -
+
 ## [v1.12.23](https://github.com/PixiBixi/freshrss-summary/compare/85724db0724247ebd35abdce1595c6744ab95dbe..v1.12.23) - 2026-11-06
 #### Miscellaneous Chores
 - (**deps**) update step-security/harden-runner action to v2.22.4 (#126) - ([85724db](https://github.com/PixiBixi/freshrss-summary/commit/85724db0724247ebd35abdce1595c6744ab95dbe)) - renovate[bot]
