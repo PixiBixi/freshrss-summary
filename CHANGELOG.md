@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.29](https://github.com/PixiBixi/freshrss-summary/compare/d1fccf9fb01fbb93b73e0fbd0cf7ad356c96f8fd..v1.12.29) - 2026-11-13
+#### Bug Fixes
+- (**deps**) update dependency fastapi to v0.162.7 (#132) - ([d1fccf9](https://github.com/PixiBixi/freshrss-summary/commit/d1fccf9fb01fbb93b73e0fbd0cf7ad356c96f8fd)) - renovate[bot]
+
+- - -
+
 ## [v1.12.28](https://github.com/PixiBixi/freshrss-summary/compare/22f820f93b15f695982f42142d8084fa333cf7b5..v1.12.28) - 2026-11-13
 #### Miscellaneous Chores
 - (**deps**) update dependency pytest-asyncio to v1.5.0 (#131) - ([22f820f](https://github.com/PixiBixi/freshrss-summary/commit/22f820f93b15f695982f42142d8084fa333cf7b5)) - renovate[bot]
