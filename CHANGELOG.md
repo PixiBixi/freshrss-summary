@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.31](https://github.com/PixiBixi/freshrss-summary/compare/1e7d3c8161feceb2787a93d5b7e28597e8780023..v1.12.31) - 2026-11-15
+#### Bug Fixes
+- (**deps**) update dependency fastapi to v0.163.1 (#134) - ([1e7d3c8](https://github.com/PixiBixi/freshrss-summary/commit/1e7d3c8161feceb2787a93d5b7e28597e8780023)) - renovate[bot]
+
+- - -
+
 ## [v1.12.30](https://github.com/PixiBixi/freshrss-summary/compare/d3f09682fecdecd397ee4e2e64709549406caae5..v1.12.30) - 2026-11-15
 #### Bug Fixes
 - (**deps**) update dependency fastapi to v0.163.0 (#133) - ([d3f0968](https://github.com/PixiBixi/freshrss-summary/commit/d3f09682fecdecd397ee4e2e64709549406caae5)) - renovate[bot]
