@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.33](https://github.com/PixiBixi/freshrss-summary/compare/d80510b1740b30fc8da5616d2b8d5c773b007bb2..v1.12.33) - 2026-11-17
+#### Miscellaneous Chores
+- (**deps**) update j178/prek-action action to v3.1.1 (#137) - ([d80510b](https://github.com/PixiBixi/freshrss-summary/commit/d80510b1740b30fc8da5616d2b8d5c773b007bb2)) - renovate[bot]
+
+- - -
+
 ## [v1.12.32](https://github.com/PixiBixi/freshrss-summary/compare/90fdec9e2c3cbb1a2ab17951d031ec1dc8296344..v1.12.32) - 2026-11-16
 #### Miscellaneous Chores
 - (**deps**) lock file maintenance (#135) - ([90fdec9](https://github.com/PixiBixi/freshrss-summary/commit/90fdec9e2c3cbb1a2ab17951d031ec1dc8296344)) - renovate[bot]
