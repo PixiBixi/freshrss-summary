@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.34](https://github.com/PixiBixi/freshrss-summary/compare/df34b49aa9e08bfe33c7053a0b3d477c834ef87d..v1.12.34) - 2026-11-18
+#### Bug Fixes
+- (**deps**) update dependency python-multipart to v0.0.34 (#138) - ([df34b49](https://github.com/PixiBixi/freshrss-summary/commit/df34b49aa9e08bfe33c7053a0b3d477c834ef87d)) - renovate[bot]
+
+- - -
+
 ## [v1.12.33](https://github.com/PixiBixi/freshrss-summary/compare/d80510b1740b30fc8da5616d2b8d5c773b007bb2..v1.12.33) - 2026-11-17
 #### Miscellaneous Chores
 - (**deps**) update j178/prek-action action to v3.1.1 (#137) - ([d80510b](https://github.com/PixiBixi/freshrss-summary/commit/d80510b1740b30fc8da5616d2b8d5c773b007bb2)) - renovate[bot]
