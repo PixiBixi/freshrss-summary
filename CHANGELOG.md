@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.35](https://github.com/PixiBixi/freshrss-summary/compare/1f47861a90999475bb34950ff2c701b45a8e7e56..v1.12.35) - 2026-11-18
+#### Bug Fixes
+- (**deps**) update dependency fastapi to v0.163.2 (#140) - ([1f47861](https://github.com/PixiBixi/freshrss-summary/commit/1f47861a90999475bb34950ff2c701b45a8e7e56)) - renovate[bot]
+
+- - -
+
 ## [v1.12.34](https://github.com/PixiBixi/freshrss-summary/compare/df34b49aa9e08bfe33c7053a0b3d477c834ef87d..v1.12.34) - 2026-11-18
 #### Bug Fixes
 - (**deps**) update dependency python-multipart to v0.0.34 (#138) - ([df34b49](https://github.com/PixiBixi/freshrss-summary/commit/df34b49aa9e08bfe33c7053a0b3d477c834ef87d)) - renovate[bot]
