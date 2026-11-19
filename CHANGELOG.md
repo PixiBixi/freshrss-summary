@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.38](https://github.com/PixiBixi/freshrss-summary/compare/ecfcfb819db23d6c65685aac0bcc54543b52ce82..v1.12.38) - 2026-11-19
+#### Miscellaneous Chores
+- (**deps**) update step-security/harden-runner action to v2.23.0 (#141) - ([ecfcfb8](https://github.com/PixiBixi/freshrss-summary/commit/ecfcfb819db23d6c65685aac0bcc54543b52ce82)) - renovate[bot]
+
+- - -
+
 ## [v1.12.37](https://github.com/PixiBixi/freshrss-summary/compare/4555320b0a6aeb3515142336386b5840db32dc2f..v1.12.37) - 2026-11-19
 #### Miscellaneous Chores
 - (**deps**) update docker/login-action digest to 8aa5831 (#125) - ([4555320](https://github.com/PixiBixi/freshrss-summary/commit/4555320b0a6aeb3515142336386b5840db32dc2f)) - renovate[bot]
