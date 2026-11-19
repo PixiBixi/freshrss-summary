@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.37](https://github.com/PixiBixi/freshrss-summary/compare/4555320b0a6aeb3515142336386b5840db32dc2f..v1.12.37) - 2026-11-19
+#### Miscellaneous Chores
+- (**deps**) update docker/login-action digest to 8aa5831 (#125) - ([4555320](https://github.com/PixiBixi/freshrss-summary/commit/4555320b0a6aeb3515142336386b5840db32dc2f)) - renovate[bot]
+
+- - -
+
 ## [v1.12.36](https://github.com/PixiBixi/freshrss-summary/compare/9ff3a208a4fc1c289d330c59bf35adbbef169dc6..v1.12.36) - 2026-11-19
 #### Bug Fixes
 - (**deps**) update dependency sqlalchemy to v2.1.9 (#139) - ([9ff3a20](https://github.com/PixiBixi/freshrss-summary/commit/9ff3a208a4fc1c289d330c59bf35adbbef169dc6)) - renovate[bot]
