@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.40](https://github.com/PixiBixi/freshrss-summary/compare/6d91632d6aba9904c06327080aaa6bc9046ba59a..v1.12.40) - 2026-11-20
+#### Miscellaneous Chores
+- (**deps**) update dependency prek to v0.5.11 (#136) - ([6d91632](https://github.com/PixiBixi/freshrss-summary/commit/6d91632d6aba9904c06327080aaa6bc9046ba59a)) - renovate[bot]
+
+- - -
+
 ## [v1.12.39](https://github.com/PixiBixi/freshrss-summary/compare/3ccf192a8276e0ae16345bef0d7d2be1f7e6ee8c..v1.12.39) - 2026-11-20
 #### Bug Fixes
 - (**deps**) update dependency pydantic to v2.14.4 (#143) - ([3ccf192](https://github.com/PixiBixi/freshrss-summary/commit/3ccf192a8276e0ae16345bef0d7d2be1f7e6ee8c)) - renovate[bot]
