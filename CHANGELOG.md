@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.39](https://github.com/PixiBixi/freshrss-summary/compare/3ccf192a8276e0ae16345bef0d7d2be1f7e6ee8c..v1.12.39) - 2026-11-20
+#### Bug Fixes
+- (**deps**) update dependency pydantic to v2.14.4 (#143) - ([3ccf192](https://github.com/PixiBixi/freshrss-summary/commit/3ccf192a8276e0ae16345bef0d7d2be1f7e6ee8c)) - renovate[bot]
+
+- - -
+
 ## [v1.12.38](https://github.com/PixiBixi/freshrss-summary/compare/ecfcfb819db23d6c65685aac0bcc54543b52ce82..v1.12.38) - 2026-11-19
 #### Miscellaneous Chores
 - (**deps**) update step-security/harden-runner action to v2.23.0 (#141) - ([ecfcfb8](https://github.com/PixiBixi/freshrss-summary/commit/ecfcfb819db23d6c65685aac0bcc54543b52ce82)) - renovate[bot]
