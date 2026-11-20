@@ -4,7 +4,35 @@
   "lockFileMaintenance": { "enabled": true, "automerge": true },
   "extends": ["config:recommended"],
   "platformAutomerge": false,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "prek-action: bump prek-version and its sha256 together. currentValue is the release tag, so keep the v prefix",
+      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      "matchStrings": [
+        "prek-version:\\s*[\"']?(?<currentValue>v[^\"'\\s]+)[\"']?\\s*\\n(?:\\s*#.*\\n)*\\s*sha256:\\s*[\"']?(?<currentDigest>[a-f0-9]{64})[\"']?"
+      ],
+      "datasourceTemplate": "github-release-attachments",
+      "depNameTemplate": "prek",
+      "packageNameTemplate": "j178/prek"
+    }
+  ],
   "packageRules": [
+    {
+      "description": "prek is bumped by the prek-action custom manager above, which also updates the pinned sha256; the built-in one only bumps prek-version and broke the checksum (#136)",
+      "matchManagers": ["github-actions"],
+      "matchDepNames": ["prek"],
+      "enabled": false
+    },
+    {
+      "description": "prek (custom manager): automerge minor/patch once CI is green, same platformAutomerge:false rationale as below",
+      "matchManagers": ["custom.regex"],
+      "matchDepNames": ["prek"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash"
+    },
     {
       "description": "Python deps (requirements*.txt via pip_requirements, pyproject.toml/uv.lock via pep621): automerge minor/patch once CI is green. platformAutomerge is disabled repo-wide (see top-level setting) so Renovate polls GitHub check statuses itself instead of relying on GitHub's native auto-merge, which would need branch protection with required status checks to actually block on a red CI - this repo has none.",
       "matchManagers": ["pip_requirements", "pep621"],
