@@ -24,7 +24,7 @@ jobs:
         with:
           prek-version: "v0.5.11"
           # The action skips verification for versions missing from its bundled checksums: bump with prek-version.
-          sha256: "5c832a9ccd0855b7c054320d8921d90165a37459d3ac175923bdf121ff1aa9b1"
+          sha256: "a4ff4c70aef6f21925aa52b82d0746095fbd66893ac3b053e859f6d3454c16ae"
 
   test:
     runs-on: ubuntu-26.04
