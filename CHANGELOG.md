@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.41](https://github.com/PixiBixi/freshrss-summary/compare/49d049e975b339045368643c0bc5a68670528462..v1.12.41) - 2026-11-20
+#### Miscellaneous Chores
+- (**renovate**) bump prek sha256 alongside prek-version (#145) - ([49d049e](https://github.com/PixiBixi/freshrss-summary/commit/49d049e975b339045368643c0bc5a68670528462)) - Jérémy
+
+- - -
+
 ## [v1.12.40](https://github.com/PixiBixi/freshrss-summary/compare/6d91632d6aba9904c06327080aaa6bc9046ba59a..v1.12.40) - 2026-11-20
 #### Miscellaneous Chores
 - (**deps**) update dependency prek to v0.5.11 (#136) - ([6d91632](https://github.com/PixiBixi/freshrss-summary/commit/6d91632d6aba9904c06327080aaa6bc9046ba59a)) - renovate[bot]
