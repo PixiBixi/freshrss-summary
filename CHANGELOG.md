@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.43](https://github.com/PixiBixi/freshrss-summary/compare/fbf92d462829aa8c2f05227b4c16d605aac73eca..v1.12.43) - 2026-11-21
+#### Bug Fixes
+- (**deps**) update dependency pyyaml to v6.0.4 (#146) - ([fbf92d4](https://github.com/PixiBixi/freshrss-summary/commit/fbf92d462829aa8c2f05227b4c16d605aac73eca)) - renovate[bot]
+
+- - -
+
 ## [v1.12.42](https://github.com/PixiBixi/freshrss-summary/compare/99bcca629e328fad25680c5098b76ab2a8fa53de..v1.12.42) - 2026-11-21
 #### Miscellaneous Chores
 - (**deps**) update astral-sh/setup-uv action to v10.4.0 (#144) - ([99bcca6](https://github.com/PixiBixi/freshrss-summary/commit/99bcca629e328fad25680c5098b76ab2a8fa53de)) - renovate[bot]
