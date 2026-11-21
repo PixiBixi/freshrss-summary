@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.44](https://github.com/PixiBixi/freshrss-summary/compare/1402a4ea9b0233764f7fd66d26fb612856098988..v1.12.44) - 2026-11-21
+#### Bug Fixes
+- (**deps**) update dependency fastapi to v0.165.0 (#142) - ([1402a4e](https://github.com/PixiBixi/freshrss-summary/commit/1402a4ea9b0233764f7fd66d26fb612856098988)) - renovate[bot]
+
+- - -
+
 ## [v1.12.43](https://github.com/PixiBixi/freshrss-summary/compare/fbf92d462829aa8c2f05227b4c16d605aac73eca..v1.12.43) - 2026-11-21
 #### Bug Fixes
 - (**deps**) update dependency pyyaml to v6.0.4 (#146) - ([fbf92d4](https://github.com/PixiBixi/freshrss-summary/commit/fbf92d462829aa8c2f05227b4c16d605aac73eca)) - renovate[bot]
