@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.42](https://github.com/PixiBixi/freshrss-summary/compare/99bcca629e328fad25680c5098b76ab2a8fa53de..v1.12.42) - 2026-11-21
+#### Miscellaneous Chores
+- (**deps**) update astral-sh/setup-uv action to v10.4.0 (#144) - ([99bcca6](https://github.com/PixiBixi/freshrss-summary/commit/99bcca629e328fad25680c5098b76ab2a8fa53de)) - renovate[bot]
+
+- - -
+
 ## [v1.12.41](https://github.com/PixiBixi/freshrss-summary/compare/49d049e975b339045368643c0bc5a68670528462..v1.12.41) - 2026-11-20
 #### Miscellaneous Chores
 - (**renovate**) bump prek sha256 alongside prek-version (#145) - ([49d049e](https://github.com/PixiBixi/freshrss-summary/commit/49d049e975b339045368643c0bc5a68670528462)) - Jérémy
