@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.46](https://github.com/PixiBixi/freshrss-summary/compare/50f470d0315809dbed9826bfc17345bd1f4779b8..v1.12.46) - 2026-11-27
+#### Miscellaneous Chores
+- (**deps**) update dependency prek to v0.5.12 (#148) - ([50f470d](https://github.com/PixiBixi/freshrss-summary/commit/50f470d0315809dbed9826bfc17345bd1f4779b8)) - renovate[bot]
+
+- - -
+
 ## [v1.12.45](https://github.com/PixiBixi/freshrss-summary/compare/d98e8dcca2d39de84c04ce6157972aae156b546b..v1.12.45) - 2026-11-23
 #### Miscellaneous Chores
 - (**deps**) lock file maintenance (#147) - ([d98e8dc](https://github.com/PixiBixi/freshrss-summary/commit/d98e8dcca2d39de84c04ce6157972aae156b546b)) - renovate[bot]
