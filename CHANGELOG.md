@@ -1,6 +1,12 @@
 # Changelog
 
 - - -
+## [v1.12.47](https://github.com/PixiBixi/freshrss-summary/compare/fe3ed4e9730033e02a080c30e59534a70a5a1c1e..v1.12.47) - 2026-11-27
+#### Bug Fixes
+- (**deps**) update dependency httpx to v0.29.0 (#149) - ([fe3ed4e](https://github.com/PixiBixi/freshrss-summary/commit/fe3ed4e9730033e02a080c30e59534a70a5a1c1e)) - renovate[bot]
+
+- - -
+
 ## [v1.12.46](https://github.com/PixiBixi/freshrss-summary/compare/50f470d0315809dbed9826bfc17345bd1f4779b8..v1.12.46) - 2026-11-27
 #### Miscellaneous Chores
 - (**deps**) update dependency prek to v0.5.12 (#148) - ([50f470d](https://github.com/PixiBixi/freshrss-summary/commit/50f470d0315809dbed9826bfc17345bd1f4779b8)) - renovate[bot]
